@@ -1,0 +1,1 @@
+Quickshell hyprland environment
