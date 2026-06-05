@@ -10,14 +10,17 @@ Item {
     // в общие glass-капсулы, чтобы это выглядело одним элементом.
     property int workspaceCount: 10
     property int cellWidth: 23
-    property int moduleHeight: 27
-    property int sidePadding: 4
+    property int moduleHeight: 26
+
+    // Было 4. Уменьшено, чтобы виджет визуально сместился немного влево.
+    property int sidePadding: 0
+
     property int circleSize: 18
     property int activeDotSize: 6
 
-    // Небольшая коррекция: содержимое поднимается на 1px,
-    // чтобы верхний и нижний отступ визуально были ровнее.
-    property int contentYOffset: -1
+    // 0 дает одинаковый верхний и нижний отступ:
+    // (moduleHeight - circleSize) / 2 = (27 - 18) / 2 = 4.5px.
+    property int contentYOffset: 0
 
     property int activeWorkspace: Services.ShellState.activeWorkspace
     property int previousWorkspace: Services.ShellState.activeWorkspace
@@ -63,18 +66,6 @@ Item {
         return moduleHeight / 2 + contentYOffset;
     }
 
-    function trailX() {
-        var fromX = workspaceCenterX(previousWorkspace);
-        var toX = workspaceCenterX(activeWorkspace);
-        return Math.min(fromX, toX) - circleSize / 2;
-    }
-
-    function trailWidth() {
-        var fromX = workspaceCenterX(previousWorkspace);
-        var toX = workspaceCenterX(activeWorkspace);
-        return Math.abs(toX - fromX) + circleSize;
-    }
-
     function dotTargetX() {
         return workspaceCenterX(activeWorkspace) - activeDotSize / 2;
     }
@@ -100,7 +91,6 @@ Item {
     // Для общего фона считаем выделенными:
     // 1) рабочие столы с окнами;
     // 2) активный рабочий стол, даже если на нем нет окон.
-    // Поэтому активный больше не рисуется как отдельный круг.
     function highlightedForGroup(workspaceId) {
         return workspaceId === activeWorkspace || isOccupied(workspaceId);
     }
@@ -129,20 +119,60 @@ Item {
         return (end - workspaceId) * cellWidth + circleSize;
     }
 
-    // Сплошной стеклянный след между старым и новым активным workspace.
-    Rectangle {
-        id: activeTrail
-        y: root.contentCenterY() - height / 2
-        x: root.trailX()
-        width: root.trailWidth()
-        height: root.circleSize
-        radius: height / 2
-        color: "#66ffffff"
-        border.width: 1
-        border.color: "#55ffffff"
-        opacity: root.trailOpacity
-        visible: root.trailOpacity > 0.01 && root.previousWorkspace !== root.activeWorkspace
-        z: 0
+    // Trail теперь не рисуется поверх/под occupied и active областями.
+    // Он разбивается на отдельные видимые группы и пропускает все highlighted workspace.
+    function trailCovers(workspaceId) {
+        if (previousWorkspace === activeWorkspace)
+            return false;
+
+        var from = Math.min(previousWorkspace, activeWorkspace);
+        var to = Math.max(previousWorkspace, activeWorkspace);
+
+        return workspaceId >= from && workspaceId <= to;
+    }
+
+    function trailVisibleAt(workspaceId) {
+        return trailCovers(workspaceId) && !highlightedForGroup(workspaceId);
+    }
+
+    function isTrailGroupStart(workspaceId) {
+        if (!trailVisibleAt(workspaceId))
+            return false;
+        if (workspaceId <= 1)
+            return true;
+        return !trailVisibleAt(workspaceId - 1);
+    }
+
+    function trailGroupEnd(workspaceId) {
+        var end = workspaceId;
+        while (end < workspaceCount && trailVisibleAt(end + 1))
+            end++;
+        return end;
+    }
+
+    function trailGroupWidth(workspaceId) {
+        var end = trailGroupEnd(workspaceId);
+        return (end - workspaceId) * cellWidth + circleSize;
+    }
+
+    // Сплошной стеклянный след только на незанятых участках между old и new workspace.
+    Repeater {
+        model: root.workspaceCount
+
+        delegate: Rectangle {
+            property int workspaceId: index + 1
+            visible: root.trailOpacity > 0.01 && root.isTrailGroupStart(workspaceId)
+            y: root.contentCenterY() - height / 2
+            x: root.groupX(workspaceId)
+            width: root.trailGroupWidth(workspaceId)
+            height: root.circleSize
+            radius: height / 2
+            color: "#66ffffff"
+            border.width: 1
+            border.color: "#55ffffff"
+            opacity: visible ? root.trailOpacity : 0.0
+            z: 0
+        }
     }
 
     // Общие капсулы для occupied + active.
