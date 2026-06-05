@@ -1,0 +1,12 @@
+# Blur для quickshell taskbar.
+# Namespace задан в modules/bar/Bar.qml:
+# WlrLayershell.namespace: "quickshell:taskbar"
+
+layerrule = blur true, match:namespace quickshell:taskbar
+layerrule = ignore_alpha 0.2, match:namespace quickshell:taskbar
+
+# Для дополнительных панелей:
+layerrule = blur true, match:namespace quickshell:tray-panel
+layerrule = ignore_alpha 0.2, match:namespace quickshell:tray-panel
+layerrule = blur true, match:namespace quickshell:launcher
+layerrule = ignore_alpha 0.2, match:namespace quickshell:launcher
