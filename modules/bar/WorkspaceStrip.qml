@@ -5,27 +5,21 @@ import "../../services" as Services
 Item {
     id: root
 
-    // Компактный strip без общего фона.
-    // Занятые рабочие столы и активный рабочий стол объединяются
-    // в общие glass-капсулы, чтобы это выглядело одним элементом.
     property int workspaceCount: 10
     property int cellWidth: 23
     property int moduleHeight: 26
-
-    // Было 4. Уменьшено, чтобы виджет визуально сместился немного влево.
     property int sidePadding: 0
-
     property int circleSize: 18
     property int activeDotSize: 6
-
-    // 0 дает одинаковый верхний и нижний отступ:
-    // (moduleHeight - circleSize) / 2 = (27 - 18) / 2 = 4.5px.
     property int contentYOffset: 0
 
     property int activeWorkspace: Services.ShellState.activeWorkspace
     property int previousWorkspace: Services.ShellState.activeWorkspace
     property int lastAnimatedWorkspace: Services.ShellState.activeWorkspace
+
     property real trailOpacity: 0.0
+    property real activeDotOpacity: 1.0
+    property real activeDotCenterX: workspaceCenterX(Services.ShellState.activeWorkspace)
 
     implicitWidth: sidePadding * 2 + workspaceCount * cellWidth
     implicitHeight: moduleHeight
@@ -33,19 +27,46 @@ Item {
     onActiveWorkspaceChanged: {
         if (activeWorkspace === lastAnimatedWorkspace)
             return;
+
         previousWorkspace = lastAnimatedWorkspace;
         lastAnimatedWorkspace = activeWorkspace;
-        trailOpacity = 0.48;
+
+        activeDotMove.stop();
+        activeDotMove.to = workspaceCenterX(activeWorkspace);
+        activeDotMove.start();
+
+        trailOpacity = 0.40;
+        activeDotOpacity = 0.0;
+
         trailFade.restart();
+        activeDotFade.restart();
+    }
+
+    NumberAnimation {
+        id: activeDotMove
+        target: root
+        property: "activeDotCenterX"
+        duration: 310
+        easing.type: Easing.OutCubic
     }
 
     NumberAnimation {
         id: trailFade
         target: root
         property: "trailOpacity"
-        from: 0.48
+        from: 0.40
         to: 0.0
         duration: 420
+        easing.type: Easing.OutCubic
+    }
+
+    NumberAnimation {
+        id: activeDotFade
+        target: root
+        property: "activeDotOpacity"
+        from: 0.0
+        to: 1.0
+        duration: 260
         easing.type: Easing.OutCubic
     }
 
@@ -66,16 +87,8 @@ Item {
         return moduleHeight / 2 + contentYOffset;
     }
 
-    function dotTargetX() {
-        return workspaceCenterX(activeWorkspace) - activeDotSize / 2;
-    }
-
-    function dotCenterX() {
-        return activeDot.x + activeDotSize / 2;
-    }
-
     function dotIsOnWorkspace(workspaceId) {
-        return Math.abs(dotCenterX() - workspaceCenterX(workspaceId)) < 3;
+        return activeDotOpacity > 0.72 && Math.abs(activeDotCenterX - workspaceCenterX(workspaceId)) < 3;
     }
 
     function isOccupied(workspaceId) {
@@ -88,9 +101,6 @@ Item {
         return false;
     }
 
-    // Для общего фона считаем выделенными:
-    // 1) рабочие столы с окнами;
-    // 2) активный рабочий стол, даже если на нем нет окон.
     function highlightedForGroup(workspaceId) {
         return workspaceId === activeWorkspace || isOccupied(workspaceId);
     }
@@ -119,91 +129,124 @@ Item {
         return (end - workspaceId) * cellWidth + circleSize;
     }
 
-    // Trail теперь не рисуется поверх/под occupied и active областями.
-    // Он разбивается на отдельные видимые группы и пропускает все highlighted workspace.
-    function trailCovers(workspaceId) {
-        if (previousWorkspace === activeWorkspace)
-            return false;
-
-        var from = Math.min(previousWorkspace, activeWorkspace);
-        var to = Math.max(previousWorkspace, activeWorkspace);
-
-        return workspaceId >= from && workspaceId <= to;
+    function isOccupiedOnly(workspaceId) {
+        return isOccupied(workspaceId);
     }
 
-    function trailVisibleAt(workspaceId) {
-        return trailCovers(workspaceId) && !highlightedForGroup(workspaceId);
-    }
-
-    function isTrailGroupStart(workspaceId) {
-        if (!trailVisibleAt(workspaceId))
+    function isOccupiedOnlyGroupStart(workspaceId) {
+        if (!isOccupiedOnly(workspaceId))
             return false;
         if (workspaceId <= 1)
             return true;
-        return !trailVisibleAt(workspaceId - 1);
+        return !isOccupiedOnly(workspaceId - 1);
     }
 
-    function trailGroupEnd(workspaceId) {
+    function occupiedOnlyGroupEnd(workspaceId) {
         var end = workspaceId;
-        while (end < workspaceCount && trailVisibleAt(end + 1))
+        while (end < workspaceCount && isOccupiedOnly(end + 1))
             end++;
         return end;
     }
 
-    function trailGroupWidth(workspaceId) {
-        var end = trailGroupEnd(workspaceId);
+    function occupiedOnlyGroupWidth(workspaceId) {
+        var end = occupiedOnlyGroupEnd(workspaceId);
         return (end - workspaceId) * cellWidth + circleSize;
     }
 
-    // Сплошной стеклянный след только на незанятых участках между old и new workspace.
+    function slideFromWorkspace() {
+        return previousWorkspace;
+    }
+
+    function slideToWorkspace() {
+        return activeWorkspace;
+    }
+
+    function slideStartWorkspace() {
+        return Math.min(slideFromWorkspace(), slideToWorkspace());
+    }
+
+    function slideEndWorkspace() {
+        return Math.max(slideFromWorkspace(), slideToWorkspace());
+    }
+
+    function slideActive() {
+        return trailOpacity > 0.01 && previousWorkspace !== activeWorkspace;
+    }
+
+    function slideGroupX() {
+        return groupX(slideStartWorkspace());
+    }
+
+    function slideGroupWidth() {
+        return (slideEndWorkspace() - slideStartWorkspace()) * cellWidth + circleSize;
+    }
+
+    // Базовые occupied-группы без active. Они нужны как постоянное тело.
     Repeater {
         model: root.workspaceCount
 
         delegate: Rectangle {
             property int workspaceId: index + 1
-            visible: root.trailOpacity > 0.01 && root.isTrailGroupStart(workspaceId)
+
+            visible: root.isOccupiedOnlyGroupStart(workspaceId)
             y: root.contentCenterY() - height / 2
             x: root.groupX(workspaceId)
-            width: root.trailGroupWidth(workspaceId)
+            width: root.occupiedOnlyGroupWidth(workspaceId)
             height: root.circleSize
             radius: height / 2
-            color: "#66ffffff"
-            border.width: 1
-            border.color: "#55ffffff"
-            opacity: visible ? root.trailOpacity : 0.0
-            z: 0
+            color: "#261b2330"
+            opacity: visible ? 0.98 : 0.0
+            z: 1
         }
     }
 
-    // Общие капсулы для occupied + active.
-    // Если активный стоит рядом с занятыми, он входит в ту же капсулу.
+    // Во время переключения рисуется единая слайд-капсула от старого active до нового.
+    // Она остается видимой до конца fade, поэтому конечная active-область не выглядит отдельной.
+    Rectangle {
+        id: slideBody
+        visible: root.slideActive()
+        y: root.contentCenterY() - height / 2
+        x: root.slideGroupX()
+        width: root.slideGroupWidth()
+        height: root.circleSize
+        radius: height / 2
+        color: "#261b2330"
+        border.width: 1
+        border.color: "#45ffffff"
+        opacity: root.trailOpacity
+        z: 2
+    }
+
+    // Финальная объединенная капсула occupied + active.
+    // Появляется поверх slideBody плавно, чтобы в конце active не отделялся от слайда.
     Repeater {
         model: root.workspaceCount
 
         delegate: Rectangle {
             property int workspaceId: index + 1
+
             visible: root.isGroupStart(workspaceId)
             y: root.contentCenterY() - height / 2
             x: root.groupX(workspaceId)
             width: root.groupWidth(workspaceId)
             height: root.circleSize
             radius: height / 2
-            color: "#34ffffff"
+            color: "#261b2330"
             border.width: 1
             border.color: "#45ffffff"
             opacity: visible ? 0.98 : 0.0
-            z: 1
+            z: 3
 
             Behavior on x {
                 NumberAnimation {
-                    duration: 210
+                    duration: 260
                     easing.type: Easing.OutCubic
                 }
             }
 
             Behavior on width {
                 NumberAnimation {
-                    duration: 210
+                    duration: 260
                     easing.type: Easing.OutCubic
                 }
             }
@@ -216,24 +259,16 @@ Item {
         }
     }
 
-    // Точка активного рабочего стола. Без отдельного фонового круга.
     Rectangle {
         id: activeDot
         y: root.contentCenterY() - height / 2
-        x: root.dotTargetX()
+        x: root.activeDotCenterX - root.activeDotSize / 2
         width: root.activeDotSize
         height: root.activeDotSize
         radius: width / 2
         color: "#ffffff"
-        opacity: 0.98
-        z: 4
-
-        Behavior on x {
-            NumberAnimation {
-                duration: 310
-                easing.type: Easing.OutCubic
-            }
-        }
+        opacity: root.activeDotOpacity * 0.98
+        z: 5
     }
 
     Row {
@@ -241,7 +276,7 @@ Item {
         y: root.contentCenterY() - height / 2
         x: root.sidePadding
         spacing: 0
-        z: 3
+        z: 4
 
         Repeater {
             model: root.workspaceCount
@@ -260,11 +295,7 @@ Item {
                     anchors.centerIn: parent
                     text: cell.workspaceId
                     color: "#ffffff"
-
-                    // Цифра исчезает не по факту смены activeWorkspace,
-                    // а только когда точка реально доехала до этого рабочего стола.
                     opacity: cell.hiddenByDot ? 0.0 : (cell.occupied ? 0.98 : 0.78)
-
                     font.pixelSize: 12
                     font.weight: cell.occupied ? Font.DemiBold : Font.Medium
                     renderType: Text.NativeRendering
