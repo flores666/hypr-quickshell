@@ -154,9 +154,26 @@ Item {
         return Services.ShellState.workspaceHasWindows(workspaceId);
     }
 
-    function dotIsOnFinalActive(workspaceId) {
-        return workspaceId === visualActiveWorkspace
-            && Math.abs(activeDotCenterX - workspaceCenterX(workspaceId)) < Math.max(2, Math.round(3 * uiScale));
+    function dotCoverAmount(workspaceId) {
+        // Цифра пропадает синхронно с белой activeDot: не по таймеру и не после
+        // смены visualActiveWorkspace, а прямо по текущей анимируемой позиции точки.
+        var distance = Math.abs(activeDotCenterX - workspaceCenterX(workspaceId));
+        var fullHideDistance = Math.max(2, activeDotSize * 0.9);
+        var fadeDistance = Math.max(fullHideDistance + 1, circleSize * 0.48);
+
+        if (distance <= fullHideDistance)
+            return 1.0;
+        if (distance >= fadeDistance)
+            return 0.0;
+
+        var t = (distance - fullHideDistance) / (fadeDistance - fullHideDistance);
+        return 1.0 - t;
+    }
+
+    function textOpacityForWorkspace(workspaceId, occupied, active) {
+        var baseOpacity = (occupied || active) ? 0.98 : 0.78;
+        var cover = dotCoverAmount(workspaceId);
+        return baseOpacity * (1.0 - cover);
     }
 
     Canvas {
@@ -283,7 +300,6 @@ Item {
                 property int workspaceId: index + 1
                 property bool occupied: root.isOccupied(workspaceId)
                 property bool active: workspaceId === root.visualActiveWorkspace
-                property bool hiddenByDot: root.dotIsOnFinalActive(workspaceId)
 
                 width: root.cellWidth
                 height: root.moduleHeight
@@ -292,18 +308,12 @@ Item {
                     anchors.centerIn: parent
                     text: cell.workspaceId
                     color: "#ffffff"
-                    opacity: cell.hiddenByDot ? 0.0 : (cell.occupied || cell.active ? 0.98 : 0.78)
+                    opacity: root.textOpacityForWorkspace(cell.workspaceId, cell.occupied, cell.active)
                     font.pixelSize: root.textSize
                     font.weight: cell.occupied || cell.active ? Font.DemiBold : Font.Medium
                     renderType: Text.QtRendering
                     font.hintingPreference: Font.PreferNoHinting
 
-                    Behavior on opacity {
-                        NumberAnimation {
-                            duration: 120
-                            easing.type: Easing.OutCubic
-                        }
-                    }
                 }
 
                 MouseArea {
