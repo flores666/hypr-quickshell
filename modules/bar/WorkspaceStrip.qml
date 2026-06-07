@@ -16,10 +16,10 @@ Item {
     readonly property int cellWidth: Math.round(23 * uiScale)
     readonly property int moduleHeight: Math.max(circleSize + 4, Math.round(26 * uiScale))
     readonly property int sidePadding: 0
-    readonly property int circleSize: Math.round(18 * uiScale)
+    readonly property int circleSize: Math.round(23 * uiScale)
     readonly property int activeDotSize: Math.max(4, Math.round(6 * uiScale))
     readonly property int contentYOffset: 0
-    readonly property int textSize: Math.max(9, Math.round(12 * uiScale))
+    readonly property int textSize: Math.max(10, Math.round(12 * uiScale))
 
     property int activeWorkspace: Services.ShellState.activeWorkspace
     property int previousWorkspace: Services.ShellState.activeWorkspace
