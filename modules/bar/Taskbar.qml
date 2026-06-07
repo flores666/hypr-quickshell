@@ -25,9 +25,9 @@ Item {
 
                 onClicked: {
                     if (Services.ShellState.isTrayed(modelData.address))
-                        Services.ShellActions.restoreFromTray(modelData)
+                        Services.ShellActions.restoreFromTray(modelData);
                     else
-                        Services.ShellActions.focusWindow(modelData)
+                        Services.ShellActions.focusWindow(modelData);
                 }
 
                 // Средняя кнопка мыши: свернуть в кастомный tray.

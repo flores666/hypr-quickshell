@@ -46,13 +46,14 @@ PanelWindow {
             Layout.alignment: Qt.AlignVCenter
         }
 
-        Taskbar {
-            Layout.fillWidth: true
-            Layout.alignment: Qt.AlignVCenter
-        }
+        // Taskbar {
+        //     Layout.fillWidth: true
+        //     Layout.alignment: Qt.AlignVCenter
+        // }
 
         Clock {
             Layout.alignment: Qt.AlignVCenter
+            anchors.right: parent.right
         }
     }
 }
