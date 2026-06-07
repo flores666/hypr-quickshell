@@ -24,32 +24,71 @@ Item {
     property int activeWorkspace: Services.ShellState.activeWorkspace
     property int previousWorkspace: Services.ShellState.activeWorkspace
     property int lastAnimatedWorkspace: Services.ShellState.activeWorkspace
+    property int visualActiveWorkspace: Services.ShellState.activeWorkspace
 
     property real activeDotOpacity: 1.0
-    property real activeDotCenterX: workspaceCenterX(Services.ShellState.activeWorkspace)
+    // Важно: это обычное значение, а не binding от activeWorkspace.
+    // Иначе QML мгновенно переносит activeDotCenterX в новую позицию,
+    // затем анимация стартует уже из конечной точки, из-за чего появляется flash/blink.
+    property real activeDotCenterX: 0
+    property bool ready: false
+    property int animationDuration: 280
 
     implicitWidth: sidePadding * 2 + workspaceCount * cellWidth
     implicitHeight: moduleHeight
 
-    onActiveWorkspaceChanged: {
+    Component.onCompleted: {
+        previousWorkspace = activeWorkspace;
+        lastAnimatedWorkspace = activeWorkspace;
+        visualActiveWorkspace = activeWorkspace;
+        activeDotCenterX = workspaceCenterX(activeWorkspace);
+        ready = true;
         workspaceCanvas.requestPaint();
+    }
 
-        if (activeWorkspace === lastAnimatedWorkspace)
+    onActiveWorkspaceChanged: {
+        if (!ready)
             return;
+
+        if (activeWorkspace === lastAnimatedWorkspace) {
+            workspaceCanvas.requestPaint();
+            return;
+        }
 
         previousWorkspace = lastAnimatedWorkspace;
         lastAnimatedWorkspace = activeWorkspace;
 
+        var distance = Math.abs(activeWorkspace - previousWorkspace);
+        animationDuration = Math.max(210, Math.min(390, 210 + distance * 22));
+
+        commitActiveTimer.stop();
+
         activeDotMove.stop();
+        activeDotMove.duration = animationDuration;
+        activeDotMove.from = activeDotCenterX;
         activeDotMove.to = workspaceCenterX(activeWorkspace);
         activeDotMove.start();
 
-        activeDotOpacity = 0.0;
+        commitActiveTimer.interval = animationDuration;
+        commitActiveTimer.restart();
+
+        activeDotOpacity = 0.92;
         activeDotFade.restart();
     }
 
-    onUiScaleChanged: workspaceCanvas.requestPaint()
-    onCellWidthChanged: workspaceCanvas.requestPaint()
+    onActiveDotCenterXChanged: workspaceCanvas.requestPaint()
+    onUiScaleChanged: {
+        if (ready && !activeDotMove.running)
+            activeDotCenterX = workspaceCenterX(visualActiveWorkspace);
+        workspaceCanvas.requestPaint();
+    }
+
+    onCellWidthChanged: {
+        if (ready && !activeDotMove.running)
+            activeDotCenterX = workspaceCenterX(visualActiveWorkspace);
+        workspaceCanvas.requestPaint();
+    }
+
     onCircleSizeChanged: workspaceCanvas.requestPaint()
     onModuleHeightChanged: workspaceCanvas.requestPaint()
 
@@ -69,18 +108,29 @@ Item {
         id: activeDotMove
         target: root
         property: "activeDotCenterX"
-        duration: 310
+        duration: root.animationDuration
         easing.type: Easing.OutCubic
+        alwaysRunToEnd: false
     }
 
     NumberAnimation {
         id: activeDotFade
         target: root
         property: "activeDotOpacity"
-        from: 0.0
+        from: 0.92
         to: 1.0
-        duration: 180
+        duration: 160
         easing.type: Easing.OutCubic
+        alwaysRunToEnd: false
+    }
+
+    Timer {
+        id: commitActiveTimer
+        repeat: false
+        onTriggered: {
+            root.visualActiveWorkspace = root.activeWorkspace;
+            root.workspaceCanvas.requestPaint();
+        }
     }
 
     function clampWorkspace(workspaceId) {
@@ -104,37 +154,8 @@ Item {
         return Services.ShellState.workspaceHasWindows(workspaceId);
     }
 
-    function highlightedForGroup(workspaceId) {
-        return workspaceId === activeWorkspace || isOccupied(workspaceId);
-    }
-
-    function isGroupStart(workspaceId) {
-        if (!highlightedForGroup(workspaceId))
-            return false;
-        if (workspaceId <= 1)
-            return true;
-        return !highlightedForGroup(workspaceId - 1);
-    }
-
-    function groupEnd(workspaceId) {
-        var end = workspaceId;
-        while (end < workspaceCount && highlightedForGroup(end + 1))
-            end++;
-        return end;
-    }
-
-    function groupX(workspaceId) {
-        return workspaceCenterX(workspaceId) - circleSize / 2;
-    }
-
-    function groupWidth(workspaceId) {
-        var end = groupEnd(workspaceId);
-        return (end - workspaceId) * cellWidth + circleSize;
-    }
-
     function dotIsOnFinalActive(workspaceId) {
-        return workspaceId === activeWorkspace
-            && activeDotOpacity > 0.72
+        return workspaceId === visualActiveWorkspace
             && Math.abs(activeDotCenterX - workspaceCenterX(workspaceId)) < Math.max(2, Math.round(3 * uiScale));
     }
 
@@ -143,6 +164,61 @@ Item {
         anchors.fill: parent
         z: 1
 
+        function appendInterval(intervals, x1, x2) {
+            if (x2 < x1) {
+                var tmp = x1;
+                x1 = x2;
+                x2 = tmp;
+            }
+
+            intervals.push({ start: x1, end: x2 });
+        }
+
+        function mergeIntervals(intervals) {
+            if (intervals.length <= 1)
+                return intervals;
+
+            intervals.sort(function(a, b) { return a.start - b.start; });
+
+            var merged = [];
+            var joinGap = Math.max(1, root.cellWidth - root.circleSize + 0.75);
+
+            for (var i = 0; i < intervals.length; i++) {
+                var current = intervals[i];
+
+                if (merged.length === 0) {
+                    merged.push({ start: current.start, end: current.end });
+                    continue;
+                }
+
+                var last = merged[merged.length - 1];
+                if (current.start <= last.end + joinGap) {
+                    last.end = Math.max(last.end, current.end);
+                } else {
+                    merged.push({ start: current.start, end: current.end });
+                }
+            }
+
+            return merged;
+        }
+
+        function drawCapsule(ctx, x, y, w, h) {
+            var r = h / 2;
+
+            ctx.beginPath();
+            ctx.moveTo(x + r, y);
+            ctx.lineTo(x + w - r, y);
+            ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+            ctx.lineTo(x + w, y + h - r);
+            ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+            ctx.lineTo(x + r, y + h);
+            ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+            ctx.lineTo(x, y + r);
+            ctx.quadraticCurveTo(x, y, x + r, y);
+            ctx.closePath();
+            ctx.fill();
+        }
+
         onPaint: {
             var ctx = getContext("2d");
             ctx.clearRect(0, 0, width, height);
@@ -150,28 +226,27 @@ Item {
             ctx.globalAlpha = 0.98;
 
             var y = root.contentCenterY() - root.circleSize / 2;
-            var h = root.circleSize;
-            var r = h / 2;
+            var radius = root.circleSize / 2;
+            var intervals = [];
 
+            // Занятые рабочие столы рисуются как стабильная база.
+            // Активный рабочий стол не загорается в конечной точке мгновенно:
+            // activeDotCenterX больше не привязан к activeWorkspace, поэтому Canvas
+            // видит только плавное движение, а не мгновенный прыжок в новую позицию.
+            // Потом интервалы объединяются и заливаются один раз, без наложения прозрачных слоев.
             for (var ws = 1; ws <= root.workspaceCount; ws++) {
-                if (!root.isGroupStart(ws))
-                    continue;
+                if (root.isOccupied(ws)) {
+                    var center = root.workspaceCenterX(ws);
+                    appendInterval(intervals, center - radius, center + radius);
+                }
+            }
 
-                var x = root.groupX(ws);
-                var w = root.groupWidth(ws);
+            appendInterval(intervals, root.activeDotCenterX - radius, root.activeDotCenterX + radius);
 
-                ctx.beginPath();
-                ctx.moveTo(x + r, y);
-                ctx.lineTo(x + w - r, y);
-                ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-                ctx.lineTo(x + w, y + h - r);
-                ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-                ctx.lineTo(x + r, y + h);
-                ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-                ctx.lineTo(x, y + r);
-                ctx.quadraticCurveTo(x, y, x + r, y);
-                ctx.closePath();
-                ctx.fill();
+            var merged = mergeIntervals(intervals);
+            for (var i = 0; i < merged.length; i++) {
+                var item = merged[i];
+                drawCapsule(ctx, item.start, y, item.end - item.start, root.circleSize);
             }
         }
     }
@@ -185,6 +260,10 @@ Item {
         radius: width / 2
         color: "#ffffff"
         opacity: root.activeDotOpacity * 0.98
+        antialiasing: true
+        smooth: true
+        layer.enabled: true
+        layer.smooth: true
         z: 2
     }
 
@@ -203,6 +282,7 @@ Item {
 
                 property int workspaceId: index + 1
                 property bool occupied: root.isOccupied(workspaceId)
+                property bool active: workspaceId === root.visualActiveWorkspace
                 property bool hiddenByDot: root.dotIsOnFinalActive(workspaceId)
 
                 width: root.cellWidth
@@ -212,16 +292,16 @@ Item {
                     anchors.centerIn: parent
                     text: cell.workspaceId
                     color: "#ffffff"
-                    opacity: cell.hiddenByDot ? 0.0 : (cell.occupied || cell.workspaceId === root.activeWorkspace ? 0.98 : 0.78)
+                    opacity: cell.hiddenByDot ? 0.0 : (cell.occupied || cell.active ? 0.98 : 0.78)
                     font.pixelSize: root.textSize
-                    font.weight: cell.occupied || cell.workspaceId === root.activeWorkspace ? Font.DemiBold : Font.Medium
+                    font.weight: cell.occupied || cell.active ? Font.DemiBold : Font.Medium
                     renderType: Text.QtRendering
                     font.hintingPreference: Font.PreferNoHinting
 
                     Behavior on opacity {
-                        enabled: cell.workspaceId === root.activeWorkspace
                         NumberAnimation {
-                            duration: 90
+                            duration: 120
+                            easing.type: Easing.OutCubic
                         }
                     }
                 }
