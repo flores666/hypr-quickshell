@@ -1,23 +1,30 @@
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Window
 import "../../services" as Services
 
 Item {
     id: root
 
     property int workspaceCount: 10
-    property int cellWidth: 23
-    property int moduleHeight: 26
-    property int sidePadding: 0
-    property int circleSize: 18
-    property int activeDotSize: 6
-    property int contentYOffset: 0
+
+    // Размеры считаются от базового 96 DPI и слегка компенсируют разные экраны.
+    // Это помогает сохранить одинаковый вид цифр, точки active и капсул на мониторе и ноутбуке.
+    readonly property real screenDpi: Screen.pixelDensity > 0 ? Screen.pixelDensity * 25.4 : 96
+    readonly property real uiScale: Math.max(0.72, Math.min(1.0, 96 / screenDpi))
+
+    readonly property int cellWidth: Math.round(23 * uiScale)
+    readonly property int moduleHeight: Math.max(circleSize + 4, Math.round(26 * uiScale))
+    readonly property int sidePadding: 0
+    readonly property int circleSize: Math.round(18 * uiScale)
+    readonly property int activeDotSize: Math.max(4, Math.round(6 * uiScale))
+    readonly property int contentYOffset: 0
+    readonly property int textSize: Math.max(9, Math.round(12 * uiScale))
 
     property int activeWorkspace: Services.ShellState.activeWorkspace
     property int previousWorkspace: Services.ShellState.activeWorkspace
     property int lastAnimatedWorkspace: Services.ShellState.activeWorkspace
 
-    property real trailOpacity: 0.0
     property real activeDotOpacity: 1.0
     property real activeDotCenterX: workspaceCenterX(Services.ShellState.activeWorkspace)
 
@@ -25,6 +32,8 @@ Item {
     implicitHeight: moduleHeight
 
     onActiveWorkspaceChanged: {
+        workspaceCanvas.requestPaint();
+
         if (activeWorkspace === lastAnimatedWorkspace)
             return;
 
@@ -35,11 +44,25 @@ Item {
         activeDotMove.to = workspaceCenterX(activeWorkspace);
         activeDotMove.start();
 
-        trailOpacity = 0.40;
         activeDotOpacity = 0.0;
-
-        trailFade.restart();
         activeDotFade.restart();
+    }
+
+    onUiScaleChanged: workspaceCanvas.requestPaint()
+    onCellWidthChanged: workspaceCanvas.requestPaint()
+    onCircleSizeChanged: workspaceCanvas.requestPaint()
+    onModuleHeightChanged: workspaceCanvas.requestPaint()
+
+    Connections {
+        target: Services.ShellState
+
+        function onOccupiedWorkspacesChanged() {
+            workspaceCanvas.requestPaint();
+        }
+
+        function onWindowsChanged() {
+            workspaceCanvas.requestPaint();
+        }
     }
 
     NumberAnimation {
@@ -51,22 +74,12 @@ Item {
     }
 
     NumberAnimation {
-        id: trailFade
-        target: root
-        property: "trailOpacity"
-        from: 0.40
-        to: 0.0
-        duration: 420
-        easing.type: Easing.OutCubic
-    }
-
-    NumberAnimation {
         id: activeDotFade
         target: root
         property: "activeDotOpacity"
         from: 0.0
         to: 1.0
-        duration: 260
+        duration: 180
         easing.type: Easing.OutCubic
     }
 
@@ -87,18 +100,8 @@ Item {
         return moduleHeight / 2 + contentYOffset;
     }
 
-    function dotIsOnWorkspace(workspaceId) {
-        return activeDotOpacity > 0.72 && Math.abs(activeDotCenterX - workspaceCenterX(workspaceId)) < 3;
-    }
-
     function isOccupied(workspaceId) {
-        for (var i = 0; i < Services.ShellState.windows.length; i++) {
-            var w = Services.ShellState.windows[i];
-            if (w.workspace === workspaceId && !w.hiddenByShell)
-                return true;
-        }
-
-        return false;
+        return Services.ShellState.workspaceHasWindows(workspaceId);
     }
 
     function highlightedForGroup(workspaceId) {
@@ -129,132 +132,46 @@ Item {
         return (end - workspaceId) * cellWidth + circleSize;
     }
 
-    function isOccupiedOnly(workspaceId) {
-        return isOccupied(workspaceId);
+    function dotIsOnFinalActive(workspaceId) {
+        return workspaceId === activeWorkspace
+            && activeDotOpacity > 0.72
+            && Math.abs(activeDotCenterX - workspaceCenterX(workspaceId)) < Math.max(2, Math.round(3 * uiScale));
     }
 
-    function isOccupiedOnlyGroupStart(workspaceId) {
-        if (!isOccupiedOnly(workspaceId))
-            return false;
-        if (workspaceId <= 1)
-            return true;
-        return !isOccupiedOnly(workspaceId - 1);
-    }
+    Canvas {
+        id: workspaceCanvas
+        anchors.fill: parent
+        z: 1
 
-    function occupiedOnlyGroupEnd(workspaceId) {
-        var end = workspaceId;
-        while (end < workspaceCount && isOccupiedOnly(end + 1))
-            end++;
-        return end;
-    }
+        onPaint: {
+            var ctx = getContext("2d");
+            ctx.clearRect(0, 0, width, height);
+            ctx.fillStyle = "#261b2330";
+            ctx.globalAlpha = 0.98;
 
-    function occupiedOnlyGroupWidth(workspaceId) {
-        var end = occupiedOnlyGroupEnd(workspaceId);
-        return (end - workspaceId) * cellWidth + circleSize;
-    }
+            var y = root.contentCenterY() - root.circleSize / 2;
+            var h = root.circleSize;
+            var r = h / 2;
 
-    function slideFromWorkspace() {
-        return previousWorkspace;
-    }
+            for (var ws = 1; ws <= root.workspaceCount; ws++) {
+                if (!root.isGroupStart(ws))
+                    continue;
 
-    function slideToWorkspace() {
-        return activeWorkspace;
-    }
+                var x = root.groupX(ws);
+                var w = root.groupWidth(ws);
 
-    function slideStartWorkspace() {
-        return Math.min(slideFromWorkspace(), slideToWorkspace());
-    }
-
-    function slideEndWorkspace() {
-        return Math.max(slideFromWorkspace(), slideToWorkspace());
-    }
-
-    function slideActive() {
-        return trailOpacity > 0.01 && previousWorkspace !== activeWorkspace;
-    }
-
-    function slideGroupX() {
-        return groupX(slideStartWorkspace());
-    }
-
-    function slideGroupWidth() {
-        return (slideEndWorkspace() - slideStartWorkspace()) * cellWidth + circleSize;
-    }
-
-    // Базовые occupied-группы без active. Они нужны как постоянное тело.
-    Repeater {
-        model: root.workspaceCount
-
-        delegate: Rectangle {
-            property int workspaceId: index + 1
-
-            visible: root.isOccupiedOnlyGroupStart(workspaceId)
-            y: root.contentCenterY() - height / 2
-            x: root.groupX(workspaceId)
-            width: root.occupiedOnlyGroupWidth(workspaceId)
-            height: root.circleSize
-            radius: height / 2
-            color: "#261b2330"
-            opacity: visible ? 0.98 : 0.0
-            z: 1
-        }
-    }
-
-    // Во время переключения рисуется единая слайд-капсула от старого active до нового.
-    // Она остается видимой до конца fade, поэтому конечная active-область не выглядит отдельной.
-    Rectangle {
-        id: slideBody
-        visible: root.slideActive()
-        y: root.contentCenterY() - height / 2
-        x: root.slideGroupX()
-        width: root.slideGroupWidth()
-        height: root.circleSize
-        radius: height / 2
-        color: "#261b2330"
-        border.width: 1
-        border.color: "#45ffffff"
-        opacity: root.trailOpacity
-        z: 2
-    }
-
-    // Финальная объединенная капсула occupied + active.
-    // Появляется поверх slideBody плавно, чтобы в конце active не отделялся от слайда.
-    Repeater {
-        model: root.workspaceCount
-
-        delegate: Rectangle {
-            property int workspaceId: index + 1
-
-            visible: root.isGroupStart(workspaceId)
-            y: root.contentCenterY() - height / 2
-            x: root.groupX(workspaceId)
-            width: root.groupWidth(workspaceId)
-            height: root.circleSize
-            radius: height / 2
-            color: "#261b2330"
-            border.width: 1
-            border.color: "#45ffffff"
-            opacity: visible ? 0.98 : 0.0
-            z: 3
-
-            Behavior on x {
-                NumberAnimation {
-                    duration: 260
-                    easing.type: Easing.OutCubic
-                }
-            }
-
-            Behavior on width {
-                NumberAnimation {
-                    duration: 260
-                    easing.type: Easing.OutCubic
-                }
-            }
-
-            Behavior on opacity {
-                NumberAnimation {
-                    duration: 150
-                }
+                ctx.beginPath();
+                ctx.moveTo(x + r, y);
+                ctx.lineTo(x + w - r, y);
+                ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+                ctx.lineTo(x + w, y + h - r);
+                ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+                ctx.lineTo(x + r, y + h);
+                ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+                ctx.lineTo(x, y + r);
+                ctx.quadraticCurveTo(x, y, x + r, y);
+                ctx.closePath();
+                ctx.fill();
             }
         }
     }
@@ -268,7 +185,7 @@ Item {
         radius: width / 2
         color: "#ffffff"
         opacity: root.activeDotOpacity * 0.98
-        z: 5
+        z: 2
     }
 
     Row {
@@ -276,7 +193,7 @@ Item {
         y: root.contentCenterY() - height / 2
         x: root.sidePadding
         spacing: 0
-        z: 4
+        z: 3
 
         Repeater {
             model: root.workspaceCount
@@ -286,7 +203,7 @@ Item {
 
                 property int workspaceId: index + 1
                 property bool occupied: root.isOccupied(workspaceId)
-                property bool hiddenByDot: root.dotIsOnWorkspace(workspaceId)
+                property bool hiddenByDot: root.dotIsOnFinalActive(workspaceId)
 
                 width: root.cellWidth
                 height: root.moduleHeight
@@ -295,12 +212,14 @@ Item {
                     anchors.centerIn: parent
                     text: cell.workspaceId
                     color: "#ffffff"
-                    opacity: cell.hiddenByDot ? 0.0 : (cell.occupied ? 0.98 : 0.78)
-                    font.pixelSize: 12
-                    font.weight: cell.occupied ? Font.DemiBold : Font.Medium
-                    renderType: Text.NativeRendering
+                    opacity: cell.hiddenByDot ? 0.0 : (cell.occupied || cell.workspaceId === root.activeWorkspace ? 0.98 : 0.78)
+                    font.pixelSize: root.textSize
+                    font.weight: cell.occupied || cell.workspaceId === root.activeWorkspace ? Font.DemiBold : Font.Medium
+                    renderType: Text.QtRendering
+                    font.hintingPreference: Font.PreferNoHinting
 
                     Behavior on opacity {
+                        enabled: cell.workspaceId === root.activeWorkspace
                         NumberAnimation {
                             duration: 90
                         }
