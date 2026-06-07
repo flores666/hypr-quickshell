@@ -13,13 +13,13 @@ Item {
     readonly property real screenDpi: Screen.pixelDensity > 0 ? Screen.pixelDensity * 25.4 : 96
     readonly property real uiScale: Math.max(0.72, Math.min(1.0, 96 / screenDpi))
 
-    readonly property int cellWidth: Math.round(23 * uiScale)
-    readonly property int moduleHeight: Math.max(circleSize + 4, Math.round(26 * uiScale))
+    readonly property int cellWidth: Math.round(27 * uiScale)
     readonly property int sidePadding: 0
     readonly property int circleSize: Math.round(23 * uiScale)
+    readonly property int moduleHeight: Math.max(circleSize + 4, Math.round(30 * uiScale))
     readonly property int activeDotSize: Math.max(6, Math.round(8 * uiScale))
     readonly property int contentYOffset: 0
-    readonly property int textSize: Math.max(10, Math.round(12 * uiScale))
+    readonly property int textSize: Math.max(10, Math.round(11 * uiScale))
 
     property int activeWorkspace: Services.ShellState.activeWorkspace
     property int previousWorkspace: Services.ShellState.activeWorkspace
@@ -195,14 +195,19 @@ Item {
                 x2 = tmp;
             }
 
-            intervals.push({ start: x1, end: x2 });
+            intervals.push({
+                start: x1,
+                end: x2
+            });
         }
 
         function mergeIntervals(intervals) {
             if (intervals.length <= 1)
                 return intervals;
 
-            intervals.sort(function(a, b) { return a.start - b.start; });
+            intervals.sort(function (a, b) {
+                return a.start - b.start;
+            });
 
             var merged = [];
             var joinGap = Math.max(1, root.cellWidth - root.circleSize + 0.75);
@@ -211,7 +216,10 @@ Item {
                 var current = intervals[i];
 
                 if (merged.length === 0) {
-                    merged.push({ start: current.start, end: current.end });
+                    merged.push({
+                        start: current.start,
+                        end: current.end
+                    });
                     continue;
                 }
 
@@ -219,7 +227,10 @@ Item {
                 if (current.start <= last.end + joinGap) {
                     last.end = Math.max(last.end, current.end);
                 } else {
-                    merged.push({ start: current.start, end: current.end });
+                    merged.push({
+                        start: current.start,
+                        end: current.end
+                    });
                 }
             }
 
@@ -327,7 +338,6 @@ Item {
                     font.weight: cell.occupied ? Font.DemiBold : Font.Medium
                     renderType: Text.QtRendering
                     font.hintingPreference: Font.PreferNoHinting
-
                 }
 
                 MouseArea {
