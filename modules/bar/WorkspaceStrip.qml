@@ -17,7 +17,7 @@ Item {
     readonly property int moduleHeight: Math.max(circleSize + 4, Math.round(26 * uiScale))
     readonly property int sidePadding: 0
     readonly property int circleSize: Math.round(23 * uiScale)
-    readonly property int activeDotSize: Math.max(4, Math.round(6 * uiScale))
+    readonly property int activeDotSize: Math.max(6, Math.round(8 * uiScale))
     readonly property int contentYOffset: 0
     readonly property int textSize: Math.max(10, Math.round(12 * uiScale))
 
@@ -37,13 +37,18 @@ Item {
     implicitWidth: sidePadding * 2 + workspaceCount * cellWidth
     implicitHeight: moduleHeight
 
+    function repaintWorkspaces() {
+        if (typeof workspaceCanvas !== "undefined" && workspaceCanvas)
+            workspaceCanvas.requestPaint();
+    }
+
     Component.onCompleted: {
         previousWorkspace = activeWorkspace;
         lastAnimatedWorkspace = activeWorkspace;
         visualActiveWorkspace = activeWorkspace;
         activeDotCenterX = workspaceCenterX(activeWorkspace);
         ready = true;
-        workspaceCanvas.requestPaint();
+        repaintWorkspaces();
     }
 
     onActiveWorkspaceChanged: {
@@ -51,7 +56,7 @@ Item {
             return;
 
         if (activeWorkspace === lastAnimatedWorkspace) {
-            workspaceCanvas.requestPaint();
+            repaintWorkspaces();
             return;
         }
 
@@ -76,31 +81,31 @@ Item {
         activeDotFade.restart();
     }
 
-    onActiveDotCenterXChanged: workspaceCanvas.requestPaint()
+    onActiveDotCenterXChanged: repaintWorkspaces()
     onUiScaleChanged: {
         if (ready && !activeDotMove.running)
             activeDotCenterX = workspaceCenterX(visualActiveWorkspace);
-        workspaceCanvas.requestPaint();
+        repaintWorkspaces();
     }
 
     onCellWidthChanged: {
         if (ready && !activeDotMove.running)
             activeDotCenterX = workspaceCenterX(visualActiveWorkspace);
-        workspaceCanvas.requestPaint();
+        repaintWorkspaces();
     }
 
-    onCircleSizeChanged: workspaceCanvas.requestPaint()
-    onModuleHeightChanged: workspaceCanvas.requestPaint()
+    onCircleSizeChanged: repaintWorkspaces()
+    onModuleHeightChanged: repaintWorkspaces()
 
     Connections {
         target: Services.ShellState
 
         function onOccupiedWorkspacesChanged() {
-            workspaceCanvas.requestPaint();
+            repaintWorkspaces();
         }
 
         function onWindowsChanged() {
-            workspaceCanvas.requestPaint();
+            repaintWorkspaces();
         }
     }
 
@@ -129,7 +134,7 @@ Item {
         repeat: false
         onTriggered: {
             root.visualActiveWorkspace = root.activeWorkspace;
-            root.workspaceCanvas.requestPaint();
+            root.repaintWorkspaces();
         }
     }
 
@@ -170,8 +175,10 @@ Item {
         return 1.0 - t;
     }
 
-    function textOpacityForWorkspace(workspaceId, occupied, active) {
-        var baseOpacity = (occupied || active) ? 0.98 : 0.78;
+    function textOpacityForWorkspace(workspaceId, occupied) {
+        // Активность больше не влияет на цвет/прозрачность цифры.
+        // Иначе после ухода activeDot было заметно, как текст меняет оттенок.
+        var baseOpacity = occupied ? 0.98 : 0.86;
         var cover = dotCoverAmount(workspaceId);
         return baseOpacity * (1.0 - cover);
     }
@@ -239,8 +246,10 @@ Item {
         onPaint: {
             var ctx = getContext("2d");
             ctx.clearRect(0, 0, width, height);
-            ctx.fillStyle = "#261b2330";
-            ctx.globalAlpha = 0.98;
+            // Контрастная подложка для занятых/активного workspace.
+            // Раньше фон был слишком прозрачным и терялся на светлых обоях.
+            ctx.fillStyle = "rgba(8, 10, 16, 0.72)";
+            ctx.globalAlpha = 1.0;
 
             var y = root.contentCenterY() - root.circleSize / 2;
             var radius = root.circleSize / 2;
@@ -276,7 +285,9 @@ Item {
         height: root.activeDotSize
         radius: width / 2
         color: "#ffffff"
-        opacity: root.activeDotOpacity * 0.98
+        opacity: root.activeDotOpacity
+        border.width: Math.max(1, Math.round(1 * root.uiScale))
+        border.color: "#99000000"
         antialiasing: true
         smooth: true
         layer.enabled: true
@@ -308,9 +319,12 @@ Item {
                     anchors.centerIn: parent
                     text: cell.workspaceId
                     color: "#ffffff"
-                    opacity: root.textOpacityForWorkspace(cell.workspaceId, cell.occupied, cell.active)
+                    opacity: root.textOpacityForWorkspace(cell.workspaceId, cell.occupied)
+                    // Черная обводка держит цифры читаемыми даже на очень светлых обоях.
+                    style: Text.Outline
+                    styleColor: "#b0000000"
                     font.pixelSize: root.textSize
-                    font.weight: cell.occupied || cell.active ? Font.DemiBold : Font.Medium
+                    font.weight: cell.occupied ? Font.DemiBold : Font.Medium
                     renderType: Text.QtRendering
                     font.hintingPreference: Font.PreferNoHinting
 

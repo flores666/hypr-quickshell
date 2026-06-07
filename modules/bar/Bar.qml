@@ -30,8 +30,10 @@ PanelWindow {
         anchors.fill: parent
         anchors.margins: 4
         radiusSize: 12
-        glassColor: "#4d141822"
-        strokeColor: "#22ffffff"
+        // Более плотный фон нужен, чтобы панель была читаемой на светлых обоях.
+        // Blur остается, но светлая картинка больше не пробивает фон слишком сильно.
+        glassColor: "#b010131a"
+        strokeColor: "#66ffffff"
     }
 
     RowLayout {
