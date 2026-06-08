@@ -10,9 +10,12 @@ Rectangle {
     property int fallbackPixelSize: 24
     property string fallbackText: "♪"
     property color fallbackTextColor: "#dfe7f0"
-    property bool imageVisible: displayedSource !== "" && shown.status === Image.Ready
+    property bool imageVisible: displayedSource !== "" || incomingSource !== ""
     property string displayedSource: ""
     property string pendingSource: ""
+    property string incomingSource: ""
+    property bool incomingActive: false
+    property bool waitingForShownReady: false
     property bool triedFallback: false
 
     color: "#18ffffff"
@@ -21,6 +24,49 @@ Rectangle {
     clip: false
     antialiasing: true
 
+    function clearCover() {
+        displayedSource = "";
+        pendingSource = "";
+        incomingSource = "";
+        incomingActive = false;
+        waitingForShownReady = false;
+        preload.source = "";
+        shownReadyTimer.stop();
+        commitIncomingTimer.stop();
+    }
+
+    function startPreload(value) {
+        if (value === "") {
+            clearCover();
+            return;
+        }
+
+        pendingSource = value;
+        incomingSource = "";
+        incomingActive = false;
+        waitingForShownReady = false;
+        shownReadyTimer.stop();
+        commitIncomingTimer.stop();
+        preload.source = "";
+        reloadTimer.restart();
+    }
+
+    function commitIncomingCover() {
+        if (incomingSource === "")
+            return;
+
+        waitingForShownReady = true;
+        displayedSource = incomingSource;
+        shownReadyTimer.restart();
+    }
+
+    function finishIncomingCover() {
+        incomingSource = "";
+        incomingActive = false;
+        waitingForShownReady = false;
+        shownReadyTimer.stop();
+    }
+
     function reloadCover() {
         const next = sourceUrl || "";
         const fallback = fallbackSourceUrl || "";
@@ -28,13 +74,9 @@ Rectangle {
         if (next === "") {
             if (fallback !== "") {
                 triedFallback = true;
-                pendingSource = fallback;
-                preload.source = "";
-                reloadTimer.restart();
+                startPreload(fallback);
             } else {
-                displayedSource = "";
-                pendingSource = "";
-                preload.source = "";
+                clearCover();
             }
             return;
         }
@@ -42,24 +84,44 @@ Rectangle {
         if (next === displayedSource && shown.status === Image.Ready)
             return;
 
+        if (next === pendingSource && preload.status === Image.Loading)
+            return;
+
         triedFallback = false;
-        pendingSource = next;
-        preload.source = "";
-        reloadTimer.restart();
+        startPreload(next);
     }
 
     onSourceUrlChanged: reloadCover()
     onFallbackSourceUrlChanged: reloadCover()
-    onSourceKeyChanged: {
-        displayedSource = "";
-        reloadCover();
-    }
+    onSourceKeyChanged: reloadCover()
 
     Timer {
         id: reloadTimer
         interval: 1
         repeat: false
         onTriggered: preload.source = root.pendingSource
+    }
+
+    Timer {
+        id: commitIncomingTimer
+        interval: 120
+        repeat: false
+        onTriggered: root.commitIncomingCover()
+    }
+
+    Timer {
+        id: shownReadyTimer
+        interval: 16
+        repeat: true
+        onTriggered: {
+            if (!root.waitingForShownReady) {
+                stop();
+                return;
+            }
+
+            if (shown.status === Image.Ready && String(shown.source) === root.displayedSource)
+                root.finishIncomingCover();
+        }
     }
 
     Rectangle {
@@ -75,12 +137,57 @@ Rectangle {
         source: root.displayedSource
         fillMode: Image.PreserveAspectCrop
         asynchronous: true
-        cache: false
+        cache: true
         smooth: true
         mipmap: true
         sourceSize.width: Math.max(64, Math.ceil(root.width * Screen.devicePixelRatio * 2))
         sourceSize.height: Math.max(64, Math.ceil(root.height * Screen.devicePixelRatio * 2))
         visible: false
+
+        onStatusChanged: {
+            if (root.waitingForShownReady && status === Image.Ready && String(source) === root.displayedSource)
+                root.finishIncomingCover();
+        }
+    }
+
+    Image {
+        id: preload
+        anchors.fill: parent
+        source: ""
+        fillMode: Image.PreserveAspectCrop
+        asynchronous: true
+        cache: true
+        smooth: true
+        mipmap: true
+        sourceSize.width: Math.max(64, Math.ceil(root.width * Screen.devicePixelRatio * 2))
+        sourceSize.height: Math.max(64, Math.ceil(root.height * Screen.devicePixelRatio * 2))
+        visible: false
+
+        onStatusChanged: {
+            if (status === Image.Ready && source !== "") {
+                const readySource = String(source);
+
+                if (readySource === root.displayedSource) {
+                    root.incomingSource = "";
+                    root.incomingActive = false;
+                    root.waitingForShownReady = false;
+                    return;
+                }
+
+                root.incomingSource = readySource;
+                root.incomingActive = true;
+                commitIncomingTimer.restart();
+                return;
+            }
+
+            if (status === Image.Error && source !== "") {
+                const fallback = root.fallbackSourceUrl || "";
+                if (!root.triedFallback && fallback !== "" && fallback !== String(source)) {
+                    root.triedFallback = true;
+                    root.startPreload(fallback);
+                }
+            }
+        }
     }
 
     Rectangle {
@@ -92,19 +199,12 @@ Rectangle {
     }
 
     Item {
-        id: roundedImage
+        id: currentImageLayer
         anchors.fill: parent
         visible: root.displayedSource !== "" && shown.status === Image.Ready
-        opacity: visible ? 1.0 : 0.0
         layer.enabled: true
         layer.smooth: true
         layer.samples: 4
-
-        Behavior on opacity {
-            NumberAnimation {
-                duration: 160
-            }
-        }
 
         OpacityMask {
             anchors.fill: parent
@@ -114,27 +214,26 @@ Rectangle {
         }
     }
 
-    Image {
-        id: preload
-        visible: false
-        asynchronous: true
-        cache: false
+    Item {
+        id: incomingImageLayer
+        anchors.fill: parent
+        visible: root.incomingSource !== "" && preload.status === Image.Ready
+        opacity: root.incomingActive || root.waitingForShownReady ? 1.0 : 0.0
+        layer.enabled: true
+        layer.smooth: true
+        layer.samples: 4
 
-        onStatusChanged: {
-            if (status === Image.Ready && source !== "") {
-                root.displayedSource = String(source);
-                return;
+        Behavior on opacity {
+            NumberAnimation {
+                duration: 120
             }
+        }
 
-            if (status === Image.Error && source !== "") {
-                const fallback = root.fallbackSourceUrl || "";
-                if (!root.triedFallback && fallback !== "" && fallback !== String(source)) {
-                    root.triedFallback = true;
-                    root.pendingSource = fallback;
-                    preload.source = "";
-                    reloadTimer.restart();
-                }
-            }
+        OpacityMask {
+            anchors.fill: parent
+            source: preload
+            maskSource: roundedMask
+            cached: true
         }
     }
 
@@ -149,7 +248,7 @@ Rectangle {
 
     Text {
         anchors.centerIn: parent
-        visible: !roundedImage.visible
+        visible: !currentImageLayer.visible && !incomingImageLayer.visible
         text: root.fallbackText
         color: root.fallbackTextColor
         font.pixelSize: root.fallbackPixelSize
