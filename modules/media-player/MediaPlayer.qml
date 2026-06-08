@@ -8,6 +8,7 @@ Item {
     property real hostWidth: 0
     property real popupBaseX: x
     property real panelHeight: 38
+    readonly property real popupTopY: panelHeight
 
     property bool popupOpen: false
     property var activePlayer: null
@@ -469,7 +470,7 @@ Item {
         hostWidth: root.hostWidth
         panelHeight: root.panelHeight
         popupX: root.popupXFor(402)
-        popupY: root.panelHeight + 6
+        popupY: root.popupTopY
         popupWidth: 402
         popupHeight: 66
     }
@@ -479,6 +480,6 @@ Item {
         controller: root
         hostWindow: root.hostWindow
         popupX: root.popupXFor(implicitWidth)
-        popupY: root.panelHeight + 6
+        popupY: root.popupTopY
     }
 }

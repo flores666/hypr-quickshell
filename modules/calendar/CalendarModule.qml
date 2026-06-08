@@ -11,6 +11,7 @@ Item {
     property real hostWidth: 0
     property real popupBaseX: x
     property real panelHeight: 38
+    readonly property real popupTopY: panelHeight
     property date now: new Date()
     property bool popupOpen: false
     property date visibleMonth: new Date(now.getFullYear(), now.getMonth(), 1)
@@ -158,7 +159,7 @@ Item {
         hostWidth: root.hostWidth
         panelHeight: root.panelHeight
         popupX: root.popupXFor(316)
-        popupY: root.panelHeight + 4
+        popupY: root.popupTopY
         popupWidth: 316
         popupHeight: 356
     }
@@ -167,7 +168,7 @@ Item {
         id: calendarPopup
         anchor.window: root.hostWindow
         anchor.rect.x: root.popupXFor(implicitWidth)
-        anchor.rect.y: root.panelHeight + 4
+        anchor.rect.y: root.popupTopY
         implicitWidth: 316
         implicitHeight: 356
         visible: popupState.renderVisible
@@ -177,8 +178,8 @@ Item {
         Components.AnimatedPopupState {
             id: popupState
             targetVisible: root.popupOpen
-            openDuration: motion.popupOpenDuration
-            closeDuration: motion.popupCloseDuration
+            openDuration: 350
+            closeDuration: 270
             closeSafetyDelay: 340
         }
 
@@ -186,7 +187,7 @@ Item {
             id: popupMotionLayer
             anchors.fill: parent
             opacity: popupState.reveal
-            y: -10 + popupState.reveal * 10
+            y: -9 + popupState.reveal * 9
             scale: 0.972 + popupState.reveal * 0.028
             transformOrigin: Item.Top
             enabled: root.popupOpen && popupState.reveal > 0.45
@@ -198,6 +199,8 @@ Item {
                 anchors.fill: parent
                 radiusSize: 18
                 glassColor: "#b010131a"
+                clip: true
+                antialiasing: true
             }
 
             Rectangle {
