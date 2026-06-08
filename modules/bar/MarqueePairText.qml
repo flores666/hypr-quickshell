@@ -12,7 +12,7 @@ Item {
     property int titleWeight: Font.DemiBold
     property int artistWeight: Font.Medium
     property int gap: 42
-    property real speedPixelsPerSecond: 22.68
+    property real speedPixelsPerSecond: 14
     property real offset: 0
     property string resetKey: titleText + "\n" + artistText
     property string lastResetKey: ""

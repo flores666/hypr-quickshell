@@ -62,7 +62,6 @@ PanelWindow {
         syncPositionFromPlayer(true);
     }
 
-
     function playersList() {
         if (!Mpris || !Mpris.players || !Mpris.players.values)
             return [];
@@ -81,12 +80,8 @@ PanelWindow {
             return "";
 
         const stable = playerStableKey(player);
-        return stable + ":"
-            + String(player.trackTitle || "") + ":"
-            + String(player.trackArtist || "") + ":"
-            + String(player.trackAlbum || "");
+        return stable + ":" + String(player.trackTitle || "") + ":" + String(player.trackArtist || "") + ":" + String(player.trackAlbum || "");
     }
-
 
     function refreshActivePlayer() {
         const list = playersList();
@@ -270,9 +265,7 @@ PanelWindow {
     }
 
     function isToday(day) {
-        return day === now.getDate()
-            && visibleMonth.getMonth() === now.getMonth()
-            && visibleMonth.getFullYear() === now.getFullYear();
+        return day === now.getDate() && visibleMonth.getMonth() === now.getMonth() && visibleMonth.getFullYear() === now.getFullYear();
     }
 
     function changeMonth(delta) {
@@ -334,7 +327,6 @@ PanelWindow {
             return currentArtist;
         return activePlayer.identity || "Media Player";
     }
-
 
     function hasDuration() {
         if (!activePlayer)
@@ -518,8 +510,16 @@ PanelWindow {
             border.color: root.calendarOpen ? "#33ffffff" : "transparent"
             border.width: 1
 
-            Behavior on color { ColorAnimation { duration: 140 } }
-            Behavior on border.color { ColorAnimation { duration: 140 } }
+            Behavior on color {
+                ColorAnimation {
+                    duration: 140
+                }
+            }
+            Behavior on border.color {
+                ColorAnimation {
+                    duration: 140
+                }
+            }
 
             Text {
                 id: clockText
@@ -538,15 +538,17 @@ PanelWindow {
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onClicked: root.toggleCalendar()
-                onEntered: if (!root.calendarOpen) clockButton.color = "#14ffffff"
-                onExited: if (!root.calendarOpen) clockButton.color = "transparent"
+                onEntered: if (!root.calendarOpen)
+                    clockButton.color = "#14ffffff"
+                onExited: if (!root.calendarOpen)
+                    clockButton.color = "transparent"
             }
         }
 
         Rectangle {
             id: mediaButton
             anchors.right: clockButton.left
-            anchors.rightMargin: 6
+            anchors.rightMargin: 20
             anchors.verticalCenter: parent.verticalCenter
             visible: root.activePlayer !== null
             width: root.activePlayer ? 270 : 0
@@ -557,8 +559,17 @@ PanelWindow {
             border.width: 1
             clip: true
 
-            Behavior on color { ColorAnimation { duration: 140 } }
-            Behavior on width { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+            Behavior on color {
+                ColorAnimation {
+                    duration: 140
+                }
+            }
+            Behavior on width {
+                NumberAnimation {
+                    duration: 180
+                    easing.type: Easing.OutCubic
+                }
+            }
 
             RowLayout {
                 z: 1
@@ -584,7 +595,7 @@ PanelWindow {
                 }
 
                 MediaProgressBar {
-                    Layout.preferredWidth: root.activePlayer ? 62 : 0
+                    Layout.preferredWidth: root.activePlayer ? 74 : 0
                     Layout.preferredHeight: 12
                     Layout.alignment: Qt.AlignVCenter
                     value: root.visualPosition
@@ -603,13 +614,15 @@ PanelWindow {
                 cursorShape: Qt.PointingHandCursor
                 z: 0
 
-                onClicked: function(mouse) {
+                onClicked: function (mouse) {
                     root.handleMediaLeftClick();
                     mouse.accepted = true;
                 }
 
-                onEntered: if (!root.mediaOpen) mediaButton.color = "#14ffffff"
-                onExited: if (!root.mediaOpen) mediaButton.color = "transparent"
+                onEntered: if (!root.mediaOpen)
+                    mediaButton.color = "#14ffffff"
+                onExited: if (!root.mediaOpen)
+                    mediaButton.color = "transparent"
             }
         }
     }
@@ -752,7 +765,10 @@ PanelWindow {
                 }
             }
 
-            Item { width: parent.width; height: 1 }
+            Item {
+                width: parent.width
+                height: 1
+            }
 
             Rectangle {
                 width: parent.width
@@ -775,7 +791,6 @@ PanelWindow {
             }
         }
     }
-
 
     PopupWindow {
         id: compactMediaPopup
@@ -925,7 +940,9 @@ PanelWindow {
                             fillColor: root.accentStrongColor
                             onDragStarted: root.isDragging = true
                             onDragEnded: root.isDragging = false
-                            onSeekRequested: function(seconds) { root.performSeek(seconds); }
+                            onSeekRequested: function (seconds) {
+                                root.performSeek(seconds);
+                            }
                         }
 
                         Text {
@@ -945,6 +962,4 @@ PanelWindow {
             }
         }
     }
-
 }
-

@@ -63,7 +63,11 @@ Rectangle {
         visible: root.displayedSource !== "" && status !== Image.Error
         opacity: visible ? 1.0 : 0.0
 
-        Behavior on opacity { NumberAnimation { duration: 160 } }
+        Behavior on opacity {
+            NumberAnimation {
+                duration: 160
+            }
+        }
     }
 
     Image {
