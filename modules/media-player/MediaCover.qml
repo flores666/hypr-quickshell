@@ -16,6 +16,7 @@ Rectangle {
     property string incomingSource: ""
     property bool incomingActive: false
     property bool waitingForShownReady: false
+    property real incomingOpacity: 0.0
     property bool triedFallback: false
 
     color: "#18ffffff"
@@ -30,9 +31,11 @@ Rectangle {
         incomingSource = "";
         incomingActive = false;
         waitingForShownReady = false;
+        incomingOpacity = 0.0;
         preload.source = "";
         shownReadyTimer.stop();
         commitIncomingTimer.stop();
+        incomingFadeTimer.stop();
     }
 
     function startPreload(value) {
@@ -45,8 +48,10 @@ Rectangle {
         incomingSource = "";
         incomingActive = false;
         waitingForShownReady = false;
+        incomingOpacity = 0.0;
         shownReadyTimer.stop();
         commitIncomingTimer.stop();
+        incomingFadeTimer.stop();
         preload.source = "";
         reloadTimer.restart();
     }
@@ -64,7 +69,9 @@ Rectangle {
         incomingSource = "";
         incomingActive = false;
         waitingForShownReady = false;
+        incomingOpacity = 0.0;
         shownReadyTimer.stop();
+        incomingFadeTimer.stop();
     }
 
     function reloadCover() {
@@ -104,9 +111,16 @@ Rectangle {
 
     Timer {
         id: commitIncomingTimer
-        interval: 120
+        interval: 260
         repeat: false
         onTriggered: root.commitIncomingCover()
+    }
+
+    Timer {
+        id: incomingFadeTimer
+        interval: 16
+        repeat: false
+        onTriggered: root.incomingOpacity = 1.0
     }
 
     Timer {
@@ -171,11 +185,14 @@ Rectangle {
                     root.incomingSource = "";
                     root.incomingActive = false;
                     root.waitingForShownReady = false;
+                    root.incomingOpacity = 0.0;
                     return;
                 }
 
                 root.incomingSource = readySource;
+                root.incomingOpacity = 0.0;
                 root.incomingActive = true;
+                incomingFadeTimer.restart();
                 commitIncomingTimer.restart();
                 return;
             }
@@ -218,14 +235,15 @@ Rectangle {
         id: incomingImageLayer
         anchors.fill: parent
         visible: root.incomingSource !== "" && preload.status === Image.Ready
-        opacity: root.incomingActive || root.waitingForShownReady ? 1.0 : 0.0
+        opacity: root.incomingOpacity
         layer.enabled: true
         layer.smooth: true
         layer.samples: 4
 
         Behavior on opacity {
             NumberAnimation {
-                duration: 120
+                duration: 220
+                easing.type: Easing.OutCubic
             }
         }
 

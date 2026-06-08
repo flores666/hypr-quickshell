@@ -14,11 +14,15 @@ Item {
     property bool dragging: false
     property real dragValue: 0
 
+    readonly property bool interactive: seekEnabled && safeDuration() > 0
+    readonly property bool hovered: progressMouse.containsMouse && interactive
+    readonly property real animatedBarHeight: barHeight + (hovered || dragging ? 2 : 0)
+
     signal seekRequested(real seconds)
     signal dragStarted()
     signal dragEnded()
 
-    implicitHeight: Math.max(12, barHeight)
+    implicitHeight: Math.max(14, barHeight + 8)
 
     function clamp(v, min, max) {
         return Math.max(min, Math.min(max, v));
@@ -45,10 +49,19 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
-        height: root.barHeight
+        height: root.animatedBarHeight
         radius: height / 2
         color: root.backgroundColor
-        opacity: root.safeDuration() > 0 ? 1.0 : 0.45
+        opacity: root.safeDuration() > 0 ? (root.hovered || root.dragging ? 1.0 : 0.86) : 0.42
+        antialiasing: true
+
+        Behavior on height {
+            NumberAnimation { duration: 190; easing.type: Easing.OutCubic }
+        }
+
+        Behavior on opacity {
+            NumberAnimation { duration: 190; easing.type: Easing.OutCubic }
+        }
 
         Rectangle {
             id: fill
@@ -60,32 +73,52 @@ Item {
                 : 0
             radius: parent.radius
             color: root.fillColor
+            opacity: root.hovered || root.dragging ? 1.0 : 0.92
+            antialiasing: true
 
             Behavior on width {
                 enabled: !root.dragging
+                NumberAnimation { duration: 260; easing.type: Easing.OutCubic }
+            }
+
+            Behavior on opacity {
                 NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
             }
         }
 
         Rectangle {
-            width: 10
-            height: 10
-            radius: 5
+            id: handle
+            width: root.hovered || root.dragging ? 11 : 8
+            height: width
+            radius: width / 2
             color: root.handleColor
-            visible: root.showHandle && root.seekEnabled && root.safeDuration() > 0
+            visible: root.showHandle && root.interactive
             anchors.verticalCenter: parent.verticalCenter
             x: root.clamp(fill.width - width / 2, 0, parent.width - width)
-            opacity: progressMouse.containsMouse || root.dragging ? 1.0 : 0.0
+            opacity: root.hovered || root.dragging ? 1.0 : 0.0
+            scale: progressMouse.pressed ? 0.92 : (root.hovered ? 1.05 : 1.0)
+            antialiasing: true
 
-            Behavior on opacity { NumberAnimation { duration: 120 } }
+            Behavior on width {
+                NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
+            }
+
+            Behavior on opacity {
+                NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
+            }
+
+            Behavior on scale {
+                NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
+            }
         }
     }
 
     MouseArea {
         id: progressMouse
         anchors.fill: parent
-        enabled: root.seekEnabled && root.safeDuration() > 0
+        enabled: root.interactive
         hoverEnabled: true
+        acceptedButtons: Qt.LeftButton
         cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
 
         onPressed: function(mouse) {

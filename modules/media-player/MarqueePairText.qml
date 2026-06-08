@@ -16,19 +16,57 @@ Item {
     property real offset: 0
     property string resetKey: titleText + "\n" + artistText
     property string lastResetKey: ""
+    property string displayTitleText: titleText
+    property string displayArtistText: artistText
+    property string pendingTitleText: titleText
+    property string pendingArtistText: artistText
+    property real textOpacity: 1.0
+    property bool completed: false
 
     implicitHeight: Math.max(titleA.implicitHeight, artistA.implicitHeight, pixelSize + 4)
     clip: true
 
-    readonly property bool hasArtist: artistText !== ""
+    readonly property bool hasArtist: displayArtistText !== ""
     readonly property real contentWidth: titleA.implicitWidth + (hasArtist ? separatorA.implicitWidth + artistA.implicitWidth : 0)
     readonly property bool shouldScroll: contentWidth > width && width > 0
     readonly property real scrollDistance: contentWidth + gap
+
+    function applyIncomingText() {
+        displayTitleText = pendingTitleText;
+        displayArtistText = pendingArtistText;
+        resetScroll();
+        textOpacity = 1.0;
+    }
+
+    function scheduleTextChange() {
+        pendingTitleText = titleText;
+        pendingArtistText = artistText;
+
+        if (!completed) {
+            displayTitleText = pendingTitleText;
+            displayArtistText = pendingArtistText;
+            return;
+        }
+
+        if (displayTitleText === pendingTitleText && displayArtistText === pendingArtistText)
+            return;
+
+        if (textOpacity <= 0.02) {
+            textSwapTimer.restart();
+            return;
+        }
+
+        textOpacity = 0.0;
+        textSwapTimer.restart();
+    }
 
     function resetScroll() {
         offset = 0;
         scrollDelay.restart();
     }
+
+    onTitleTextChanged: scheduleTextChange()
+    onArtistTextChanged: scheduleTextChange()
 
     onResetKeyChanged: {
         if (lastResetKey === resetKey)
@@ -45,6 +83,24 @@ Item {
             scrollDelay.stop();
             offset = 0;
         }
+    }
+
+    Component.onCompleted: {
+        completed = true;
+        displayTitleText = titleText;
+        displayArtistText = artistText;
+        lastResetKey = resetKey;
+    }
+
+    Behavior on textOpacity {
+        NumberAnimation { duration: 135; easing.type: Easing.OutCubic }
+    }
+
+    Timer {
+        id: textSwapTimer
+        interval: 145
+        repeat: false
+        onTriggered: root.applyIncomingText()
     }
 
     Timer {
@@ -78,12 +134,13 @@ Item {
         width: root.contentWidth
         height: parent.height
         x: root.shouldScroll ? -root.offset : 0
+        opacity: root.textOpacity
 
         Text {
             id: titleA
             x: 0
             y: Math.round((root.height - implicitHeight) / 2)
-            text: root.titleText
+            text: root.displayTitleText
             color: root.titleColor
             font.pixelSize: root.pixelSize
             font.weight: root.titleWeight
@@ -115,7 +172,7 @@ Item {
             visible: root.hasArtist
             x: titleA.implicitWidth + separatorA.implicitWidth
             y: Math.round((root.height - implicitHeight) / 2)
-            text: root.artistText
+            text: root.displayArtistText
             color: root.artistColor
             font.pixelSize: root.pixelSize
             font.weight: root.artistWeight
@@ -133,12 +190,13 @@ Item {
         width: root.contentWidth
         height: parent.height
         x: copyA.x + root.contentWidth + root.gap
+        opacity: root.textOpacity
 
         Text {
             id: titleB
             x: 0
             y: Math.round((root.height - implicitHeight) / 2)
-            text: root.titleText
+            text: root.displayTitleText
             color: root.titleColor
             font.pixelSize: root.pixelSize
             font.weight: root.titleWeight
@@ -169,7 +227,7 @@ Item {
             visible: root.hasArtist
             x: titleB.implicitWidth + separatorB.implicitWidth
             y: Math.round((root.height - implicitHeight) / 2)
-            text: root.artistText
+            text: root.displayArtistText
             color: root.artistColor
             font.pixelSize: root.pixelSize
             font.weight: root.artistWeight

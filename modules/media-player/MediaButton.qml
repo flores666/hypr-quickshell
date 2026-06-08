@@ -20,22 +20,31 @@ Rectangle {
     implicitHeight: 24
     visible: playerActive
     radius: 12
-    color: popupOpen ? "#20ffffff" : "transparent"
-    border.color: popupOpen ? "#28ffffff" : "transparent"
+    color: popupOpen
+        ? "#22ffffff"
+        : (buttonMouse.pressed ? "#1cffffff" : (buttonMouse.containsMouse ? "#14ffffff" : "transparent"))
+    border.color: popupOpen
+        ? "#35ffffff"
+        : (buttonMouse.containsMouse ? "#1effffff" : "transparent")
     border.width: 1
     clip: true
+    scale: buttonMouse.pressed ? 0.982 : (buttonMouse.containsMouse || popupOpen ? 1.01 : 1.0)
+    transformOrigin: Item.Center
 
     Behavior on color {
-        ColorAnimation {
-            duration: 140
-        }
+        ColorAnimation { duration: 220; easing.type: Easing.OutCubic }
+    }
+
+    Behavior on border.color {
+        ColorAnimation { duration: 220; easing.type: Easing.OutCubic }
+    }
+
+    Behavior on scale {
+        NumberAnimation { duration: 190; easing.type: Easing.OutCubic }
     }
 
     Behavior on width {
-        NumberAnimation {
-            duration: 180
-            easing.type: Easing.OutCubic
-        }
+        NumberAnimation { duration: 240; easing.type: Easing.OutCubic }
     }
 
     RowLayout {
@@ -44,6 +53,11 @@ Rectangle {
         anchors.leftMargin: 6
         anchors.rightMargin: 6
         spacing: 5
+        opacity: root.playerActive ? 1.0 : 0.0
+
+        Behavior on opacity {
+            NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
+        }
 
         MarqueePairText {
             Layout.fillWidth: true
@@ -75,20 +89,16 @@ Rectangle {
     }
 
     MouseArea {
+        id: buttonMouse
         anchors.fill: parent
         hoverEnabled: true
         acceptedButtons: Qt.LeftButton
         cursorShape: Qt.PointingHandCursor
-        z: 0
+        z: 2
 
         onClicked: function (mouse) {
             root.clicked();
             mouse.accepted = true;
         }
-
-        onEntered: if (!root.popupOpen)
-            root.color = "#14ffffff"
-        onExited: if (!root.popupOpen)
-            root.color = "transparent"
     }
 }

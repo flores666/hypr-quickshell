@@ -379,7 +379,7 @@ Item {
 
     Timer {
         id: positionTimer
-        interval: 500
+        interval: 250
         repeat: true
         running: root.activePlayer && root.activePlayer.isPlaying
         onTriggered: {
@@ -463,7 +463,19 @@ Item {
         onClicked: root.togglePopup()
     }
 
+    MediaOutsideClickLayer {
+        controller: root
+        hostWindow: root.hostWindow
+        hostWidth: root.hostWidth
+        panelHeight: root.panelHeight
+        popupX: root.popupXFor(402)
+        popupY: root.panelHeight + 6
+        popupWidth: 402
+        popupHeight: 66
+    }
+
     MediaPopup {
+        id: mediaPopup
         controller: root
         hostWindow: root.hostWindow
         popupX: root.popupXFor(implicitWidth)

@@ -44,8 +44,16 @@ PanelWindow {
         anchors.leftMargin: 4
         anchors.rightMargin: 4
 
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.LeftButton
+            cursorShape: Qt.ArrowCursor
+            onClicked: root.closePopups()
+        }
+
         Workspaces.WorkspaceStrip {
             id: workspaces
+            z: 1
             width: implicitWidth
             height: implicitHeight
             anchors.left: parent.left
@@ -54,6 +62,7 @@ PanelWindow {
 
         Calendar.CalendarModule {
             id: calendar
+            z: 1
             width: implicitWidth
             height: implicitHeight
             anchors.horizontalCenter: parent.horizontalCenter
@@ -67,6 +76,7 @@ PanelWindow {
 
         Media.MediaPlayer {
             id: mediaPlayer
+            z: 1
             width: implicitWidth
             height: implicitHeight
             anchors.right: calendar.left
