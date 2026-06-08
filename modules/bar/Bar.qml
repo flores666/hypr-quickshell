@@ -430,7 +430,7 @@ PanelWindow {
             return;
 
         const target = Math.max(0, Math.min(Number(seconds || 0), currentLength));
-        const previousPosition = Math.max(0, Number(currentPosition || player.position || 0));
+        const previousPosition = Math.max(0, Number(player.position || currentPosition || 0));
         const delta = target - previousPosition;
 
         if (Math.abs(delta) < 0.25) {
@@ -440,12 +440,13 @@ PanelWindow {
         }
 
         try {
-            if (typeof player.seek === "function")
-                player.seek(delta);
-            else if (player.positionSupported !== false)
+            if (player.positionSupported !== false) {
                 player.position = target;
-            else
+            } else if (typeof player.seek === "function") {
+                player.seek(delta);
+            } else {
                 return;
+            }
 
             pendingSeekPosition = target;
             pendingSeekTrackId = currentTrackId;
