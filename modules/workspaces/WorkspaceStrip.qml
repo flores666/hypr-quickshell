@@ -297,8 +297,7 @@ Item {
         radius: width / 2
         color: "#ffffff"
         opacity: root.activeDotOpacity
-        border.width: Math.max(1, Math.round(1 * root.uiScale))
-        border.color: "#99000000"
+        border.width: 0
         antialiasing: true
         smooth: true
         layer.enabled: true

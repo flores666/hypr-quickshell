@@ -96,20 +96,13 @@ Item {
         height: 24
         radius: 12
         color: root.popupOpen ? "#26ffffff" : "transparent"
-        border.color: root.popupOpen ? "#33ffffff" : "transparent"
-        border.width: 1
+        border.width: 0
 
         Behavior on color {
             ColorAnimation {
                 duration: 140
             }
         }
-        Behavior on border.color {
-            ColorAnimation {
-                duration: 140
-            }
-        }
-
         Text {
             id: clockText
             anchors.centerIn: parent
@@ -149,7 +142,6 @@ Item {
             anchors.fill: parent
             radiusSize: 18
             glassColor: "#e010131a"
-            strokeColor: "#55ffffff"
         }
 
         Column {
@@ -282,8 +274,7 @@ Item {
                 height: 42
                 radius: 14
                 color: "#12ffffff"
-                border.color: "#22ffffff"
-                border.width: 1
+                border.width: 0
 
                 Text {
                     anchors.centerIn: parent

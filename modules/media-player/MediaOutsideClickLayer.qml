@@ -39,7 +39,7 @@ Item {
             anchors.fill: parent
             acceptedButtons: Qt.LeftButton
             cursorShape: Qt.ArrowCursor
-            onPressed: root.closeFromOutside(mouse)
+            onPressed: function(mouse) { root.closeFromOutside(mouse); }
         }
     }
 
@@ -57,7 +57,7 @@ Item {
             anchors.fill: parent
             acceptedButtons: Qt.LeftButton
             cursorShape: Qt.ArrowCursor
-            onPressed: root.closeFromOutside(mouse)
+            onPressed: function(mouse) { root.closeFromOutside(mouse); }
         }
     }
 
@@ -75,7 +75,7 @@ Item {
             anchors.fill: parent
             acceptedButtons: Qt.LeftButton
             cursorShape: Qt.ArrowCursor
-            onPressed: root.closeFromOutside(mouse)
+            onPressed: function(mouse) { root.closeFromOutside(mouse); }
         }
     }
 
@@ -93,7 +93,7 @@ Item {
             anchors.fill: parent
             acceptedButtons: Qt.LeftButton
             cursorShape: Qt.ArrowCursor
-            onPressed: root.closeFromOutside(mouse)
+            onPressed: function(mouse) { root.closeFromOutside(mouse); }
         }
     }
 }

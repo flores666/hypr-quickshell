@@ -93,8 +93,7 @@ PopupWindow {
             anchors.fill: parent
             radius: 18
             color: controller ? controller.darkPanelSoftColor : "#e0181c27"
-            border.color: Qt.rgba(1, 1, 1, 0.13 + root.reveal * 0.08)
-            border.width: 1
+            border.width: 0
             clip: true
             antialiasing: true
             scale: popupMouse.pressed ? 0.992 : 1.0
@@ -106,7 +105,7 @@ PopupWindow {
 
 
             Behavior on scale {
-                NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
+                NumberAnimation { duration: 260; easing.type: Easing.OutCubic }
             }
 
             MouseArea {
@@ -120,7 +119,7 @@ PopupWindow {
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 8
+                anchors.leftMargin: 9
                 anchors.rightMargin: 8
                 anchors.topMargin: 8
                 anchors.bottomMargin: 8
@@ -146,7 +145,7 @@ PopupWindow {
 
                 ColumnLayout {
                     Layout.fillWidth: true
-                    Layout.alignment: Qt.AlignVCenter
+                    Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
                     spacing: 4
                     opacity: root.segment(0.18, 0.92)
 
@@ -154,6 +153,7 @@ PopupWindow {
                     MarqueePairText {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 20
+                        Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
                         titleText: controller ? controller.mediaTitle() : ""
                         artistText: controller && controller.activePlayer ? controller.mediaArtist() : ""
                         titleColor: controller && controller.activePlayer ? "#f4f7fb" : "#9ba5b2"
@@ -168,21 +168,22 @@ PopupWindow {
 
                     RowLayout {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 22
-                        Layout.alignment: Qt.AlignVCenter
+                        Layout.preferredHeight: 24
+                        Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
                         spacing: 6
                         opacity: root.segment(0.28, 1.0)
 
 
                         RowLayout {
-                            Layout.preferredWidth: 82
-                            Layout.preferredHeight: 24
-                            spacing: 4
+                            Layout.preferredWidth: 91
+                            Layout.preferredHeight: 28
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                            spacing: 5
 
                             MediaIconButton {
                                 iconSource: Qt.resolvedUrl("icons/previous.svg")
-                                iconSize: 14
-                                buttonSize: 24
+                                iconSize: 15
+                                buttonSize: 26
                                 enabledState: controller && controller.activePlayer && controller.activePlayer.canGoPrevious
                                 onClicked: if (controller && controller.activePlayer) controller.activePlayer.previous()
                             }
@@ -191,16 +192,16 @@ PopupWindow {
                                 iconSource: controller && controller.activePlayer && controller.activePlayer.isPlaying
                                     ? Qt.resolvedUrl("icons/pause.svg")
                                     : Qt.resolvedUrl("icons/play.svg")
-                                iconSize: 15
-                                buttonSize: 26
+                                iconSize: 17
+                                buttonSize: 29
                                 enabledState: controller && controller.activePlayer && controller.activePlayer.canTogglePlaying
                                 onClicked: if (controller) controller.togglePlayPause()
                             }
 
                             MediaIconButton {
                                 iconSource: Qt.resolvedUrl("icons/next.svg")
-                                iconSize: 14
-                                buttonSize: 24
+                                iconSize: 15
+                                buttonSize: 26
                                 enabledState: controller && controller.activePlayer && controller.activePlayer.canGoNext
                                 onClicked: if (controller && controller.activePlayer) controller.activePlayer.next()
                             }

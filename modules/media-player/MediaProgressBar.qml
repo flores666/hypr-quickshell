@@ -13,6 +13,7 @@ Item {
     property bool showHandle: false
     property bool dragging: false
     property real dragValue: 0
+    property bool pointerReady: false
 
     readonly property bool interactive: seekEnabled && safeDuration() > 0
     readonly property bool hovered: progressMouse.containsMouse && interactive
@@ -23,6 +24,13 @@ Item {
     signal dragEnded()
 
     implicitHeight: Math.max(14, barHeight + 8)
+
+    onInteractiveChanged: {
+        if (!interactive) {
+            pointerDelay.stop();
+            pointerReady = false;
+        }
+    }
 
     function clamp(v, min, max) {
         return Math.max(min, Math.min(max, v));
@@ -44,6 +52,13 @@ Item {
         return clamp(x / track.width, 0, 1) * safeDuration();
     }
 
+    Timer {
+        id: pointerDelay
+        interval: 80
+        repeat: false
+        onTriggered: root.pointerReady = progressMouse.containsMouse && root.interactive
+    }
+
     Rectangle {
         id: track
         anchors.left: parent.left
@@ -52,15 +67,16 @@ Item {
         height: root.animatedBarHeight
         radius: height / 2
         color: root.backgroundColor
-        opacity: root.safeDuration() > 0 ? (root.hovered || root.dragging ? 1.0 : 0.86) : 0.42
+        opacity: root.safeDuration() > 0 ? (root.hovered || root.dragging ? 1.0 : 0.84) : 0.42
+        border.width: 0
         antialiasing: true
 
         Behavior on height {
-            NumberAnimation { duration: 190; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: 285; easing.type: Easing.OutCubic }
         }
 
         Behavior on opacity {
-            NumberAnimation { duration: 190; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: 260; easing.type: Easing.OutCubic }
         }
 
         Rectangle {
@@ -73,22 +89,23 @@ Item {
                 : 0
             radius: parent.radius
             color: root.fillColor
-            opacity: root.hovered || root.dragging ? 1.0 : 0.92
+            opacity: root.hovered || root.dragging ? 1.0 : 0.91
+            border.width: 0
             antialiasing: true
 
             Behavior on width {
                 enabled: !root.dragging
-                NumberAnimation { duration: 260; easing.type: Easing.OutCubic }
+                NumberAnimation { duration: 330; easing.type: Easing.OutCubic }
             }
 
             Behavior on opacity {
-                NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
+                NumberAnimation { duration: 260; easing.type: Easing.OutCubic }
             }
         }
 
         Rectangle {
             id: handle
-            width: root.hovered || root.dragging ? 11 : 8
+            width: root.hovered || root.dragging ? 11.5 : 8
             height: width
             radius: width / 2
             color: root.handleColor
@@ -96,19 +113,20 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             x: root.clamp(fill.width - width / 2, 0, parent.width - width)
             opacity: root.hovered || root.dragging ? 1.0 : 0.0
-            scale: progressMouse.pressed ? 0.92 : (root.hovered ? 1.05 : 1.0)
+            scale: progressMouse.pressed ? 0.9 : (root.hovered ? 1.08 : 1.0)
+            border.width: 0
             antialiasing: true
 
             Behavior on width {
-                NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
+                NumberAnimation { duration: 280; easing.type: Easing.OutCubic }
             }
 
             Behavior on opacity {
-                NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
+                NumberAnimation { duration: 260; easing.type: Easing.OutCubic }
             }
 
             Behavior on scale {
-                NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
+                NumberAnimation { duration: progressMouse.pressed ? 150 : 280; easing.type: Easing.OutCubic }
             }
         }
     }
@@ -119,7 +137,17 @@ Item {
         enabled: root.interactive
         hoverEnabled: true
         acceptedButtons: Qt.LeftButton
-        cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+        cursorShape: root.pointerReady ? Qt.PointingHandCursor : Qt.ArrowCursor
+
+        onEntered: {
+            root.pointerReady = false;
+            pointerDelay.restart();
+        }
+
+        onExited: {
+            pointerDelay.stop();
+            root.pointerReady = false;
+        }
 
         onPressed: function(mouse) {
             root.dragging = true;

@@ -18,8 +18,7 @@ Rectangle {
     implicitHeight: 24
     radius: 8
     color: active ? "#44ffffff" : trayed ? "#1a1b2330" : "#261b2330"
-    border.width: active ? 1 : 0
-    border.color: "#55ffffff"
+    border.width: 0
 
     RowLayout {
         anchors.fill: parent

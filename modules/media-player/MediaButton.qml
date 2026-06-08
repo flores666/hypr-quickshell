@@ -13,6 +13,7 @@ Rectangle {
     property real durationValue: 0
     property color accentStrongColor: "#e8eef6"
     property color mutedTextColor: "#929aa7"
+    property bool pointerReady: false
 
     signal clicked()
 
@@ -23,46 +24,46 @@ Rectangle {
     color: popupOpen
         ? "#22ffffff"
         : (buttonMouse.pressed ? "#1cffffff" : (buttonMouse.containsMouse ? "#14ffffff" : "transparent"))
-    border.color: popupOpen
-        ? "#35ffffff"
-        : (buttonMouse.containsMouse ? "#1effffff" : "transparent")
-    border.width: 1
+    border.width: 0
     clip: true
-    scale: buttonMouse.pressed ? 0.982 : (buttonMouse.containsMouse || popupOpen ? 1.01 : 1.0)
+    scale: buttonMouse.pressed ? 0.972 : (buttonMouse.containsMouse || popupOpen ? 1.012 : 1.0)
     transformOrigin: Item.Center
 
     Behavior on color {
-        ColorAnimation { duration: 220; easing.type: Easing.OutCubic }
-    }
-
-    Behavior on border.color {
-        ColorAnimation { duration: 220; easing.type: Easing.OutCubic }
+        ColorAnimation { duration: 300; easing.type: Easing.OutCubic }
     }
 
     Behavior on scale {
-        NumberAnimation { duration: 190; easing.type: Easing.OutCubic }
+        NumberAnimation { duration: 260; easing.type: Easing.OutCubic }
     }
 
     Behavior on width {
-        NumberAnimation { duration: 240; easing.type: Easing.OutCubic }
+        NumberAnimation { duration: 280; easing.type: Easing.OutCubic }
+    }
+
+    Timer {
+        id: pointerDelay
+        interval: 85
+        repeat: false
+        onTriggered: root.pointerReady = buttonMouse.containsMouse && root.playerActive
     }
 
     RowLayout {
         z: 1
         anchors.fill: parent
-        anchors.leftMargin: 6
+        anchors.leftMargin: 7
         anchors.rightMargin: 6
         spacing: 5
         opacity: root.playerActive ? 1.0 : 0.0
 
         Behavior on opacity {
-            NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: 240; easing.type: Easing.OutCubic }
         }
 
         MarqueePairText {
             Layout.fillWidth: true
             Layout.preferredHeight: 18
-            Layout.alignment: Qt.AlignVCenter
+            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
             titleText: root.titleText
             artistText: root.artistText
             titleColor: root.playerActive ? "#f4f7fb" : "#9ba5b2"
@@ -93,8 +94,18 @@ Rectangle {
         anchors.fill: parent
         hoverEnabled: true
         acceptedButtons: Qt.LeftButton
-        cursorShape: Qt.PointingHandCursor
+        cursorShape: root.pointerReady ? Qt.PointingHandCursor : Qt.ArrowCursor
         z: 2
+
+        onEntered: {
+            root.pointerReady = false;
+            pointerDelay.restart();
+        }
+
+        onExited: {
+            pointerDelay.stop();
+            root.pointerReady = false;
+        }
 
         onClicked: function (mouse) {
             root.clicked();

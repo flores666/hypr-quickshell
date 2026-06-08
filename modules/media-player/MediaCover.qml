@@ -20,8 +20,7 @@ Rectangle {
     property bool triedFallback: false
 
     color: "#18ffffff"
-    border.color: "#24ffffff"
-    border.width: 1
+    border.width: 0
     clip: false
     antialiasing: true
 
@@ -253,15 +252,6 @@ Rectangle {
             maskSource: roundedMask
             cached: true
         }
-    }
-
-    Rectangle {
-        anchors.fill: parent
-        radius: root.radius
-        color: "transparent"
-        border.color: root.border.color
-        border.width: root.border.width
-        antialiasing: true
     }
 
     Text {

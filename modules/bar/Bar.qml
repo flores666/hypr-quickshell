@@ -35,7 +35,6 @@ PanelWindow {
         anchors.margins: 2
         radiusSize: 12
         glassColor: "#b010131a"
-        strokeColor: "#66ffffff"
     }
 
     Item {
