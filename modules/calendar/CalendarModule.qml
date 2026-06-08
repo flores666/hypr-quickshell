@@ -179,7 +179,7 @@ Item {
             targetVisible: root.popupOpen
             openDuration: motion.popupOpenDuration
             closeDuration: motion.popupCloseDuration
-            closeSafetyDelay: motion.popupCloseDuration + 70
+            closeSafetyDelay: 340
         }
 
         Item {
