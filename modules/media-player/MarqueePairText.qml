@@ -6,7 +6,7 @@ Item {
     property string titleText: ""
     property string artistText: ""
     property color titleColor: "#f4f7fb"
-    property color artistColor: "#929aa7"
+    property color artistColor: "#C3C8CF"
     property color separatorColor: "#7f8896"
     property int pixelSize: 12
     property int titleWeight: Font.DemiBold
@@ -93,7 +93,10 @@ Item {
     }
 
     Behavior on textOpacity {
-        NumberAnimation { duration: 68; easing.type: Easing.OutCubic }
+        NumberAnimation {
+            duration: 68
+            easing.type: Easing.OutCubic
+        }
     }
 
     Timer {

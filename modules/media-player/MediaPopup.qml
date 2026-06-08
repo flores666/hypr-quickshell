@@ -40,7 +40,9 @@ PopupWindow {
         closeSafetyDelay: 340
     }
 
-    Components.AnimationTokens { id: motion }
+    Components.AnimationTokens {
+        id: motion
+    }
 
     Item {
         id: popupMotionLayer
@@ -62,46 +64,64 @@ PopupWindow {
             antialiasing: true
         }
 
-        Item {
-            id: coverGlowLayer
+        Rectangle {
+            id: glowMask
             anchors.fill: panel
-            clip: true
-            visible: controller && ((controller.currentCoverSource || "") !== "" || (controller.currentCoverFallbackSource || "") !== "")
-            opacity: 0.17 * root.segment(0.06, 0.90)
+            radius: panel.radius
+            visible: false
+            antialiasing: true
+        }
+
+        Item {
+            id: coverGlowSourceLayer
+            anchors.fill: panel
+            visible: false
 
             Item {
-                id: glowBubble
-                width: 162
-                height: 162
-                x: -18
-                anchors.verticalCenter: parent.verticalCenter
+                id: coverGlowRaw
+                anchors.fill: parent
+                visible: controller && ((controller.currentCoverSource || "") !== "" || (controller.currentCoverFallbackSource || "") !== "")
+                opacity: 0.3 * root.segment(0.06, 0.90)
 
-                Image {
-                    id: glowSource
+                Item {
+                    id: glowBubble
                     anchors.fill: parent
-                    source: controller ? (controller.currentCoverSource || controller.currentCoverFallbackSource || "") : ""
-                    fillMode: Image.PreserveAspectCrop
-                    asynchronous: true
-                    cache: true
-                    smooth: true
-                    mipmap: true
-                    visible: false
-                }
 
-                FastBlur {
-                    anchors.fill: parent
-                    source: glowSource
-                    radius: 52
-                    transparentBorder: true
-                }
+                    Image {
+                        id: glowSource
+                        anchors.fill: parent
+                        source: controller ? (controller.currentCoverSource || controller.currentCoverFallbackSource || "") : ""
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: true
+                        cache: true
+                        smooth: true
+                        mipmap: true
+                        visible: false
+                    }
 
-                Rectangle {
-                    anchors.fill: parent
-                    radius: width / 2
-                    color: "#06ffffff"
-                    visible: glowSource.status === Image.Ready
+                    FastBlur {
+                        anchors.fill: parent
+                        source: glowSource
+                        radius: 60
+                        transparentBorder: true
+                    }
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: panel.radius
+                        color: "#0affffff"
+                        visible: glowSource.status === Image.Ready
+                    }
                 }
             }
+        }
+
+        OpacityMask {
+            anchors.fill: panel
+            source: coverGlowSourceLayer
+            maskSource: glowMask
+            cached: true
+            visible: controller && ((controller.currentCoverSource || "") !== "" || (controller.currentCoverFallbackSource || "") !== "")
         }
 
         Rectangle {
@@ -112,7 +132,10 @@ PopupWindow {
             antialiasing: true
 
             Behavior on color {
-                ColorAnimation { duration: popupMouse.pressed ? motion.pressDuration : motion.releaseDuration; easing.type: Easing.OutCubic }
+                ColorAnimation {
+                    duration: popupMouse.pressed ? motion.pressDuration : motion.releaseDuration
+                    easing.type: Easing.OutCubic
+                }
             }
         }
 
@@ -122,7 +145,9 @@ PopupWindow {
             acceptedButtons: Qt.LeftButton
             hoverEnabled: true
             cursorShape: Qt.ArrowCursor
-            onClicked: function(mouse) { mouse.accepted = true; }
+            onClicked: function (mouse) {
+                mouse.accepted = true;
+            }
         }
 
         RowLayout {
@@ -189,17 +214,17 @@ PopupWindow {
                             iconSize: 15
                             buttonSize: 26
                             enabledState: controller && controller.activePlayer && controller.activePlayer.canGoPrevious
-                            onClicked: if (controller && controller.activePlayer) controller.activePlayer.previous()
+                            onClicked: if (controller && controller.activePlayer)
+                                controller.activePlayer.previous()
                         }
 
                         MediaIconButton {
-                            iconSource: controller && controller.activePlayer && controller.activePlayer.isPlaying
-                                ? Qt.resolvedUrl("icons/pause.svg")
-                                : Qt.resolvedUrl("icons/play.svg")
+                            iconSource: controller && controller.activePlayer && controller.activePlayer.isPlaying ? Qt.resolvedUrl("icons/pause.svg") : Qt.resolvedUrl("icons/play.svg")
                             iconSize: 17
                             buttonSize: 29
                             enabledState: controller && controller.activePlayer && controller.activePlayer.canTogglePlaying
-                            onClicked: if (controller) controller.togglePlayPause()
+                            onClicked: if (controller)
+                                controller.togglePlayPause()
                         }
 
                         MediaIconButton {
@@ -207,7 +232,8 @@ PopupWindow {
                             iconSize: 15
                             buttonSize: 26
                             enabledState: controller && controller.activePlayer && controller.activePlayer.canGoNext
-                            onClicked: if (controller && controller.activePlayer) controller.activePlayer.next()
+                            onClicked: if (controller && controller.activePlayer)
+                                controller.activePlayer.next()
                         }
                     }
 
@@ -234,8 +260,10 @@ PopupWindow {
                         barHeight: 4
                         backgroundColor: "#2bffffff"
                         fillColor: controller ? controller.accentStrongColor : "#e8eef6"
-                        onDragStarted: if (controller) controller.isDragging = true
-                        onDragEnded: if (controller) controller.isDragging = false
+                        onDragStarted: if (controller)
+                            controller.isDragging = true
+                        onDragEnded: if (controller)
+                            controller.isDragging = false
                         onSeekRequested: function (seconds) {
                             if (controller)
                                 controller.performSeek(seconds);
