@@ -12,8 +12,10 @@ Item {
     property int titleWeight: Font.DemiBold
     property int artistWeight: Font.Medium
     property int gap: 42
-    property real speedPixelsPerSecond: 12
+    property real speedPixelsPerSecond: 22.68
     property real offset: 0
+    property string resetKey: titleText + "\n" + artistText
+    property string lastResetKey: ""
 
     implicitHeight: Math.max(titleA.implicitHeight, artistA.implicitHeight, pixelSize + 4)
     clip: true
@@ -25,19 +27,47 @@ Item {
 
     function resetScroll() {
         offset = 0;
+        scrollDelay.restart();
     }
 
-    onTitleTextChanged: resetScroll()
-    onArtistTextChanged: resetScroll()
-    onWidthChanged: resetScroll()
-    onShouldScrollChanged: resetScroll()
+    onResetKeyChanged: {
+        if (lastResetKey === resetKey)
+            return;
+
+        lastResetKey = resetKey;
+        resetScroll();
+    }
+
+    onShouldScrollChanged: {
+        if (shouldScroll)
+            resetScroll();
+        else {
+            scrollDelay.stop();
+            offset = 0;
+        }
+    }
 
     Timer {
+        id: scrollDelay
+        interval: 650
+        repeat: false
+    }
+
+    Timer {
+        id: scrollTimer
+        property double lastTick: Date.now()
         interval: 16
         repeat: true
-        running: root.shouldScroll
+        running: root.shouldScroll && !scrollDelay.running
+
+        onRunningChanged: lastTick = Date.now()
+
         onTriggered: {
-            root.offset += root.speedPixelsPerSecond * interval / 1000;
+            const now = Date.now();
+            const delta = Math.max(0, Math.min(50, now - lastTick));
+            lastTick = now;
+
+            root.offset += root.speedPixelsPerSecond * delta / 1000;
             if (root.offset >= root.scrollDistance)
                 root.offset = 0;
         }

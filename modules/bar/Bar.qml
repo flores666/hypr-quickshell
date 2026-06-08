@@ -41,6 +41,7 @@ PanelWindow {
     property string currentArtist: ""
     property string currentAlbum: ""
     property string currentCoverSource: ""
+    property string currentCoverFallbackSource: ""
     property int coverNonce: 0
     property real currentPosition: 0
     property real currentLength: 0
@@ -71,19 +72,19 @@ PanelWindow {
     function playerStableKey(player) {
         if (!player)
             return "";
-        return String(player.dbusName || player.desktopEntry || player.identity || player.uniqueId || "player");
+
+        return String(player.desktopEntry || player.identity || player.dbusName || "player");
     }
 
     function playerTrackKey(player) {
         if (!player)
             return "";
 
-        var stable = playerStableKey(player);
-        var uid = player.uniqueId !== undefined && player.uniqueId !== null ? String(player.uniqueId) : "";
-        if (uid !== "")
-            return stable + ":" + uid;
-
-        return stable + ":" + String(player.trackTitle || "") + ":" + String(player.trackArtist || "") + ":" + String(player.trackAlbum || "") + ":" + String(player.length || 0) + ":" + String(player.trackArtUrl || "");
+        const stable = playerStableKey(player);
+        return stable + ":"
+            + String(player.trackTitle || "") + ":"
+            + String(player.trackArtist || "") + ":"
+            + String(player.trackAlbum || "");
     }
 
 
@@ -105,8 +106,11 @@ PanelWindow {
         if (activePlayer) {
             const currentKey = playerStableKey(activePlayer);
             for (let j = 0; j < list.length; j++) {
-                if (list[j] && playerStableKey(list[j]) === currentKey)
+                if (list[j] && playerStableKey(list[j]) === currentKey) {
+                    if (activePlayer !== list[j])
+                        activePlayer = list[j];
                     return;
+                }
             }
         }
 
@@ -137,15 +141,30 @@ PanelWindow {
         return value;
     }
 
+    function enhancedCoverUrl(url) {
+        var value = normalizeCoverUrl(url);
+        if (value === "")
+            return "";
+
+        if (value.indexOf("avatars.yandex.net/get-music-content") >= 0) {
+            value = value.replace(/\/\d+x\d+(\?.*)?$/, "/1000x1000$1");
+            value = value.replace(/\/%%(\?.*)?$/, "/1000x1000$1");
+            value = value.replace(/size=\d+x\d+/, "size=1000x1000");
+        }
+
+        return value;
+    }
+
     function syncMetadataFromPlayer(forceCoverReload) {
         const player = activePlayer;
         if (!player) {
             if (currentTrackId !== "") {
                 currentTrackId = "";
-                currentTitle = "No media";
+                currentTitle = "";
                 currentArtist = "";
                 currentAlbum = "";
                 currentCoverSource = "";
+                currentCoverFallbackSource = "";
                 currentPosition = 0;
                 currentLength = 0;
                 coverNonce++;
@@ -158,9 +177,10 @@ PanelWindow {
         const nextTitle = player.trackTitle || player.identity || "Unknown Title";
         const nextArtist = player.trackArtist || "";
         const nextAlbum = player.trackAlbum || "";
-        const nextCover = normalizeCoverUrl(player.trackArtUrl || "");
+        const rawCover = normalizeCoverUrl(player.trackArtUrl || "");
+        const nextCover = enhancedCoverUrl(rawCover);
         const trackChanged = nextTrackId !== currentTrackId;
-        const coverChanged = nextCover !== currentCoverSource;
+        const coverChanged = nextCover !== "" && nextCover !== currentCoverSource;
 
         if (trackChanged) {
             pendingSeekPosition = -1;
@@ -174,8 +194,9 @@ PanelWindow {
         currentAlbum = nextAlbum;
         currentLength = Number(player.length || 0);
 
-        if (trackChanged || coverChanged || forceCoverReload) {
+        if (nextCover !== "" && (trackChanged || coverChanged || forceCoverReload)) {
             currentCoverSource = nextCover;
+            currentCoverFallbackSource = rawCover;
             coverNonce++;
         }
     }
@@ -293,7 +314,7 @@ PanelWindow {
 
     function mediaTitle() {
         if (!activePlayer)
-            return "No media";
+            return "";
         return currentTitle || activePlayer.identity || "Unknown Title";
     }
 
@@ -305,7 +326,7 @@ PanelWindow {
 
     function mediaSubtitle() {
         if (!activePlayer)
-            return "Open a player with MPRIS support";
+            return "";
 
         if (currentArtist && currentAlbum)
             return currentArtist + ", " + currentAlbum;
@@ -388,7 +409,10 @@ PanelWindow {
         interval: 1000
         repeat: true
         running: true
-        onTriggered: root.refreshActivePlayer()
+        onTriggered: {
+            root.refreshActivePlayer();
+            root.syncMetadataFromPlayer(false);
+        }
     }
 
     Timer {
@@ -397,11 +421,22 @@ PanelWindow {
         repeat: true
         running: root.activePlayer && root.activePlayer.isPlaying
         onTriggered: {
-            if (root.activePlayer)
-                root.activePlayer.positionChanged();
-            root.syncPositionFromPlayer(false);
-            root.syncMetadataFromPlayer(false);
+            if (!root.activePlayer || root.isDragging || root.pendingSeekPosition >= 0)
+                return;
+
+            if (root.currentLength > 0)
+                root.currentPosition = Math.min(root.currentLength, root.currentPosition + interval / 1000);
+            else
+                root.currentPosition = Math.max(0, root.currentPosition + interval / 1000);
         }
+    }
+
+    Timer {
+        id: metadataPollTimer
+        interval: 1600
+        repeat: true
+        running: root.activePlayer !== null
+        onTriggered: root.syncMetadataFromPlayer(false)
     }
 
     Timer {
@@ -513,7 +548,8 @@ PanelWindow {
             anchors.right: clockButton.left
             anchors.rightMargin: 6
             anchors.verticalCenter: parent.verticalCenter
-            width: root.activePlayer ? 270 : 92
+            visible: root.activePlayer !== null
+            width: root.activePlayer ? 270 : 0
             height: 24
             radius: 12
             color: root.mediaOpen ? "#20ffffff" : "transparent"
@@ -543,7 +579,8 @@ PanelWindow {
                     pixelSize: 12
                     titleWeight: Font.DemiBold
                     artistWeight: Font.Medium
-                    speedPixelsPerSecond: 25.2
+                    speedPixelsPerSecond: 22.68
+                    resetKey: root.currentTrackId
                 }
 
                 MediaProgressBar {
@@ -773,6 +810,7 @@ PanelWindow {
                     Layout.alignment: Qt.AlignVCenter
                     radius: 10
                     sourceUrl: root.currentCoverSource
+                    fallbackSourceUrl: root.currentCoverFallbackSource
                     sourceKey: root.coverNonce
                     fallbackPixelSize: 19
                     fallbackTextColor: "#dce6f2"
@@ -794,7 +832,8 @@ PanelWindow {
                         pixelSize: 16
                         titleWeight: Font.DemiBold
                         artistWeight: Font.Medium
-                        speedPixelsPerSecond: 25.2
+                        speedPixelsPerSecond: 22.68
+                        resetKey: root.currentTrackId
                     }
 
                     RowLayout {

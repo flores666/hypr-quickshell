@@ -4,6 +4,7 @@ Rectangle {
     id: root
 
     property string sourceUrl: ""
+    property string fallbackSourceUrl: ""
     property int sourceKey: 0
     property int fallbackPixelSize: 24
     property string fallbackText: "♪"
@@ -11,6 +12,7 @@ Rectangle {
     property bool imageVisible: displayedSource !== ""
     property string displayedSource: ""
     property string pendingSource: ""
+    property bool triedFallback: false
 
     color: "#18ffffff"
     border.color: "#24ffffff"
@@ -18,19 +20,30 @@ Rectangle {
     clip: true
 
     function reloadCover() {
-        pendingSource = sourceUrl || "";
+        const next = sourceUrl || "";
+        const fallback = fallbackSourceUrl || "";
 
-        if (pendingSource === "") {
-            displayedSource = "";
-            preload.source = "";
+        if (next === "") {
+            if (displayedSource === "" && fallback !== "") {
+                triedFallback = true;
+                pendingSource = fallback;
+                preload.source = "";
+                reloadTimer.restart();
+            }
             return;
         }
 
+        if (next === displayedSource)
+            return;
+
+        triedFallback = false;
+        pendingSource = next;
         preload.source = "";
         reloadTimer.restart();
     }
 
     onSourceUrlChanged: reloadCover()
+    onFallbackSourceUrlChanged: reloadCover()
     onSourceKeyChanged: reloadCover()
 
     Timer {
@@ -61,10 +74,18 @@ Rectangle {
 
         onStatusChanged: {
             if (status === Image.Ready && source !== "") {
-                root.displayedSource = root.pendingSource;
-            } else if (status === Image.Error && source !== "") {
-                if (root.pendingSource === root.sourceUrl)
-                    root.displayedSource = "";
+                root.displayedSource = String(source);
+                return;
+            }
+
+            if (status === Image.Error && source !== "") {
+                const fallback = root.fallbackSourceUrl || "";
+                if (!root.triedFallback && fallback !== "" && fallback !== String(source)) {
+                    root.triedFallback = true;
+                    root.pendingSource = fallback;
+                    preload.source = "";
+                    reloadTimer.restart();
+                }
             }
         }
     }
