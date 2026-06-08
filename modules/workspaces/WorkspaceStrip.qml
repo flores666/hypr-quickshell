@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import QtQuick.Window
 import "../../services" as Services
+import "../../components" as Components
 
 Item {
     id: root
@@ -325,7 +326,7 @@ Item {
                 width: root.cellWidth
                 height: root.moduleHeight
 
-                Text {
+                Components.StyledText {
                     anchors.centerIn: parent
                     text: cell.workspaceId
                     color: "#ffffff"
@@ -335,9 +336,6 @@ Item {
                     styleColor: "#b0000000"
                     font.pixelSize: root.textSize
                     font.weight: cell.occupied ? Font.DemiBold : Font.Medium
-                    renderType: Text.NativeRendering
-                    font.hintingPreference: Font.PreferFullHinting
-                    font.kerning: false
                 }
 
                 MouseArea {

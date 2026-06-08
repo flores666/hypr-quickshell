@@ -1,5 +1,6 @@
 import QtQuick
 import Qt5Compat.GraphicalEffects
+import "../../components" as Components
 
 Rectangle {
     id: root
@@ -254,15 +255,12 @@ Rectangle {
         }
     }
 
-    Text {
+    Components.StyledText {
         anchors.centerIn: parent
         visible: !currentImageLayer.visible && !incomingImageLayer.visible
         text: root.fallbackText
         color: root.fallbackTextColor
         font.pixelSize: root.fallbackPixelSize
         font.weight: Font.DemiBold
-        renderType: Text.NativeRendering
-        font.hintingPreference: Font.PreferFullHinting
-        font.kerning: false
     }
 }

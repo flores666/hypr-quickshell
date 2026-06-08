@@ -117,16 +117,13 @@ Item {
             ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic }
         }
 
-        Text {
+        Components.StyledText {
             id: clockText
             anchors.centerIn: parent
             text: root.centerDateText(root.now)
             color: "#eef3f8"
             font.pixelSize: 12
             font.weight: Font.DemiBold
-            renderType: Text.NativeRendering
-            font.hintingPreference: Font.PreferFullHinting
-            font.kerning: false
         }
 
         MouseArea {
@@ -235,7 +232,7 @@ Item {
                     height: 28
                     opacity: Math.max(0, Math.min(1, (popupState.reveal - 0.12) / 0.74))
 
-                    Text {
+                    Components.StyledText {
                         anchors.left: parent.left
                         anchors.right: calendarNav.left
                         anchors.rightMargin: 10
@@ -245,9 +242,6 @@ Item {
                         font.pixelSize: 15
                         font.weight: Font.DemiBold
                         elide: Text.ElideRight
-                        renderType: Text.NativeRendering
-                        font.hintingPreference: Font.PreferFullHinting
-                        font.kerning: false
                     }
 
                     Row {
@@ -286,15 +280,12 @@ Item {
                                     onTriggered: parent.pointerReady = navMouse.containsMouse
                                 }
 
-                                Text {
+                                Components.StyledText {
                                     anchors.centerIn: parent
                                     text: modelData
                                     color: "#eef3f8"
                                     font.pixelSize: 16
                                     font.weight: Font.DemiBold
-                                    renderType: Text.NativeRendering
-                                    font.hintingPreference: Font.PreferFullHinting
-                                    font.kerning: false
                                 }
 
                                 MouseArea {
@@ -324,15 +315,12 @@ Item {
                     }
                 }
 
-                Text {
+                Components.StyledText {
                     width: parent.width
                     text: Qt.formatDateTime(root.now, "dddd, MMMM d")
                     color: "#b9c3cf"
                     font.pixelSize: 12
                     opacity: Math.max(0, Math.min(1, (popupState.reveal - 0.18) / 0.72))
-                    renderType: Text.NativeRendering
-                    font.hintingPreference: Font.PreferFullHinting
-                    font.kerning: false
                 }
 
                 Grid {
@@ -344,7 +332,7 @@ Item {
 
                     Repeater {
                         model: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-                        delegate: Text {
+                        delegate: Components.StyledText {
                             required property string modelData
                             width: 36
                             height: 24
@@ -354,9 +342,6 @@ Item {
                             color: "#8f9aa8"
                             font.pixelSize: 11
                             font.weight: Font.DemiBold
-                            renderType: Text.NativeRendering
-                            font.hintingPreference: Font.PreferFullHinting
-                            font.kerning: false
                         }
                     }
 
@@ -378,16 +363,13 @@ Item {
                                 ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic }
                             }
 
-                            Text {
+                            Components.StyledText {
                                 anchors.centerIn: parent
                                 text: parent.validDay ? parent.day : ""
                                 color: parent.validDay && root.isToday(parent.day) ? "#10131a" : "#e8eef5"
                                 opacity: parent.validDay ? 1.0 : 0.0
                                 font.pixelSize: 12
                                 font.weight: parent.validDay && root.isToday(parent.day) ? Font.DemiBold : Font.Medium
-                                renderType: Text.NativeRendering
-                                font.hintingPreference: Font.PreferFullHinting
-                                font.kerning: false
                             }
                         }
                     }
@@ -411,15 +393,12 @@ Item {
                         ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic }
                     }
 
-                    Text {
+                    Components.StyledText {
                         anchors.centerIn: parent
                         text: "Today • " + root.centerDateText(root.now)
                         color: "#eef3f8"
                         font.pixelSize: 12
                         font.weight: Font.Medium
-                        renderType: Text.NativeRendering
-                        font.hintingPreference: Font.PreferFullHinting
-                        font.kerning: false
                     }
                 }
             }

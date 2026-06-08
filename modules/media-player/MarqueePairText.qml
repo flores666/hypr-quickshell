@@ -1,4 +1,5 @@
 import QtQuick
+import "../../components" as Components
 
 Item {
     id: root
@@ -6,8 +7,8 @@ Item {
     property string titleText: ""
     property string artistText: ""
     property color titleColor: "#f4f7fb"
-    property color artistColor: "#C3C8CF"
-    property color separatorColor: "#7f8896"
+    property color artistColor: "#bcc5d0"
+    property color separatorColor: "#9aa4b1"
     property int pixelSize: 12
     property int titleWeight: Font.DemiBold
     property int artistWeight: Font.Medium
@@ -93,10 +94,7 @@ Item {
     }
 
     Behavior on textOpacity {
-        NumberAnimation {
-            duration: 68
-            easing.type: Easing.OutCubic
-        }
+        NumberAnimation { duration: 68; easing.type: Easing.OutCubic }
     }
 
     Timer {
@@ -139,7 +137,7 @@ Item {
         x: root.shouldScroll ? -root.offset : 0
         opacity: root.textOpacity
 
-        Text {
+        Components.StyledText {
             id: titleA
             x: 0
             y: Math.round((root.height - implicitHeight) / 2)
@@ -148,13 +146,9 @@ Item {
             font.pixelSize: root.pixelSize
             font.weight: root.titleWeight
             maximumLineCount: 1
-            textFormat: Text.PlainText
-            renderType: Text.NativeRendering
-            font.hintingPreference: Font.PreferFullHinting
-            font.kerning: false
         }
 
-        Text {
+        Components.StyledText {
             id: separatorA
             visible: root.hasArtist
             x: titleA.implicitWidth
@@ -164,13 +158,9 @@ Item {
             font.pixelSize: root.pixelSize
             font.weight: Font.DemiBold
             maximumLineCount: 1
-            textFormat: Text.PlainText
-            renderType: Text.NativeRendering
-            font.hintingPreference: Font.PreferFullHinting
-            font.kerning: false
         }
 
-        Text {
+        Components.StyledText {
             id: artistA
             visible: root.hasArtist
             x: titleA.implicitWidth + separatorA.implicitWidth
@@ -180,10 +170,6 @@ Item {
             font.pixelSize: root.pixelSize
             font.weight: root.artistWeight
             maximumLineCount: 1
-            textFormat: Text.PlainText
-            renderType: Text.NativeRendering
-            font.hintingPreference: Font.PreferFullHinting
-            font.kerning: false
         }
     }
 
@@ -195,7 +181,7 @@ Item {
         x: copyA.x + root.contentWidth + root.gap
         opacity: root.textOpacity
 
-        Text {
+        Components.StyledText {
             id: titleB
             x: 0
             y: Math.round((root.height - implicitHeight) / 2)
@@ -204,13 +190,9 @@ Item {
             font.pixelSize: root.pixelSize
             font.weight: root.titleWeight
             maximumLineCount: 1
-            textFormat: Text.PlainText
-            renderType: Text.NativeRendering
-            font.hintingPreference: Font.PreferFullHinting
-            font.kerning: false
         }
 
-        Text {
+        Components.StyledText {
             id: separatorB
             visible: root.hasArtist
             x: titleB.implicitWidth
@@ -220,13 +202,9 @@ Item {
             font.pixelSize: root.pixelSize
             font.weight: Font.DemiBold
             maximumLineCount: 1
-            textFormat: Text.PlainText
-            renderType: Text.NativeRendering
-            font.hintingPreference: Font.PreferFullHinting
-            font.kerning: false
         }
 
-        Text {
+        Components.StyledText {
             visible: root.hasArtist
             x: titleB.implicitWidth + separatorB.implicitWidth
             y: Math.round((root.height - implicitHeight) / 2)
@@ -235,10 +213,6 @@ Item {
             font.pixelSize: root.pixelSize
             font.weight: root.artistWeight
             maximumLineCount: 1
-            textFormat: Text.PlainText
-            renderType: Text.NativeRendering
-            font.hintingPreference: Font.PreferFullHinting
-            font.kerning: false
         }
     }
 }

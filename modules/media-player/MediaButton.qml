@@ -13,7 +13,7 @@ Rectangle {
     property real position: 0
     property real durationValue: 0
     property color accentStrongColor: "#e8eef6"
-    property color mutedTextColor: "#929aa7"
+    property color mutedTextColor: "#bcc5d0"
     property bool pointerReady: false
 
     signal clicked()
@@ -67,7 +67,7 @@ Rectangle {
             artistText: root.artistText
             titleColor: root.playerActive ? "#f4f7fb" : "#9ba5b2"
             artistColor: root.mutedTextColor
-            separatorColor: "#7f8896"
+            separatorColor: "#9aa4b1"
             pixelSize: 12
             titleWeight: Font.DemiBold
             artistWeight: Font.Medium

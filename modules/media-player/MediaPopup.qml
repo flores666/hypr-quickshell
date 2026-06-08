@@ -40,9 +40,7 @@ PopupWindow {
         closeSafetyDelay: 340
     }
 
-    Components.AnimationTokens {
-        id: motion
-    }
+    Components.AnimationTokens { id: motion }
 
     Item {
         id: popupMotionLayer
@@ -81,7 +79,7 @@ PopupWindow {
                 id: coverGlowRaw
                 anchors.fill: parent
                 visible: controller && ((controller.currentCoverSource || "") !== "" || (controller.currentCoverFallbackSource || "") !== "")
-                opacity: 0.3 * root.segment(0.06, 0.90)
+                opacity: 0.242 * root.segment(0.06, 0.90)
 
                 Item {
                     id: glowBubble
@@ -132,10 +130,7 @@ PopupWindow {
             antialiasing: true
 
             Behavior on color {
-                ColorAnimation {
-                    duration: popupMouse.pressed ? motion.pressDuration : motion.releaseDuration
-                    easing.type: Easing.OutCubic
-                }
+                ColorAnimation { duration: popupMouse.pressed ? motion.pressDuration : motion.releaseDuration; easing.type: Easing.OutCubic }
             }
         }
 
@@ -145,9 +140,7 @@ PopupWindow {
             acceptedButtons: Qt.LeftButton
             hoverEnabled: true
             cursorShape: Qt.ArrowCursor
-            onClicked: function (mouse) {
-                mouse.accepted = true;
-            }
+            onClicked: function(mouse) { mouse.accepted = true; }
         }
 
         RowLayout {
@@ -187,8 +180,8 @@ PopupWindow {
                     titleText: controller ? controller.mediaTitle() : ""
                     artistText: controller && controller.activePlayer ? controller.mediaArtist() : ""
                     titleColor: controller && controller.activePlayer ? "#f4f7fb" : "#9ba5b2"
-                    artistColor: controller ? controller.mutedTextColor : "#929aa7"
-                    separatorColor: "#798391"
+                    artistColor: controller ? controller.mutedTextColor : "#bcc5d0"
+                    separatorColor: "#9aa4b1"
                     pixelSize: 14
                     titleWeight: Font.DemiBold
                     artistWeight: Font.Medium
@@ -214,17 +207,17 @@ PopupWindow {
                             iconSize: 15
                             buttonSize: 26
                             enabledState: controller && controller.activePlayer && controller.activePlayer.canGoPrevious
-                            onClicked: if (controller && controller.activePlayer)
-                                controller.activePlayer.previous()
+                            onClicked: if (controller && controller.activePlayer) controller.activePlayer.previous()
                         }
 
                         MediaIconButton {
-                            iconSource: controller && controller.activePlayer && controller.activePlayer.isPlaying ? Qt.resolvedUrl("icons/pause.svg") : Qt.resolvedUrl("icons/play.svg")
+                            iconSource: controller && controller.activePlayer && controller.activePlayer.isPlaying
+                                ? Qt.resolvedUrl("icons/pause.svg")
+                                : Qt.resolvedUrl("icons/play.svg")
                             iconSize: 17
                             buttonSize: 29
                             enabledState: controller && controller.activePlayer && controller.activePlayer.canTogglePlaying
-                            onClicked: if (controller)
-                                controller.togglePlayPause()
+                            onClicked: if (controller) controller.togglePlayPause()
                         }
 
                         MediaIconButton {
@@ -232,12 +225,11 @@ PopupWindow {
                             iconSize: 15
                             buttonSize: 26
                             enabledState: controller && controller.activePlayer && controller.activePlayer.canGoNext
-                            onClicked: if (controller && controller.activePlayer)
-                                controller.activePlayer.next()
+                            onClicked: if (controller && controller.activePlayer) controller.activePlayer.next()
                         }
                     }
 
-                    Text {
+                    Components.StyledText {
                         Layout.preferredWidth: 35
                         text: controller ? controller.formatSeconds(controller.visualPosition) : "0:00"
                         color: "#cfd8e4"
@@ -245,9 +237,6 @@ PopupWindow {
                         font.weight: Font.DemiBold
                         horizontalAlignment: Text.AlignLeft
                         verticalAlignment: Text.AlignVCenter
-                        renderType: Text.NativeRendering
-                        font.hintingPreference: Font.PreferFullHinting
-                        font.kerning: false
                     }
 
                     MediaProgressBar {
@@ -260,17 +249,15 @@ PopupWindow {
                         barHeight: 4
                         backgroundColor: "#2bffffff"
                         fillColor: controller ? controller.accentStrongColor : "#e8eef6"
-                        onDragStarted: if (controller)
-                            controller.isDragging = true
-                        onDragEnded: if (controller)
-                            controller.isDragging = false
+                        onDragStarted: if (controller) controller.isDragging = true
+                        onDragEnded: if (controller) controller.isDragging = false
                         onSeekRequested: function (seconds) {
                             if (controller)
                                 controller.performSeek(seconds);
                         }
                     }
 
-                    Text {
+                    Components.StyledText {
                         Layout.preferredWidth: 35
                         text: controller ? controller.formatSeconds(controller.currentLength) : "0:00"
                         color: "#cfd8e4"
@@ -278,9 +265,6 @@ PopupWindow {
                         font.weight: Font.DemiBold
                         horizontalAlignment: Text.AlignRight
                         verticalAlignment: Text.AlignVCenter
-                        renderType: Text.NativeRendering
-                        font.hintingPreference: Font.PreferFullHinting
-                        font.kerning: false
                     }
                 }
             }

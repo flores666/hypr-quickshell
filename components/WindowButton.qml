@@ -32,17 +32,14 @@ Rectangle {
             source: root.window && root.window.icon ? root.window.icon : "application-x-executable"
         }
 
-        Text {
+        StyledText {
             id: label
             Layout.fillWidth: true
             text: root.window && root.window.title ? root.window.title : "Window"
-            color: root.trayed ? "#88ffffff" : "#eef3f8"
+            color: root.trayed ? "#9affffff" : "#f4f7fb"
             font.pixelSize: 11
             elide: Text.ElideRight
             verticalAlignment: Text.AlignVCenter
-            renderType: Text.NativeRendering
-            font.hintingPreference: Font.PreferFullHinting
-            font.kerning: false
         }
     }
 

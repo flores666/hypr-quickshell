@@ -33,14 +33,11 @@ PanelWindow {
         anchors.margins: 14
         spacing: 10
 
-        Text {
+        Components.StyledText {
             text: "Свернутые окна"
             color: "#f4f7fb"
             font.pixelSize: 14
             font.weight: Font.DemiBold
-            renderType: Text.NativeRendering
-            font.hintingPreference: Font.PreferFullHinting
-            font.kerning: false
         }
 
         Repeater {

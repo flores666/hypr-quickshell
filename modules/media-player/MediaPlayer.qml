@@ -32,7 +32,7 @@ Item {
     property real visualPosition: pendingSeekPosition >= 0 ? pendingSeekPosition : currentPosition
 
     readonly property color accentStrongColor: "#e8eef6"
-    readonly property color mutedTextColor: "#929aa7"
+    readonly property color mutedTextColor: "#bcc5d0"
     readonly property color darkPanelSoftColor: "#b010131a"
 
     signal popupOpened()
