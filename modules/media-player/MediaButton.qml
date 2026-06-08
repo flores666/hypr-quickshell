@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import "../../components" as Components
 
 Rectangle {
     id: root
@@ -26,15 +27,13 @@ Rectangle {
         : (buttonMouse.pressed ? "#1cffffff" : (buttonMouse.containsMouse ? "#14ffffff" : "transparent"))
     border.width: 0
     clip: true
-    scale: buttonMouse.pressed ? 0.972 : (buttonMouse.containsMouse || popupOpen ? 1.012 : 1.0)
+    scale: 1.0
     transformOrigin: Item.Center
 
-    Behavior on color {
-        ColorAnimation { duration: 300; easing.type: Easing.OutCubic }
-    }
+    Components.AnimationTokens { id: motion }
 
-    Behavior on scale {
-        NumberAnimation { duration: 260; easing.type: Easing.OutCubic }
+    Behavior on color {
+        ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic }
     }
 
     Behavior on width {
@@ -43,7 +42,7 @@ Rectangle {
 
     Timer {
         id: pointerDelay
-        interval: 85
+        interval: motion.cursorDelay
         repeat: false
         onTriggered: root.pointerReady = buttonMouse.containsMouse && root.playerActive
     }
@@ -57,7 +56,7 @@ Rectangle {
         opacity: root.playerActive ? 1.0 : 0.0
 
         Behavior on opacity {
-            NumberAnimation { duration: 240; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: 260; easing.type: Easing.OutCubic }
         }
 
         MarqueePairText {

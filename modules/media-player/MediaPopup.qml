@@ -1,6 +1,7 @@
 import Quickshell
 import QtQuick
 import QtQuick.Layouts
+import "../../components" as Components
 
 PopupWindow {
     id: root
@@ -10,9 +11,8 @@ PopupWindow {
     property real popupX: 0
     property real popupY: 44
     property bool targetVisible: controller ? controller.popupOpen : false
-    property bool renderVisible: false
-    property real reveal: 0.0
-    property bool animating: revealAnimation.running || openDelay.running
+    property real reveal: popupState.reveal
+    property bool animating: popupState.animating
 
     function clamp01(value) {
         return Math.max(0, Math.min(1, value));
@@ -22,71 +22,35 @@ PopupWindow {
         return clamp01((reveal - start) / (end - start));
     }
 
-    function finishMaybeHide() {
-        if (!targetVisible && reveal <= 0.001)
-            renderVisible = false;
-    }
-
     anchor.window: hostWindow
     anchor.rect.x: popupX
     anchor.rect.y: popupY
     implicitWidth: 402
     implicitHeight: 66
-    visible: renderVisible
+    visible: popupState.renderVisible
     color: "transparent"
     surfaceFormat.opaque: false
 
-    onTargetVisibleChanged: {
-        if (targetVisible) {
-            forceHideTimer.stop();
-            renderVisible = true;
-            openDelay.restart();
-        } else {
-            openDelay.stop();
-            reveal = 0.0;
-            forceHideTimer.restart();
-        }
+    Components.AnimatedPopupState {
+        id: popupState
+        targetVisible: root.targetVisible
+        openDuration: 350
+        closeDuration: 270
+        closeSafetyDelay: 340
     }
 
-    Component.onCompleted: {
-        if (targetVisible) {
-            renderVisible = true;
-            reveal = 1.0;
-        }
-    }
-
-    Behavior on reveal {
-        NumberAnimation {
-            id: revealAnimation
-            duration: root.targetVisible ? 310 : 240
-            easing.type: root.targetVisible ? Easing.OutCubic : Easing.InOutCubic
-            onStopped: root.finishMaybeHide()
-        }
-    }
-
-    Timer {
-        id: openDelay
-        interval: 1
-        repeat: false
-        onTriggered: root.reveal = 1.0
-    }
-
-    Timer {
-        id: forceHideTimer
-        interval: 260
-        repeat: false
-        onTriggered: root.finishMaybeHide()
-    }
+    Components.AnimationTokens { id: motion }
 
     Item {
         id: popupMotionLayer
         anchors.fill: parent
         opacity: root.reveal
-        y: -8 + root.reveal * 8
-        scale: 0.965 + root.reveal * 0.035
+        y: -9 + root.reveal * 9
+        scale: 0.972 + root.reveal * 0.028
         transformOrigin: Item.Top
-        enabled: root.targetVisible
-
+        enabled: root.targetVisible && root.reveal > 0.45
+        layer.enabled: root.reveal > 0.001 && root.reveal < 0.999
+        layer.smooth: true
 
         Rectangle {
             id: panel
@@ -96,16 +60,22 @@ PopupWindow {
             border.width: 0
             clip: true
             antialiasing: true
-            scale: popupMouse.pressed ? 0.992 : 1.0
             transformOrigin: Item.Center
 
             Behavior on color {
-                ColorAnimation { duration: 240; easing.type: Easing.OutCubic }
+                ColorAnimation { duration: 260; easing.type: Easing.OutCubic }
             }
 
+            Rectangle {
+                anchors.fill: parent
+                radius: parent.radius
+                color: popupMouse.pressed ? "#08ffffff" : "transparent"
+                border.width: 0
+                antialiasing: true
 
-            Behavior on scale {
-                NumberAnimation { duration: 260; easing.type: Easing.OutCubic }
+                Behavior on color {
+                    ColorAnimation { duration: popupMouse.pressed ? motion.pressDuration : motion.releaseDuration; easing.type: Easing.OutCubic }
+                }
             }
 
             MouseArea {
@@ -124,8 +94,7 @@ PopupWindow {
                 anchors.topMargin: 8
                 anchors.bottomMargin: 8
                 spacing: 9
-                opacity: root.segment(0.12, 1.0)
-
+                opacity: root.segment(0.10, 1.0)
 
                 MediaCover {
                     Layout.preferredWidth: 50
@@ -137,18 +106,16 @@ PopupWindow {
                     sourceKey: controller ? controller.coverNonce : 0
                     fallbackPixelSize: 20
                     fallbackTextColor: "#dce6f2"
-                    opacity: root.segment(0.05, 0.75)
-                    scale: 0.96 + root.segment(0.05, 0.75) * 0.04
+                    opacity: root.segment(0.04, 0.82)
+                    scale: 0.985 + root.segment(0.04, 0.82) * 0.015
                     transformOrigin: Item.Center
-
                 }
 
                 ColumnLayout {
                     Layout.fillWidth: true
                     Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
                     spacing: 4
-                    opacity: root.segment(0.18, 0.92)
-
+                    opacity: root.segment(0.16, 0.94)
 
                     MarqueePairText {
                         Layout.fillWidth: true
@@ -171,8 +138,7 @@ PopupWindow {
                         Layout.preferredHeight: 24
                         Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
                         spacing: 6
-                        opacity: root.segment(0.28, 1.0)
-
+                        opacity: root.segment(0.25, 1.0)
 
                         RowLayout {
                             Layout.preferredWidth: 91
@@ -218,7 +184,6 @@ PopupWindow {
                             renderType: Text.NativeRendering
                             font.hintingPreference: Font.PreferFullHinting
                             font.kerning: false
-
                         }
 
                         MediaProgressBar {

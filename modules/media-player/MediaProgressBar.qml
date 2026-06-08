@@ -1,4 +1,5 @@
 import QtQuick
+import "../../components" as Components
 
 Item {
     id: root
@@ -14,10 +15,12 @@ Item {
     property bool dragging: false
     property real dragValue: 0
     property bool pointerReady: false
+    property real animatedValue: clampedValue
 
     readonly property bool interactive: seekEnabled && safeDuration() > 0
     readonly property bool hovered: progressMouse.containsMouse && interactive
     readonly property real animatedBarHeight: barHeight + (hovered || dragging ? 2 : 0)
+    readonly property real clampedValue: safeDuration() > 0 ? clamp(value || 0, 0, safeDuration()) : 0
 
     signal seekRequested(real seconds)
     signal dragStarted()
@@ -25,10 +28,36 @@ Item {
 
     implicitHeight: Math.max(14, barHeight + 8)
 
+    Components.AnimationTokens { id: motion }
+
+    onClampedValueChanged: {
+        if (!dragging)
+            animatedValue = clampedValue;
+    }
+
+    onDragValueChanged: {
+        if (dragging)
+            animatedValue = dragValue;
+    }
+
+    onDraggingChanged: {
+        if (dragging)
+            animatedValue = dragValue;
+        else
+            animatedValue = clampedValue;
+    }
+
     onInteractiveChanged: {
         if (!interactive) {
             pointerDelay.stop();
             pointerReady = false;
+        }
+    }
+
+    Behavior on animatedValue {
+        NumberAnimation {
+            duration: root.dragging ? 115 : 520
+            easing.type: root.dragging ? Easing.OutQuad : Easing.OutCubic
         }
     }
 
@@ -41,9 +70,7 @@ Item {
     }
 
     function currentValue() {
-        if (dragging)
-            return dragValue;
-        return clamp(value || 0, 0, safeDuration());
+        return clamp(animatedValue || 0, 0, safeDuration());
     }
 
     function valueFromX(x) {
@@ -54,7 +81,7 @@ Item {
 
     Timer {
         id: pointerDelay
-        interval: 80
+        interval: motion.cursorDelay
         repeat: false
         onTriggered: root.pointerReady = progressMouse.containsMouse && root.interactive
     }
@@ -67,16 +94,16 @@ Item {
         height: root.animatedBarHeight
         radius: height / 2
         color: root.backgroundColor
-        opacity: root.safeDuration() > 0 ? (root.hovered || root.dragging ? 1.0 : 0.84) : 0.42
+        opacity: root.safeDuration() > 0 ? (root.hovered || root.dragging ? 1.0 : 0.82) : 0.42
         border.width: 0
         antialiasing: true
 
         Behavior on height {
-            NumberAnimation { duration: 285; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: 380; easing.type: Easing.OutCubic }
         }
 
         Behavior on opacity {
-            NumberAnimation { duration: 260; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: 320; easing.type: Easing.OutCubic }
         }
 
         Rectangle {
@@ -89,44 +116,12 @@ Item {
                 : 0
             radius: parent.radius
             color: root.fillColor
-            opacity: root.hovered || root.dragging ? 1.0 : 0.91
+            opacity: root.hovered || root.dragging ? 1.0 : 0.9
             border.width: 0
             antialiasing: true
 
-            Behavior on width {
-                enabled: !root.dragging
-                NumberAnimation { duration: 330; easing.type: Easing.OutCubic }
-            }
-
             Behavior on opacity {
-                NumberAnimation { duration: 260; easing.type: Easing.OutCubic }
-            }
-        }
-
-        Rectangle {
-            id: handle
-            width: root.hovered || root.dragging ? 11.5 : 8
-            height: width
-            radius: width / 2
-            color: root.handleColor
-            visible: root.showHandle && root.interactive
-            anchors.verticalCenter: parent.verticalCenter
-            x: root.clamp(fill.width - width / 2, 0, parent.width - width)
-            opacity: root.hovered || root.dragging ? 1.0 : 0.0
-            scale: progressMouse.pressed ? 0.9 : (root.hovered ? 1.08 : 1.0)
-            border.width: 0
-            antialiasing: true
-
-            Behavior on width {
-                NumberAnimation { duration: 280; easing.type: Easing.OutCubic }
-            }
-
-            Behavior on opacity {
-                NumberAnimation { duration: 260; easing.type: Easing.OutCubic }
-            }
-
-            Behavior on scale {
-                NumberAnimation { duration: progressMouse.pressed ? 150 : 280; easing.type: Easing.OutCubic }
+                NumberAnimation { duration: 320; easing.type: Easing.OutCubic }
             }
         }
     }

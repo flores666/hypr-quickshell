@@ -14,11 +14,14 @@ Item {
     property date now: new Date()
     property bool popupOpen: false
     property date visibleMonth: new Date(now.getFullYear(), now.getMonth(), 1)
+    property bool pointerReady: false
 
     signal popupOpened()
 
     implicitWidth: clockButton.width
     implicitHeight: clockButton.height
+
+    Components.AnimationTokens { id: motion }
 
     function two(n) {
         return n < 10 ? "0" + n : "" + n;
@@ -89,20 +92,30 @@ Item {
         onDateChanged: root.now = date
     }
 
+    Timer {
+        id: pointerDelay
+        interval: motion.cursorDelay
+        repeat: false
+        onTriggered: root.pointerReady = clockMouse.containsMouse
+    }
+
     Rectangle {
         id: clockButton
         anchors.centerIn: parent
         width: clockText.implicitWidth + 16
         height: 24
         radius: 12
-        color: root.popupOpen ? "#26ffffff" : "transparent"
+        color: root.popupOpen
+            ? "#26ffffff"
+            : (clockMouse.pressed ? "#1cffffff" : (clockMouse.containsMouse ? "#14ffffff" : "transparent"))
         border.width: 0
+        scale: 1.0
+        antialiasing: true
 
         Behavior on color {
-            ColorAnimation {
-                duration: 140
-            }
+            ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic }
         }
+
         Text {
             id: clockText
             anchors.centerIn: parent
@@ -116,15 +129,38 @@ Item {
         }
 
         MouseArea {
+            id: clockMouse
             anchors.fill: parent
             hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: root.togglePopup()
-            onEntered: if (!root.popupOpen)
-                clockButton.color = "#14ffffff"
-            onExited: if (!root.popupOpen)
-                clockButton.color = "transparent"
+            acceptedButtons: Qt.LeftButton
+            cursorShape: root.pointerReady ? Qt.PointingHandCursor : Qt.ArrowCursor
+
+            onEntered: {
+                root.pointerReady = false;
+                pointerDelay.restart();
+            }
+
+            onExited: {
+                pointerDelay.stop();
+                root.pointerReady = false;
+            }
+
+            onClicked: function(mouse) {
+                root.togglePopup();
+                mouse.accepted = true;
+            }
         }
+    }
+
+    CalendarOutsideClickLayer {
+        controller: root
+        hostWindow: root.hostWindow
+        hostWidth: root.hostWidth
+        panelHeight: root.panelHeight
+        popupX: root.popupXFor(316)
+        popupY: root.panelHeight + 4
+        popupWidth: 316
+        popupHeight: 356
     }
 
     PopupWindow {
@@ -134,157 +170,254 @@ Item {
         anchor.rect.y: root.panelHeight + 4
         implicitWidth: 316
         implicitHeight: 356
-        visible: root.popupOpen
+        visible: popupState.renderVisible
         color: "transparent"
         surfaceFormat.opaque: false
 
-        Components.GlassPanel {
-            anchors.fill: parent
-            radiusSize: 18
-            glassColor: "#e010131a"
+        Components.AnimatedPopupState {
+            id: popupState
+            targetVisible: root.popupOpen
+            openDuration: motion.popupOpenDuration
+            closeDuration: motion.popupCloseDuration
+            closeSafetyDelay: 340
         }
 
-        Column {
+        Item {
+            id: popupMotionLayer
             anchors.fill: parent
-            anchors.margins: 16
-            spacing: 12
+            opacity: popupState.reveal
+            y: -10 + popupState.reveal * 10
+            scale: 0.972 + popupState.reveal * 0.028
+            transformOrigin: Item.Top
+            enabled: root.popupOpen && popupState.reveal > 0.45
+            layer.enabled: popupState.reveal > 0.001 && popupState.reveal < 0.999
+            layer.smooth: true
 
-            Item {
-                width: parent.width
-                height: 28
+            Components.GlassPanel {
+                id: panel
+                anchors.fill: parent
+                radiusSize: 18
+                glassColor: "#e010131a"
+            }
+
+            Rectangle {
+                anchors.fill: parent
+                radius: 18
+                color: popupMouse.pressed ? "#08ffffff" : "transparent"
+                border.width: 0
+                antialiasing: true
+
+                Behavior on color {
+                    ColorAnimation { duration: popupMouse.pressed ? motion.pressDuration : motion.releaseDuration; easing.type: Easing.OutCubic }
+                }
+            }
+
+            MouseArea {
+                id: popupMouse
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton
+                hoverEnabled: true
+                cursorShape: Qt.ArrowCursor
+                onClicked: function(mouse) { mouse.accepted = true; }
+            }
+
+            Column {
+                anchors.fill: parent
+                anchors.margins: 16
+                spacing: 12
+                opacity: Math.max(0, Math.min(1, (popupState.reveal - 0.10) / 0.90))
+
+                Item {
+                    width: parent.width
+                    height: 28
+                    opacity: Math.max(0, Math.min(1, (popupState.reveal - 0.12) / 0.74))
+
+                    Text {
+                        anchors.left: parent.left
+                        anchors.right: calendarNav.left
+                        anchors.rightMargin: 10
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: root.monthTitle(root.visibleMonth)
+                        color: "#f4f7fb"
+                        font.pixelSize: 15
+                        font.weight: Font.DemiBold
+                        elide: Text.ElideRight
+                        renderType: Text.NativeRendering
+                        font.hintingPreference: Font.PreferFullHinting
+                        font.kerning: false
+                    }
+
+                    Row {
+                        id: calendarNav
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 6
+
+                        Repeater {
+                            model: ["‹", "›"]
+                            delegate: Rectangle {
+                                required property string modelData
+                                property bool pointerReady: false
+
+                                width: 28
+                                height: 24
+                                radius: 12
+                                color: navMouse.pressed ? "#28ffffff" : (navMouse.containsMouse ? "#18ffffff" : "#12ffffff")
+                                scale: navMouse.pressed ? 0.94 : (navMouse.containsMouse ? 1.06 : 1.0)
+                                border.width: 0
+                                antialiasing: true
+                                transformOrigin: Item.Center
+
+                                Behavior on color {
+                                    ColorAnimation { duration: navMouse.pressed ? motion.pressDuration : motion.hoverDuration; easing.type: Easing.OutCubic }
+                                }
+
+                                Behavior on scale {
+                                    NumberAnimation { duration: navMouse.pressed ? motion.pressDuration : motion.releaseDuration; easing.type: Easing.OutCubic }
+                                }
+
+                                Timer {
+                                    id: navPointerDelay
+                                    interval: motion.cursorDelay
+                                    repeat: false
+                                    onTriggered: parent.pointerReady = navMouse.containsMouse
+                                }
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: modelData
+                                    color: "#eef3f8"
+                                    font.pixelSize: 16
+                                    font.weight: Font.DemiBold
+                                    renderType: Text.NativeRendering
+                                    font.hintingPreference: Font.PreferFullHinting
+                                    font.kerning: false
+                                }
+
+                                MouseArea {
+                                    id: navMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    acceptedButtons: Qt.LeftButton
+                                    cursorShape: parent.pointerReady ? Qt.PointingHandCursor : Qt.ArrowCursor
+
+                                    onEntered: {
+                                        parent.pointerReady = false;
+                                        navPointerDelay.restart();
+                                    }
+
+                                    onExited: {
+                                        navPointerDelay.stop();
+                                        parent.pointerReady = false;
+                                    }
+
+                                    onClicked: function(mouse) {
+                                        root.changeMonth(modelData === "‹" ? -1 : 1);
+                                        mouse.accepted = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
 
                 Text {
-                    anchors.left: parent.left
-                    anchors.right: calendarNav.left
-                    anchors.rightMargin: 10
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: root.monthTitle(root.visibleMonth)
-                    color: "#f4f7fb"
-                    font.pixelSize: 15
-                    font.weight: Font.DemiBold
-                    elide: Text.ElideRight
+                    width: parent.width
+                    text: Qt.formatDateTime(root.now, "dddd, MMMM d")
+                    color: "#b9c3cf"
+                    font.pixelSize: 12
+                    opacity: Math.max(0, Math.min(1, (popupState.reveal - 0.18) / 0.72))
                     renderType: Text.NativeRendering
                     font.hintingPreference: Font.PreferFullHinting
                     font.kerning: false
                 }
 
-                Row {
-                    id: calendarNav
-                    anchors.right: parent.right
-                    anchors.verticalCenter: parent.verticalCenter
-                    spacing: 6
+                Grid {
+                    width: parent.width
+                    columns: 7
+                    rowSpacing: 4
+                    columnSpacing: 4
+                    opacity: Math.max(0, Math.min(1, (popupState.reveal - 0.22) / 0.72))
 
                     Repeater {
-                        model: ["‹", "›"]
-                        delegate: Rectangle {
+                        model: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+                        delegate: Text {
                             required property string modelData
-                            width: 28
+                            width: 36
                             height: 24
-                            radius: 12
-                            color: "#14ffffff"
-
-                            Text {
-                                anchors.centerIn: parent
-                                text: modelData
-                                color: "#eef3f8"
-                                font.pixelSize: 16
-                                font.weight: Font.DemiBold
-                                renderType: Text.NativeRendering
-                                font.hintingPreference: Font.PreferFullHinting
-                                font.kerning: false
-                            }
-
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: root.changeMonth(modelData === "‹" ? -1 : 1)
-                            }
-                        }
-                    }
-                }
-            }
-
-            Text {
-                width: parent.width
-                text: Qt.formatDateTime(root.now, "dddd, MMMM d")
-                color: "#b9c3cf"
-                font.pixelSize: 12
-                renderType: Text.NativeRendering
-                font.hintingPreference: Font.PreferFullHinting
-                font.kerning: false
-            }
-
-            Grid {
-                width: parent.width
-                columns: 7
-                rowSpacing: 4
-                columnSpacing: 4
-
-                Repeater {
-                    model: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-                    delegate: Text {
-                        required property string modelData
-                        width: 36
-                        height: 24
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                        text: modelData
-                        color: "#8f9aa8"
-                        font.pixelSize: 11
-                        font.weight: Font.DemiBold
-                        renderType: Text.NativeRendering
-                        font.hintingPreference: Font.PreferFullHinting
-                        font.kerning: false
-                    }
-                }
-
-                Repeater {
-                    model: 42
-                    delegate: Rectangle {
-                        required property int index
-                        property int day: root.calendarDay(index)
-                        property bool validDay: root.calendarDayValid(index)
-                        width: 36
-                        height: 32
-                        radius: 16
-                        color: validDay && root.isToday(day) ? "#eef3f8" : "transparent"
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: parent.validDay ? parent.day : ""
-                            color: parent.validDay && root.isToday(parent.day) ? "#10131a" : "#e8eef5"
-                            opacity: parent.validDay ? 1.0 : 0.0
-                            font.pixelSize: 12
-                            font.weight: parent.validDay && root.isToday(parent.day) ? Font.DemiBold : Font.Medium
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                            text: modelData
+                            color: "#8f9aa8"
+                            font.pixelSize: 11
+                            font.weight: Font.DemiBold
                             renderType: Text.NativeRendering
                             font.hintingPreference: Font.PreferFullHinting
                             font.kerning: false
                         }
                     }
+
+                    Repeater {
+                        model: 42
+                        delegate: Rectangle {
+                            required property int index
+                            property int day: root.calendarDay(index)
+                            property bool validDay: root.calendarDayValid(index)
+
+                            width: 36
+                            height: 32
+                            radius: 16
+                            color: validDay && root.isToday(day) ? "#eef3f8" : "transparent"
+                            border.width: 0
+                            antialiasing: true
+
+                            Behavior on color {
+                                ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic }
+                            }
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: parent.validDay ? parent.day : ""
+                                color: parent.validDay && root.isToday(parent.day) ? "#10131a" : "#e8eef5"
+                                opacity: parent.validDay ? 1.0 : 0.0
+                                font.pixelSize: 12
+                                font.weight: parent.validDay && root.isToday(parent.day) ? Font.DemiBold : Font.Medium
+                                renderType: Text.NativeRendering
+                                font.hintingPreference: Font.PreferFullHinting
+                                font.kerning: false
+                            }
+                        }
+                    }
                 }
-            }
 
-            Item {
-                width: parent.width
-                height: 1
-            }
+                Item {
+                    width: parent.width
+                    height: 1
+                }
 
-            Rectangle {
-                width: parent.width
-                height: 42
-                radius: 14
-                color: "#12ffffff"
-                border.width: 0
+                Rectangle {
+                    width: parent.width
+                    height: 42
+                    radius: 14
+                    color: "#12ffffff"
+                    border.width: 0
+                    opacity: Math.max(0, Math.min(1, (popupState.reveal - 0.30) / 0.70))
+                    antialiasing: true
 
-                Text {
-                    anchors.centerIn: parent
-                    text: "Today • " + root.centerDateText(root.now)
-                    color: "#eef3f8"
-                    font.pixelSize: 12
-                    font.weight: Font.Medium
-                    renderType: Text.NativeRendering
-                    font.hintingPreference: Font.PreferFullHinting
-                    font.kerning: false
+                    Behavior on color {
+                        ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic }
+                    }
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "Today • " + root.centerDateText(root.now)
+                        color: "#eef3f8"
+                        font.pixelSize: 12
+                        font.weight: Font.Medium
+                        renderType: Text.NativeRendering
+                        font.hintingPreference: Font.PreferFullHinting
+                        font.kerning: false
+                    }
                 }
             }
         }

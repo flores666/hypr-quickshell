@@ -1,4 +1,5 @@
 import QtQuick
+import "../../components" as Components
 
 Item {
     id: root
@@ -18,6 +19,8 @@ Item {
     scale: !enabledState ? 1.0 : (buttonMouse.pressed ? 0.92 : (buttonMouse.containsMouse ? 1.075 : 1.0))
     transformOrigin: Item.Center
 
+    Components.AnimationTokens { id: motion }
+
     onEnabledStateChanged: {
         if (!enabledState) {
             pointerDelay.stop();
@@ -30,12 +33,12 @@ Item {
     }
 
     Behavior on scale {
-        NumberAnimation { duration: buttonMouse.pressed ? 160 : 300; easing.type: Easing.OutCubic }
+        NumberAnimation { duration: buttonMouse.pressed ? motion.pressDuration : motion.releaseDuration; easing.type: Easing.OutCubic }
     }
 
     Timer {
         id: pointerDelay
-        interval: 80
+        interval: motion.cursorDelay
         repeat: false
         onTriggered: root.pointerReady = buttonMouse.containsMouse && root.enabledState
     }
@@ -51,7 +54,7 @@ Item {
         antialiasing: true
 
         Behavior on color {
-            ColorAnimation { duration: buttonMouse.pressed ? 150 : 320; easing.type: Easing.OutCubic }
+            ColorAnimation { duration: buttonMouse.pressed ? motion.pressDuration : motion.hoverDuration; easing.type: Easing.OutCubic }
         }
     }
 
@@ -68,11 +71,11 @@ Item {
         opacity: !root.enabledState ? 0.7 : (buttonMouse.containsMouse ? 1.0 : 0.86)
 
         Behavior on width {
-            NumberAnimation { duration: 280; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: motion.releaseDuration; easing.type: Easing.OutCubic }
         }
 
         Behavior on opacity {
-            NumberAnimation { duration: 270; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: motion.releaseDuration; easing.type: Easing.OutCubic }
         }
     }
 
