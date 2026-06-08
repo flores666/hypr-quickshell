@@ -7,8 +7,8 @@ Item {
     property bool renderVisible: false
     property bool inputEnabled: targetVisible && reveal > 0.72
     property real reveal: 0.0
-    property int openDuration: 340
-    property int closeDuration: 260
+    property int openDuration: 170
+    property int closeDuration: 130
     property int closeSafetyDelay: closeDuration + 70
     property bool animating: revealAnimation.running || openKick.running || closeSafetyTimer.running
 

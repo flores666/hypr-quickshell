@@ -16,7 +16,7 @@ Item {
     implicitWidth: buttonSize
     implicitHeight: buttonSize
     opacity: enabledState ? 1.0 : 0.34
-    scale: !enabledState ? 1.0 : (buttonMouse.pressed ? 0.92 : (buttonMouse.containsMouse ? 1.075 : 1.0))
+    scale: !enabledState ? 1.0 : (buttonMouse.pressed ? 0.96 : 1.0)
     transformOrigin: Item.Center
 
     Components.AnimationTokens { id: motion }
@@ -29,7 +29,7 @@ Item {
     }
 
     Behavior on opacity {
-        NumberAnimation { duration: 260; easing.type: Easing.OutCubic }
+        NumberAnimation { duration: 130; easing.type: Easing.OutCubic }
     }
 
     Behavior on scale {
@@ -61,8 +61,8 @@ Item {
     Image {
         id: icon
         anchors.centerIn: parent
-        width: root.iconSize + (buttonMouse.containsMouse && root.enabledState ? 1.5 : 0)
-        height: width
+        width: root.iconSize
+        height: root.iconSize
         source: root.iconSource
         sourceSize.width: Math.ceil(width * Screen.devicePixelRatio * 2)
         sourceSize.height: Math.ceil(height * Screen.devicePixelRatio * 2)

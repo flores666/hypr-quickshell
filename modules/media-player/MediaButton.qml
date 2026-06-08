@@ -37,7 +37,7 @@ Rectangle {
     }
 
     Behavior on width {
-        NumberAnimation { duration: 280; easing.type: Easing.OutCubic }
+        NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
     }
 
     Timer {
@@ -56,7 +56,7 @@ Rectangle {
         opacity: root.playerActive ? 1.0 : 0.0
 
         Behavior on opacity {
-            NumberAnimation { duration: 260; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: 130; easing.type: Easing.OutCubic }
         }
 
         MarqueePairText {

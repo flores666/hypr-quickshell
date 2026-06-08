@@ -56,7 +56,7 @@ Item {
 
     Behavior on animatedValue {
         NumberAnimation {
-            duration: root.dragging ? 115 : 520
+            duration: root.dragging ? 58 : 260
             easing.type: root.dragging ? Easing.OutQuad : Easing.OutCubic
         }
     }
@@ -99,11 +99,11 @@ Item {
         antialiasing: true
 
         Behavior on height {
-            NumberAnimation { duration: 380; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: 190; easing.type: Easing.OutCubic }
         }
 
         Behavior on opacity {
-            NumberAnimation { duration: 320; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
         }
 
         Rectangle {
@@ -121,7 +121,7 @@ Item {
             antialiasing: true
 
             Behavior on opacity {
-                NumberAnimation { duration: 320; easing.type: Easing.OutCubic }
+                NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
             }
         }
     }

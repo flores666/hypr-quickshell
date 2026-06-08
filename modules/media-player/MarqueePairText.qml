@@ -93,19 +93,19 @@ Item {
     }
 
     Behavior on textOpacity {
-        NumberAnimation { duration: 135; easing.type: Easing.OutCubic }
+        NumberAnimation { duration: 68; easing.type: Easing.OutCubic }
     }
 
     Timer {
         id: textSwapTimer
-        interval: 145
+        interval: 72
         repeat: false
         onTriggered: root.applyIncomingText()
     }
 
     Timer {
         id: scrollDelay
-        interval: 650
+        interval: 325
         repeat: false
     }
 

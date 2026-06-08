@@ -32,7 +32,7 @@ Item {
 
     readonly property color accentStrongColor: "#e8eef6"
     readonly property color mutedTextColor: "#929aa7"
-    readonly property color darkPanelSoftColor: "#e0181c27"
+    readonly property color darkPanelSoftColor: "#b010131a"
 
     signal popupOpened()
 

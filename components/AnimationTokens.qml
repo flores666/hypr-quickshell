@@ -1,10 +1,10 @@
 import QtQuick
 
 QtObject {
-    readonly property int hoverDuration: 340
-    readonly property int pressDuration: 180
-    readonly property int releaseDuration: 340
-    readonly property int popupOpenDuration: 340
-    readonly property int popupCloseDuration: 260
-    readonly property int cursorDelay: 125
+    readonly property int hoverDuration: 170
+    readonly property int pressDuration: 90
+    readonly property int releaseDuration: 170
+    readonly property int popupOpenDuration: 170
+    readonly property int popupCloseDuration: 130
+    readonly property int cursorDelay: 65
 }

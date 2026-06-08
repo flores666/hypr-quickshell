@@ -31,15 +31,15 @@ PopupWindow {
     color: "transparent"
     surfaceFormat.opaque: false
 
+    Components.AnimationTokens { id: motion }
+
     Components.AnimatedPopupState {
         id: popupState
         targetVisible: root.targetVisible
-        openDuration: 350
-        closeDuration: 270
-        closeSafetyDelay: 340
+        openDuration: motion.popupOpenDuration
+        closeDuration: motion.popupCloseDuration
+        closeSafetyDelay: motion.popupCloseDuration + 70
     }
-
-    Components.AnimationTokens { id: motion }
 
     Item {
         id: popupMotionLayer
@@ -56,14 +56,14 @@ PopupWindow {
             id: panel
             anchors.fill: parent
             radius: 18
-            color: controller ? controller.darkPanelSoftColor : "#e0181c27"
+            color: controller ? controller.darkPanelSoftColor : "#b010131a"
             border.width: 0
             clip: true
             antialiasing: true
             transformOrigin: Item.Center
 
             Behavior on color {
-                ColorAnimation { duration: 260; easing.type: Easing.OutCubic }
+                ColorAnimation { duration: 130; easing.type: Easing.OutCubic }
             }
 
             Rectangle {

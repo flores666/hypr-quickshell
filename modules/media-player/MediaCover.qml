@@ -110,7 +110,7 @@ Rectangle {
 
     Timer {
         id: commitIncomingTimer
-        interval: 260
+        interval: 130
         repeat: false
         onTriggered: root.commitIncomingCover()
     }
@@ -241,7 +241,7 @@ Rectangle {
 
         Behavior on opacity {
             NumberAnimation {
-                duration: 220
+                duration: 110
                 easing.type: Easing.OutCubic
             }
         }

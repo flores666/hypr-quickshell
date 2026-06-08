@@ -179,7 +179,7 @@ Item {
             targetVisible: root.popupOpen
             openDuration: motion.popupOpenDuration
             closeDuration: motion.popupCloseDuration
-            closeSafetyDelay: 340
+            closeSafetyDelay: motion.popupCloseDuration + 70
         }
 
         Item {
@@ -197,7 +197,7 @@ Item {
                 id: panel
                 anchors.fill: parent
                 radiusSize: 18
-                glassColor: "#e010131a"
+                glassColor: "#b010131a"
             }
 
             Rectangle {
