@@ -1,5 +1,5 @@
 import QtQuick
-import QtQuick.Effects
+import Qt5Compat.GraphicalEffects
 
 Rectangle {
     id: root
@@ -18,7 +18,8 @@ Rectangle {
     color: "#18ffffff"
     border.color: "#24ffffff"
     border.width: 1
-    clip: true
+    clip: false
+    antialiasing: true
 
     function reloadCover() {
         const next = sourceUrl || "";
@@ -62,11 +63,10 @@ Rectangle {
     }
 
     Rectangle {
-        id: roundedMask
         anchors.fill: parent
         radius: root.radius
-        visible: false
-        layer.enabled: true
+        color: root.color
+        antialiasing: true
     }
 
     Image {
@@ -76,22 +76,41 @@ Rectangle {
         fillMode: Image.PreserveAspectCrop
         asynchronous: true
         cache: false
+        smooth: true
+        mipmap: true
+        sourceSize.width: Math.max(64, Math.ceil(root.width * Screen.devicePixelRatio * 2))
+        sourceSize.height: Math.max(64, Math.ceil(root.height * Screen.devicePixelRatio * 2))
         visible: false
     }
 
-    MultiEffect {
+    Rectangle {
+        id: roundedMask
+        anchors.fill: parent
+        radius: root.radius
+        visible: false
+        antialiasing: true
+    }
+
+    Item {
         id: roundedImage
         anchors.fill: parent
-        source: shown
         visible: root.displayedSource !== "" && shown.status === Image.Ready
         opacity: visible ? 1.0 : 0.0
-        maskEnabled: true
-        maskSource: roundedMask
+        layer.enabled: true
+        layer.smooth: true
+        layer.samples: 4
 
         Behavior on opacity {
             NumberAnimation {
                 duration: 160
             }
+        }
+
+        OpacityMask {
+            anchors.fill: parent
+            source: shown
+            maskSource: roundedMask
+            cached: true
         }
     }
 
@@ -125,6 +144,7 @@ Rectangle {
         color: "transparent"
         border.color: root.border.color
         border.width: root.border.width
+        antialiasing: true
     }
 
     Text {
