@@ -3,6 +3,7 @@ import Quickshell.Wayland
 import Quickshell.Services.Mpris
 import QtQuick
 import QtQuick.Layouts
+import QtCore
 import "../../components" as Components
 
 PanelWindow {
@@ -30,7 +31,6 @@ PanelWindow {
 
     property var activePlayer: null
     property string lastActivePlayerKey: ""
-
     property bool isDragging: false
     property real pendingSeekPosition: -1
     property string pendingSeekTrackId: ""
@@ -61,6 +61,7 @@ PanelWindow {
         syncPositionFromPlayer(true);
     }
 
+
     function playersList() {
         if (!Mpris || !Mpris.players || !Mpris.players.values)
             return [];
@@ -84,6 +85,7 @@ PanelWindow {
 
         return stable + ":" + String(player.trackTitle || "") + ":" + String(player.trackArtist || "") + ":" + String(player.trackAlbum || "") + ":" + String(player.length || 0) + ":" + String(player.trackArtUrl || "");
     }
+
 
     function refreshActivePlayer() {
         const list = playersList();
@@ -268,9 +270,8 @@ PanelWindow {
     function toggleCalendar() {
         visibleMonth = new Date(now.getFullYear(), now.getMonth(), 1);
         calendarOpen = !calendarOpen;
-        if (calendarOpen) {
-                closeMediaPopup();
-        }
+        if (calendarOpen)
+            closeMediaPopup();
     }
 
     function openMediaPopup() {
@@ -313,17 +314,6 @@ PanelWindow {
         return activePlayer.identity || "Media Player";
     }
 
-    function compactLineText() {
-        if (!activePlayer)
-            return "No media";
-        return mediaTitle() + "  •  " + mediaArtist();
-    }
-
-    function minimalLineText() {
-        if (!activePlayer)
-            return "No media";
-        return mediaTitle() + "  •  " + mediaArtist();
-    }
 
     function hasDuration() {
         if (!activePlayer)
@@ -382,9 +372,9 @@ PanelWindow {
         player.togglePlaying();
     }
 
-    function popupX(popupWidth) {
-        const raw = centerGroup.x + mediaButton.x + mediaButton.width / 2 - popupWidth / 2;
-        return Math.max(8, Math.min(raw, root.width - popupWidth - 8));
+    function popupXFor(item, popupWidth) {
+        const raw = barContent.x + item.x + item.width / 2 - popupWidth / 2;
+        return Math.max(6, Math.min(raw, root.width - popupWidth - 6));
     }
 
     SystemClock {
@@ -464,7 +454,7 @@ PanelWindow {
     Components.GlassPanel {
         id: background
         anchors.fill: parent
-        anchors.margins: 4
+        anchors.margins: 2
         radiusSize: 12
         glassColor: "#b010131a"
         strokeColor: "#66ffffff"
@@ -473,8 +463,8 @@ PanelWindow {
     Item {
         id: barContent
         anchors.fill: background
-        anchors.leftMargin: 8
-        anchors.rightMargin: 8
+        anchors.leftMargin: 4
+        anchors.rightMargin: 4
 
         WorkspaceStrip {
             id: workspaces
@@ -482,154 +472,107 @@ PanelWindow {
             anchors.verticalCenter: parent.verticalCenter
         }
 
-        Row {
-            id: centerGroup
+        Rectangle {
+            id: clockButton
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.verticalCenter: parent.verticalCenter
-            spacing: 6
+            width: clockText.implicitWidth + 16
+            height: 24
+            radius: 12
+            color: root.calendarOpen ? "#26ffffff" : "transparent"
+            border.color: root.calendarOpen ? "#33ffffff" : "transparent"
+            border.width: 1
 
-            Rectangle {
-                id: clockButton
-                width: clockText.implicitWidth + 22
-                height: 26
-                radius: 13
-                color: root.calendarOpen ? "#26ffffff" : "transparent"
-                border.color: root.calendarOpen ? "#33ffffff" : "transparent"
-                border.width: 1
+            Behavior on color { ColorAnimation { duration: 140 } }
+            Behavior on border.color { ColorAnimation { duration: 140 } }
 
-                Behavior on color { ColorAnimation { duration: 140 } }
-                Behavior on border.color { ColorAnimation { duration: 140 } }
+            Text {
+                id: clockText
+                anchors.centerIn: parent
+                text: root.centerDateText(root.now)
+                color: "#eef3f8"
+                font.pixelSize: 12
+                font.weight: Font.DemiBold
+                renderType: Text.NativeRendering
+                font.hintingPreference: Font.PreferFullHinting
+                font.kerning: false
+            }
 
-                Text {
-                    id: clockText
-                    anchors.centerIn: parent
-                    text: root.centerDateText(root.now)
-                    color: "#eef3f8"
-                    font.pixelSize: 12
-                    font.weight: Font.DemiBold
-                    renderType: Text.NativeRendering
-                    font.hintingPreference: Font.PreferFullHinting
-                    font.kerning: false
+            MouseArea {
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.toggleCalendar()
+                onEntered: if (!root.calendarOpen) clockButton.color = "#14ffffff"
+                onExited: if (!root.calendarOpen) clockButton.color = "transparent"
+            }
+        }
+
+        Rectangle {
+            id: mediaButton
+            anchors.right: clockButton.left
+            anchors.rightMargin: 6
+            anchors.verticalCenter: parent.verticalCenter
+            width: root.activePlayer ? 270 : 92
+            height: 24
+            radius: 12
+            color: root.mediaOpen ? "#20ffffff" : "transparent"
+            border.color: root.mediaOpen ? "#28ffffff" : "transparent"
+            border.width: 1
+            clip: true
+
+            Behavior on color { ColorAnimation { duration: 140 } }
+            Behavior on width { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+
+            RowLayout {
+                z: 1
+                anchors.fill: parent
+                anchors.leftMargin: 6
+                anchors.rightMargin: 6
+                spacing: 5
+
+                MarqueePairText {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 18
+                    Layout.alignment: Qt.AlignVCenter
+                    titleText: root.mediaTitle()
+                    artistText: root.activePlayer ? root.mediaArtist() : ""
+                    titleColor: root.activePlayer ? "#f4f7fb" : "#9ba5b2"
+                    artistColor: root.mutedTextColor
+                    separatorColor: "#7f8896"
+                    pixelSize: 12
+                    titleWeight: Font.DemiBold
+                    artistWeight: Font.Medium
+                    speedPixelsPerSecond: 25.2
                 }
 
-                MouseArea {
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: root.toggleCalendar()
-                    onEntered: if (!root.calendarOpen) clockButton.color = "#14ffffff"
-                    onExited: if (!root.calendarOpen) clockButton.color = "transparent"
+                MediaProgressBar {
+                    Layout.preferredWidth: root.activePlayer ? 62 : 0
+                    Layout.preferredHeight: 12
+                    Layout.alignment: Qt.AlignVCenter
+                    value: root.visualPosition
+                    duration: root.hasDuration() ? root.currentLength : 0
+                    seekEnabled: false
+                    barHeight: 3
+                    backgroundColor: "#22ffffff"
+                    fillColor: root.accentStrongColor
                 }
             }
 
-            Rectangle {
-                id: mediaButton
-                width: root.activePlayer ? 334 : 104
-                height: 26
-                radius: 13
-                color: root.mediaOpen ? "#20ffffff" : "transparent"
-                border.color: root.mediaOpen ? "#28ffffff" : "transparent"
-                border.width: 1
-                clip: true
+            MouseArea {
+                anchors.fill: parent
+                hoverEnabled: true
+                acceptedButtons: Qt.LeftButton
+                cursorShape: Qt.PointingHandCursor
+                z: 0
 
-                Behavior on color { ColorAnimation { duration: 140 } }
-                Behavior on width { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
-
-                RowLayout {
-                    z: 1
-                    anchors.fill: parent
-                    anchors.leftMargin: 8
-                    anchors.rightMargin: 8
-                    spacing: 7
-
-                    Item {
-                        Layout.preferredWidth: 18
-                        Layout.preferredHeight: 20
-                        Layout.alignment: Qt.AlignVCenter
-                        opacity: root.activePlayer && root.activePlayer.canTogglePlaying ? 1.0 : 0.48
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: root.activePlayer && root.activePlayer.isPlaying ? "Ⅱ" : "▶"
-                            color: "#f4f7fb"
-                            font.pixelSize: root.activePlayer && root.activePlayer.isPlaying ? 11 : 10
-                            font.weight: Font.DemiBold
-                            renderType: Text.NativeRendering
-                            font.hintingPreference: Font.PreferFullHinting
-                            font.kerning: false
-                        }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            acceptedButtons: Qt.LeftButton
-                            cursorShape: root.activePlayer && root.activePlayer.canTogglePlaying ? Qt.PointingHandCursor : Qt.ArrowCursor
-                            onClicked: root.togglePlayPause()
-                        }
-                    }
-
-                    MarqueeText {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 18
-                        Layout.alignment: Qt.AlignVCenter
-                        text: root.mediaTitle()
-                        textColor: root.activePlayer ? "#f4f7fb" : "#9ba5b2"
-                        pixelSize: 12
-                        fontWeight: Font.DemiBold
-                    }
-
-                    Text {
-                        Layout.preferredWidth: root.activePlayer ? 8 : 0
-                        Layout.alignment: Qt.AlignVCenter
-                        visible: root.activePlayer !== null
-                        horizontalAlignment: Text.AlignHCenter
-                        text: "•"
-                        color: "#7f8896"
-                        font.pixelSize: 12
-                        font.weight: Font.DemiBold
-                        renderType: Text.NativeRendering
-                        font.hintingPreference: Font.PreferFullHinting
-                        font.kerning: false
-                    }
-
-                    MarqueeText {
-                        Layout.preferredWidth: root.activePlayer ? 92 : 0
-                        Layout.preferredHeight: 18
-                        Layout.alignment: Qt.AlignVCenter
-                        visible: root.activePlayer !== null
-                        text: root.mediaArtist()
-                        textColor: root.mutedTextColor
-                        pixelSize: 12
-                        fontWeight: Font.Medium
-                    }
-
-                    MediaProgressBar {
-                        Layout.preferredWidth: root.activePlayer ? 74 : 0
-                        Layout.preferredHeight: 14
-                        Layout.alignment: Qt.AlignVCenter
-                        value: root.visualPosition
-                        duration: root.hasDuration() ? root.currentLength : 0
-                        seekEnabled: false
-                        barHeight: 3
-                        backgroundColor: "#22ffffff"
-                        fillColor: root.accentStrongColor
-                    }
+                onClicked: function(mouse) {
+                    root.handleMediaLeftClick();
+                    mouse.accepted = true;
                 }
 
-                MouseArea {
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    acceptedButtons: Qt.LeftButton
-                    cursorShape: Qt.PointingHandCursor
-                    z: 0
-
-                    onClicked: function(mouse) {
-                        root.handleMediaLeftClick();
-                        mouse.accepted = true;
-                    }
-
-                    onEntered: if (!root.mediaOpen) mediaButton.color = "#14ffffff"
-                    onExited: if (!root.mediaOpen) mediaButton.color = "transparent"
-                }
+                onEntered: if (!root.mediaOpen) mediaButton.color = "#14ffffff"
+                onExited: if (!root.mediaOpen) mediaButton.color = "transparent"
             }
         }
     }
@@ -637,7 +580,7 @@ PanelWindow {
     PopupWindow {
         id: calendarPopup
         anchor.window: root
-        anchor.rect.x: root.width / 2 - implicitWidth / 2
+        anchor.rect.x: root.popupXFor(clockButton, implicitWidth)
         anchor.rect.y: root.implicitHeight + 4
         implicitWidth: 316
         implicitHeight: 356
@@ -796,96 +739,81 @@ PanelWindow {
         }
     }
 
+
     PopupWindow {
         id: compactMediaPopup
         anchor.window: root
-        anchor.rect.x: root.popupX(implicitWidth)
+        anchor.rect.x: root.popupXFor(mediaButton, implicitWidth)
         anchor.rect.y: root.implicitHeight + 6
-        implicitWidth: 424
-        implicitHeight: 96
+        implicitWidth: 402
+        implicitHeight: 78
         visible: root.mediaOpen
         color: "transparent"
         surfaceFormat.opaque: false
 
         Rectangle {
             anchors.fill: parent
-            radius: 19
+            radius: 18
             color: root.darkPanelSoftColor
             border.color: "#35ffffff"
             border.width: 1
             clip: true
-            opacity: compactMediaPopup.visible ? 1.0 : 0.0
-
-            Behavior on opacity { NumberAnimation { duration: 140 } }
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 12
-                anchors.rightMargin: 14
-                anchors.topMargin: 11
-                anchors.bottomMargin: 11
-                spacing: 11
+                anchors.leftMargin: 8
+                anchors.rightMargin: 8
+                anchors.topMargin: 7
+                anchors.bottomMargin: 7
+                spacing: 8
 
                 MediaCover {
-                    Layout.preferredWidth: 58
-                    Layout.preferredHeight: 58
+                    Layout.preferredWidth: 48
+                    Layout.preferredHeight: 48
                     Layout.alignment: Qt.AlignVCenter
-                    radius: 12
+                    radius: 10
                     sourceUrl: root.currentCoverSource
                     sourceKey: root.coverNonce
-                    fallbackPixelSize: 22
+                    fallbackPixelSize: 19
                     fallbackTextColor: "#dce6f2"
                 }
 
                 ColumnLayout {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 58
                     Layout.alignment: Qt.AlignVCenter
                     spacing: 4
 
-                    MarqueeText {
+                    MarqueePairText {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 20
-                        text: root.compactLineText()
-                        textColor: root.activePlayer ? "#f4f7fb" : "#9ba5b2"
-                        pixelSize: 15
-                        fontWeight: Font.DemiBold
-                        gap: 54
-                        speedPixelsPerSecond: 30
-                    }
-
-                    MediaProgressBar {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 11
-                        value: root.visualPosition
-                        duration: root.hasDuration() ? root.currentLength : 0
-                        seekEnabled: root.canSeek()
-                        showHandle: false
-                        barHeight: 5
-                        backgroundColor: "#2bffffff"
-                        fillColor: root.accentStrongColor
-                        onDragStarted: root.isDragging = true
-                        onDragEnded: root.isDragging = false
-                        onSeekRequested: function(seconds) { root.performSeek(seconds); }
+                        titleText: root.mediaTitle()
+                        artistText: root.activePlayer ? root.mediaArtist() : ""
+                        titleColor: root.activePlayer ? "#f4f7fb" : "#9ba5b2"
+                        artistColor: root.mutedTextColor
+                        separatorColor: "#798391"
+                        pixelSize: 16
+                        titleWeight: Font.DemiBold
+                        artistWeight: Font.Medium
+                        speedPixelsPerSecond: 25.2
                     }
 
                     RowLayout {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 18
-                        spacing: 6
+                        Layout.alignment: Qt.AlignVCenter
+                        spacing: 5
 
-                        Row {
-                            Layout.preferredWidth: 62
+                        RowLayout {
+                            Layout.preferredWidth: 54
                             Layout.preferredHeight: 18
-                            Layout.alignment: Qt.AlignVCenter
-                            spacing: 2
+                            spacing: 3
 
                             Repeater {
                                 model: ["previous", "play", "next"]
                                 delegate: Item {
                                     required property string modelData
-                                    width: modelData === "play" ? 22 : 18
-                                    height: 18
+                                    Layout.preferredWidth: modelData === "play" ? 20 : 15
+                                    Layout.preferredHeight: 18
                                     opacity: {
                                         if (!root.activePlayer)
                                             return 0.45;
@@ -906,7 +834,7 @@ PanelWindow {
                                             return root.activePlayer && root.activePlayer.isPlaying ? "Ⅱ" : "▶";
                                         }
                                         color: "#eef3f8"
-                                        font.pixelSize: modelData === "play" ? 11 : 15
+                                        font.pixelSize: modelData === "play" ? 10 : 14
                                         font.weight: Font.DemiBold
                                         renderType: Text.NativeRendering
                                         font.hintingPreference: Font.PreferFullHinting
@@ -934,28 +862,41 @@ PanelWindow {
                         }
 
                         Text {
-                            Layout.preferredWidth: 42
-                            Layout.alignment: Qt.AlignVCenter
+                            Layout.preferredWidth: 34
                             text: root.formatSeconds(root.visualPosition)
                             color: "#cfd8e4"
-                            font.pixelSize: 11
+                            font.pixelSize: 10
                             font.weight: Font.DemiBold
                             horizontalAlignment: Text.AlignLeft
+                            verticalAlignment: Text.AlignVCenter
                             renderType: Text.NativeRendering
                             font.hintingPreference: Font.PreferFullHinting
                             font.kerning: false
                         }
 
-                        Item { Layout.fillWidth: true; Layout.preferredHeight: 1 }
+                        MediaProgressBar {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 12
+                            value: root.visualPosition
+                            duration: root.hasDuration() ? root.currentLength : 0
+                            seekEnabled: root.canSeek()
+                            showHandle: false
+                            barHeight: 4
+                            backgroundColor: "#2bffffff"
+                            fillColor: root.accentStrongColor
+                            onDragStarted: root.isDragging = true
+                            onDragEnded: root.isDragging = false
+                            onSeekRequested: function(seconds) { root.performSeek(seconds); }
+                        }
 
                         Text {
-                            Layout.preferredWidth: 42
-                            Layout.alignment: Qt.AlignVCenter
+                            Layout.preferredWidth: 34
                             text: root.formatSeconds(root.currentLength)
                             color: "#cfd8e4"
-                            font.pixelSize: 11
+                            font.pixelSize: 10
                             font.weight: Font.DemiBold
                             horizontalAlignment: Text.AlignRight
+                            verticalAlignment: Text.AlignVCenter
                             renderType: Text.NativeRendering
                             font.hintingPreference: Font.PreferFullHinting
                             font.kerning: false
@@ -967,3 +908,4 @@ PanelWindow {
     }
 
 }
+
