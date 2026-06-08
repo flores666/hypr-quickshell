@@ -798,7 +798,7 @@ PanelWindow {
         anchor.rect.x: root.popupXFor(mediaButton, implicitWidth)
         anchor.rect.y: root.implicitHeight + 6
         implicitWidth: 402
-        implicitHeight: 78
+        implicitHeight: 64
         visible: root.mediaOpen
         color: "transparent"
         surfaceFormat.opaque: false
@@ -844,7 +844,7 @@ PanelWindow {
                         titleColor: root.activePlayer ? "#f4f7fb" : "#9ba5b2"
                         artistColor: root.mutedTextColor
                         separatorColor: "#798391"
-                        pixelSize: 16
+                        pixelSize: 14
                         titleWeight: Font.DemiBold
                         artistWeight: Font.Medium
                         speedPixelsPerSecond: 22.68
