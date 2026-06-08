@@ -41,6 +41,9 @@ Rectangle {
             font.pixelSize: 11
             elide: Text.ElideRight
             verticalAlignment: Text.AlignVCenter
+            renderType: Text.NativeRendering
+            font.hintingPreference: Font.PreferFullHinting
+            font.kerning: false
         }
     }
 

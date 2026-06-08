@@ -336,8 +336,9 @@ Item {
                     styleColor: "#b0000000"
                     font.pixelSize: root.textSize
                     font.weight: cell.occupied ? Font.DemiBold : Font.Medium
-                    renderType: Text.QtRendering
-                    font.hintingPreference: Font.PreferNoHinting
+                    renderType: Text.NativeRendering
+                    font.hintingPreference: Font.PreferFullHinting
+                    font.kerning: false
                 }
 
                 MouseArea {

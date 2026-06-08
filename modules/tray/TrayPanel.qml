@@ -38,6 +38,9 @@ PanelWindow {
             color: "#f4f7fb"
             font.pixelSize: 14
             font.weight: Font.DemiBold
+            renderType: Text.NativeRendering
+            font.hintingPreference: Font.PreferFullHinting
+            font.kerning: false
         }
 
         Repeater {
