@@ -35,6 +35,7 @@ PanelWindow {
     property real pendingSeekPosition: -1
     property string pendingSeekTrackId: ""
     property double pendingSeekStartedAt: 0
+    property real pendingSeekPreviousPosition: -1
 
     property string currentTrackId: ""
     property string currentTitle: ""
@@ -150,6 +151,65 @@ PanelWindow {
         return value;
     }
 
+    function clearPendingSeek() {
+        pendingSeekPosition = -1;
+        pendingSeekTrackId = "";
+        pendingSeekStartedAt = 0;
+        pendingSeekPreviousPosition = -1;
+    }
+
+    function lowerText(value) {
+        return String(value || "").toLowerCase();
+    }
+
+    function looksLikeBrowserPlayer(player) {
+        const key = lowerText(playerStableKey(player));
+        const identity = lowerText(player ? player.identity : "");
+        return key.indexOf("firefox") >= 0
+            || key.indexOf("chrome") >= 0
+            || key.indexOf("chromium") >= 0
+            || key.indexOf("browser") >= 0
+            || key.indexOf("yandex") >= 0
+            || identity.indexOf("firefox") >= 0
+            || identity.indexOf("chrome") >= 0
+            || identity.indexOf("chromium") >= 0
+            || identity.indexOf("browser") >= 0
+            || identity.indexOf("браузер") >= 0;
+    }
+
+
+    function cleanBrowserTabTitle(title) {
+        var value = String(title || "").trim();
+        value = value.replace(/\s+[—-]\s*(yandex music|яндекс\.?\s*музыка).*$/i, "");
+        value = value.replace(/\s+[—-]\s*(mozilla firefox|google chrome|chromium|yandex browser|яндекс браузер).*$/i, "");
+        return value.trim();
+    }
+
+    function looksLikeBrowserTabTitle(player, title, artist) {
+        const value = lowerText(title).trim();
+        const playerName = lowerText(player ? player.identity : "").trim();
+
+        if (value === "")
+            return true;
+
+        if (playerName !== "" && value === playerName)
+            return true;
+
+        if ((value.indexOf("yandex") >= 0 && value.indexOf("music") >= 0)
+                || (value.indexOf("яндекс") >= 0 && value.indexOf("музык") >= 0)
+                || value.indexOf("music.yandex") >= 0)
+            return true;
+
+        if (value.indexOf("mozilla firefox") >= 0
+                || value.indexOf("google chrome") >= 0
+                || value.indexOf("chromium") >= 0
+                || value.indexOf("yandex browser") >= 0
+                || value.indexOf("яндекс браузер") >= 0)
+            return true;
+
+        return false;
+    }
+
     function syncMetadataFromPlayer(forceCoverReload) {
         const player = activePlayer;
         if (!player) {
@@ -162,26 +222,32 @@ PanelWindow {
                 currentCoverFallbackSource = "";
                 currentPosition = 0;
                 currentLength = 0;
+                clearPendingSeek();
                 coverNonce++;
             }
             closeMediaPopup();
             return;
         }
 
-        const nextTrackId = playerTrackKey(player);
-        const nextTitle = player.trackTitle || player.identity || "Unknown Title";
-        const nextArtist = player.trackArtist || "";
-        const nextAlbum = player.trackAlbum || "";
+        const rawTitle = String(player.trackTitle || "").trim();
+        const rawArtist = String(player.trackArtist || "").trim();
+        const rawAlbum = String(player.trackAlbum || "").trim();
+        const cleanedTitle = cleanBrowserTabTitle(rawTitle);
+        const titleWasCleaned = cleanedTitle !== "" && cleanedTitle !== rawTitle;
+        const badBrowserTitle = looksLikeBrowserTabTitle(player, rawTitle, rawArtist) && !titleWasCleaned;
+        const nextTitle = badBrowserTitle
+            ? (currentTitle || player.identity || "Unknown Title")
+            : (cleanedTitle || rawTitle || player.identity || "Unknown Title");
+        const nextArtist = badBrowserTitle ? currentArtist : rawArtist;
+        const nextAlbum = badBrowserTitle ? currentAlbum : rawAlbum;
+        const nextTrackId = playerStableKey(player) + ":" + nextTitle + ":" + nextArtist + ":" + nextAlbum;
         const rawCover = normalizeCoverUrl(player.trackArtUrl || "");
         const nextCover = enhancedCoverUrl(rawCover);
         const trackChanged = nextTrackId !== currentTrackId;
         const coverChanged = nextCover !== "" && nextCover !== currentCoverSource;
 
-        if (trackChanged) {
-            pendingSeekPosition = -1;
-            pendingSeekTrackId = "";
-            pendingSeekStartedAt = 0;
-        }
+        if (trackChanged)
+            clearPendingSeek();
 
         currentTrackId = nextTrackId;
         currentTitle = nextTitle;
@@ -212,20 +278,24 @@ PanelWindow {
 
         if (pendingSeekPosition >= 0 && pendingSeekTrackId === currentTrackId && !force) {
             const age = Date.now() - pendingSeekStartedAt;
-            if (Math.abs(actual - pendingSeekPosition) <= 2.5) {
-                pendingSeekPosition = -1;
-                pendingSeekTrackId = "";
-                pendingSeekStartedAt = 0;
+            const targetDiff = Math.abs(actual - pendingSeekPosition);
+
+            if (targetDiff <= 2.5) {
+                clearPendingSeek();
                 currentPosition = actual;
                 return;
             }
 
-            if (age < 3500)
+            if (pendingSeekPosition <= 0.35 && age >= 850 && actual > 2.0) {
+                clearPendingSeek();
+                currentPosition = actual;
+                return;
+            }
+
+            if (age < 2200)
                 return;
 
-            pendingSeekPosition = -1;
-            pendingSeekTrackId = "";
-            pendingSeekStartedAt = 0;
+            clearPendingSeek();
         }
 
         currentPosition = actual;
@@ -314,7 +384,11 @@ PanelWindow {
     function mediaArtist() {
         if (!activePlayer)
             return "";
-        return currentArtist || activePlayer.identity || "Media Player";
+        if (currentArtist)
+            return currentArtist;
+        if (currentTitle)
+            return "";
+        return activePlayer.identity || "Media Player";
     }
 
     function mediaSubtitle() {
@@ -356,23 +430,30 @@ PanelWindow {
             return;
 
         const target = Math.max(0, Math.min(Number(seconds || 0), currentLength));
-        const previousPosition = Number(player.position || currentPosition || 0);
-        pendingSeekPosition = target;
-        pendingSeekTrackId = currentTrackId;
-        pendingSeekStartedAt = Date.now();
-        currentPosition = target;
+        const previousPosition = Math.max(0, Number(currentPosition || player.position || 0));
+        const delta = target - previousPosition;
+
+        if (Math.abs(delta) < 0.25) {
+            clearPendingSeek();
+            syncPositionFromPlayer(true);
+            return;
+        }
 
         try {
-            if (player.positionSupported !== false) {
+            if (typeof player.seek === "function")
+                player.seek(delta);
+            else if (player.positionSupported !== false)
                 player.position = target;
-            } else {
-                player.seek(target - previousPosition);
-            }
+            else
+                return;
+
+            pendingSeekPosition = target;
+            pendingSeekTrackId = currentTrackId;
+            pendingSeekStartedAt = Date.now();
+            pendingSeekPreviousPosition = previousPosition;
             seekVerifyTimer.restart();
         } catch (e) {
-            pendingSeekPosition = -1;
-            pendingSeekTrackId = "";
-            pendingSeekStartedAt = 0;
+            clearPendingSeek();
             syncPositionFromPlayer(true);
             console.log("media seek failed", e);
         }
@@ -433,7 +514,7 @@ PanelWindow {
 
     Timer {
         id: seekVerifyTimer
-        interval: 1200
+        interval: 850
         repeat: false
         onTriggered: root.syncPositionFromPlayer(false)
     }

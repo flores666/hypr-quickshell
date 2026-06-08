@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 
 Rectangle {
     id: root
@@ -9,7 +10,7 @@ Rectangle {
     property int fallbackPixelSize: 24
     property string fallbackText: "♪"
     property color fallbackTextColor: "#dfe7f0"
-    property bool imageVisible: displayedSource !== ""
+    property bool imageVisible: displayedSource !== "" && shown.status === Image.Ready
     property string displayedSource: ""
     property string pendingSource: ""
     property bool triedFallback: false
@@ -24,16 +25,20 @@ Rectangle {
         const fallback = fallbackSourceUrl || "";
 
         if (next === "") {
-            if (displayedSource === "" && fallback !== "") {
+            if (fallback !== "") {
                 triedFallback = true;
                 pendingSource = fallback;
                 preload.source = "";
                 reloadTimer.restart();
+            } else {
+                displayedSource = "";
+                pendingSource = "";
+                preload.source = "";
             }
             return;
         }
 
-        if (next === displayedSource)
+        if (next === displayedSource && shown.status === Image.Ready)
             return;
 
         triedFallback = false;
@@ -44,13 +49,24 @@ Rectangle {
 
     onSourceUrlChanged: reloadCover()
     onFallbackSourceUrlChanged: reloadCover()
-    onSourceKeyChanged: reloadCover()
+    onSourceKeyChanged: {
+        displayedSource = "";
+        reloadCover();
+    }
 
     Timer {
         id: reloadTimer
         interval: 1
         repeat: false
         onTriggered: preload.source = root.pendingSource
+    }
+
+    Rectangle {
+        id: roundedMask
+        anchors.fill: parent
+        radius: root.radius
+        visible: false
+        layer.enabled: true
     }
 
     Image {
@@ -60,8 +76,17 @@ Rectangle {
         fillMode: Image.PreserveAspectCrop
         asynchronous: true
         cache: false
-        visible: root.displayedSource !== "" && status !== Image.Error
+        visible: false
+    }
+
+    MultiEffect {
+        id: roundedImage
+        anchors.fill: parent
+        source: shown
+        visible: root.displayedSource !== "" && shown.status === Image.Ready
         opacity: visible ? 1.0 : 0.0
+        maskEnabled: true
+        maskSource: roundedMask
 
         Behavior on opacity {
             NumberAnimation {
@@ -94,9 +119,17 @@ Rectangle {
         }
     }
 
+    Rectangle {
+        anchors.fill: parent
+        radius: root.radius
+        color: "transparent"
+        border.color: root.border.color
+        border.width: root.border.width
+    }
+
     Text {
         anchors.centerIn: parent
-        visible: !shown.visible
+        visible: !roundedImage.visible
         text: root.fallbackText
         color: root.fallbackTextColor
         font.pixelSize: root.fallbackPixelSize
