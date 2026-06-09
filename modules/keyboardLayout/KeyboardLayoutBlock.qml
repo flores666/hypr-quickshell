@@ -5,14 +5,14 @@ import "../../services" as Services
 Item {
     id: root
 
-    readonly property string layoutText: Services.KeyboardLayoutService.currentLayout.length > 0
-        ? Services.KeyboardLayoutService.currentLayout.toUpperCase()
-        : "--"
+    readonly property string layoutText: Services.KeyboardLayoutService.currentLayout.length > 0 ? Services.KeyboardLayoutService.currentLayout.toLowerCase() : "--"
 
     implicitWidth: layoutButton.implicitWidth
     implicitHeight: layoutButton.implicitHeight
 
-    Components.AnimationTokens { id: motion }
+    Components.AnimationTokens {
+        id: motion
+    }
 
     Rectangle {
         id: layoutButton
@@ -26,7 +26,10 @@ Item {
         scale: 1.0
 
         Behavior on color {
-            ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic }
+            ColorAnimation {
+                duration: motion.hoverDuration
+                easing.type: Easing.OutCubic
+            }
         }
 
         Components.StyledText {
@@ -38,7 +41,10 @@ Item {
             font.weight: Font.DemiBold
 
             Behavior on color {
-                ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic }
+                ColorAnimation {
+                    duration: motion.hoverDuration
+                    easing.type: Easing.OutCubic
+                }
             }
         }
 
