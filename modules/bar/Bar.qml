@@ -5,6 +5,7 @@ import "../../components" as Components
 import "../calendar" as Calendar
 import "../media-player" as Media
 import "../workspaces" as Workspaces
+import "../systemStatus" as SystemStatus
 
 PanelWindow {
     id: root
@@ -29,6 +30,7 @@ PanelWindow {
     function closePopups() {
         calendar.closePopup();
         mediaPlayer.closePopup();
+        systemStatus.closePopup();
     }
 
     Components.GlassPanel {
@@ -77,7 +79,10 @@ PanelWindow {
             hostWidth: root.width
             panelHeight: root.implicitHeight
             popupBaseX: barContent.x + x
-            onPopupOpened: mediaPlayer.closePopup()
+            onPopupOpened: {
+                mediaPlayer.closePopup();
+                systemStatus.closePopup();
+            }
         }
 
         Media.MediaPlayer {
@@ -92,7 +97,27 @@ PanelWindow {
             hostWidth: root.width
             panelHeight: root.implicitHeight
             popupBaseX: barContent.x + x
-            onPopupOpened: calendar.closePopup()
+            onPopupOpened: {
+                calendar.closePopup();
+                systemStatus.closePopup();
+            }
+        }
+
+        SystemStatus.SystemStatusBlock {
+            id: systemStatus
+            z: 1
+            width: implicitWidth
+            height: implicitHeight
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            hostWindow: root
+            hostWidth: root.width
+            panelHeight: root.implicitHeight
+            popupBaseX: barContent.x + x
+            onPopupOpened: {
+                calendar.closePopup();
+                mediaPlayer.closePopup();
+            }
         }
     }
 }

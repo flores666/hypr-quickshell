@@ -2,3 +2,5 @@ singleton ShellState 1.0 ShellState.qml
 singleton ShellActions 1.0 ShellActions.qml
 HyprlandService 1.0 HyprlandService.qml
 TrayBridge 1.0 TrayBridge.qml
+
+singleton SystemStatus 1.0 SystemStatus.qml
