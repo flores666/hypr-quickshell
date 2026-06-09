@@ -63,6 +63,16 @@ PopupWindow {
     color: "transparent"
     surfaceFormat.opaque: false
 
+    Shortcut {
+        sequence: "Esc"
+        context: Qt.ApplicationShortcut
+        enabled: root.targetVisible
+        onActivated: {
+            if (root.controller && root.controller.controller)
+                root.controller.controller.closePopup();
+        }
+    }
+
     onModeChanged: {
         if (mode !== "")
             displayMode = mode;

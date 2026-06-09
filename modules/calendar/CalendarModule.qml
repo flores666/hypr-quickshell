@@ -14,6 +14,7 @@ Item {
     readonly property real popupTopY: panelHeight
     property date now: new Date()
     property bool popupOpen: false
+    property bool hoverSwitchEnabled: false
     property date visibleMonth: new Date(now.getFullYear(), now.getMonth(), 1)
     property bool pointerReady: false
 
@@ -136,6 +137,9 @@ Item {
             onEntered: {
                 root.pointerReady = false;
                 pointerDelay.restart();
+
+                if (root.hoverSwitchEnabled && !root.popupOpen)
+                    root.openPopup();
             }
 
             onExited: {
@@ -171,6 +175,13 @@ Item {
         visible: popupState.renderVisible
         color: "transparent"
         surfaceFormat.opaque: false
+
+        Shortcut {
+            sequence: "Esc"
+            context: Qt.ApplicationShortcut
+            enabled: root.popupOpen
+            onActivated: root.closePopup()
+        }
 
         Components.AnimatedPopupState {
             id: popupState

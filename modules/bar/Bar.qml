@@ -1,5 +1,6 @@
 import Quickshell
 import Quickshell.Wayland
+import Quickshell.Hyprland
 import QtQuick
 import "../../components" as Components
 import "../calendar" as Calendar
@@ -28,11 +29,42 @@ PanelWindow {
 
     exclusiveZone: 38
 
+    function anyPopupOpen() {
+        return calendar.popupOpen
+            || mediaPlayer.popupOpen
+            || keyboardLayout.popupOpen
+            || systemStatus.popupOpen;
+    }
+
     function closePopups() {
         calendar.closePopup();
         mediaPlayer.closePopup();
         keyboardLayout.closePopup();
         systemStatus.closePopup();
+    }
+
+    function closePopupsFromOutside() {
+        if (anyPopupOpen())
+            closePopups();
+    }
+
+    function handleHyprlandRawEvent(event) {
+        if (!anyPopupOpen())
+            return;
+
+        if (event.name === "activewindow" || event.name === "activewindowv2")
+            closePopupsFromOutside();
+    }
+
+    Component.onCompleted: {
+        Hyprland.rawEvent.connect(handleHyprlandRawEvent);
+    }
+
+    Shortcut {
+        sequence: "Esc"
+        context: Qt.ApplicationShortcut
+        enabled: root.anyPopupOpen()
+        onActivated: root.closePopups()
     }
 
     Components.GlassPanel {
@@ -81,6 +113,7 @@ PanelWindow {
             hostWidth: root.width
             panelHeight: root.implicitHeight
             popupBaseX: barContent.x + x
+            hoverSwitchEnabled: root.anyPopupOpen()
             onPopupOpened: {
                 mediaPlayer.closePopup();
                 keyboardLayout.closePopup();
@@ -100,6 +133,7 @@ PanelWindow {
             hostWidth: root.width
             panelHeight: root.implicitHeight
             popupBaseX: barContent.x + x
+            hoverSwitchEnabled: root.anyPopupOpen()
             onPopupOpened: {
                 calendar.closePopup();
                 keyboardLayout.closePopup();
@@ -119,6 +153,7 @@ PanelWindow {
             hostWidth: root.width
             panelHeight: root.implicitHeight
             popupBaseX: barContent.x + x
+            hoverSwitchEnabled: root.anyPopupOpen()
             onPopupOpened: {
                 calendar.closePopup();
                 mediaPlayer.closePopup();
@@ -137,6 +172,7 @@ PanelWindow {
             hostWidth: root.width
             panelHeight: root.implicitHeight
             popupBaseX: barContent.x + x
+            hoverSwitchEnabled: root.anyPopupOpen()
             onPopupOpened: {
                 calendar.closePopup();
                 mediaPlayer.closePopup();

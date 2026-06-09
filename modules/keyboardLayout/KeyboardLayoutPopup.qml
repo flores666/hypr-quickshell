@@ -33,6 +33,16 @@ PopupWindow {
     color: "transparent"
     surfaceFormat.opaque: false
 
+    Shortcut {
+        sequence: "Esc"
+        context: Qt.ApplicationShortcut
+        enabled: root.targetVisible
+        onActivated: {
+            if (root.controller)
+                root.controller.closePopup();
+        }
+    }
+
     onTargetVisibleChanged: {
         if (targetVisible)
             Services.KeyboardLayoutService.requestLayouts();

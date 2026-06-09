@@ -22,7 +22,10 @@ Item {
     function closeFromOutside(mouse) {
         if (controller)
             controller.closePopup();
-        mouse.accepted = true;
+
+        // Do not keep the event accepted. The layer is hidden immediately after
+        // closing, and this avoids keeping an invisible click blocker around.
+        mouse.accepted = false;
     }
 
     PopupWindow {
@@ -40,6 +43,8 @@ Item {
             acceptedButtons: Qt.LeftButton
             cursorShape: Qt.ArrowCursor
             onPressed: function(mouse) { root.closeFromOutside(mouse); }
+            onClicked: function(mouse) { mouse.accepted = false; }
+            onReleased: function(mouse) { mouse.accepted = false; }
         }
     }
 
@@ -58,6 +63,8 @@ Item {
             acceptedButtons: Qt.LeftButton
             cursorShape: Qt.ArrowCursor
             onPressed: function(mouse) { root.closeFromOutside(mouse); }
+            onClicked: function(mouse) { mouse.accepted = false; }
+            onReleased: function(mouse) { mouse.accepted = false; }
         }
     }
 
@@ -76,6 +83,8 @@ Item {
             acceptedButtons: Qt.LeftButton
             cursorShape: Qt.ArrowCursor
             onPressed: function(mouse) { root.closeFromOutside(mouse); }
+            onClicked: function(mouse) { mouse.accepted = false; }
+            onReleased: function(mouse) { mouse.accepted = false; }
         }
     }
 
@@ -94,6 +103,8 @@ Item {
             acceptedButtons: Qt.LeftButton
             cursorShape: Qt.ArrowCursor
             onPressed: function(mouse) { root.closeFromOutside(mouse); }
+            onClicked: function(mouse) { mouse.accepted = false; }
+            onReleased: function(mouse) { mouse.accepted = false; }
         }
     }
 }
