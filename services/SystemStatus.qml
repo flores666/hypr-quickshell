@@ -13,6 +13,9 @@ Item {
     property bool actionRunning: false
     property var pendingActionArgs: []
 
+    property string distroName: "Linux"
+    property string distroInitial: "L"
+
     property bool networkAvailable: false
     property bool hasWifi: false
     property bool wifiEnabled: false
@@ -191,6 +194,10 @@ Item {
     }
 
     function applyStatus(data) {
+        var distro = data.distro || {};
+        distroName = distro.name || "Linux";
+        distroInitial = String(distro.initial || "L").substring(0, 1).toUpperCase();
+
         var n = data.network || {};
         networkAvailable = !!n.available;
         hasWifi = !!n.hasWifi;

@@ -28,6 +28,25 @@ PopupWindow {
         return Qt.resolvedUrl("icons/" + name + ".svg");
     }
 
+    function notificationIconSource(notification) {
+        if (!notification)
+            return "";
+
+        var icon = String(notification.icon || "").trim();
+        if (icon.length === 0)
+            return "";
+
+        if (icon.indexOf("file://") === 0)
+            return icon;
+
+        if (icon.indexOf("/") === 0)
+            return "file://" + icon;
+
+        // Do not pass icon theme names like "telegram" or "notify-send" to Image.
+        // They become qrc-relative paths and produce warnings.
+        return "";
+    }
+
     function wifiIcon() {
         if (!Services.SystemStatus.hasWifi || !Services.SystemStatus.wifiEnabled)
             return rowIcon("wifi-off");
@@ -650,7 +669,7 @@ PopupWindow {
                                         required property var modelData
 
                                         width: parent.width
-                                        height: Math.max(68, notificationTextColumn.implicitHeight + 20)
+                                        height: Math.max(58, notificationTextColumn.implicitHeight + 18)
                                         radius: 15
                                         color: notificationMouse.pressed ? "#20ffffff" : (notificationMouse.containsMouse ? "#16ffffff" : "#0dffffff")
                                         border.width: 0
@@ -658,38 +677,75 @@ PopupWindow {
 
                                         Behavior on color { ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic } }
 
-                                        RowLayout {
+                                        Item {
                                             z: 1
                                             anchors.fill: parent
-                                            anchors.margins: 9
-                                            spacing: 9
+                                            anchors.leftMargin: 10
+                                            anchors.rightMargin: 8
+                                            anchors.topMargin: 9
+                                            anchors.bottomMargin: 9
 
                                             Rectangle {
-                                                Layout.alignment: Qt.AlignTop
-                                                width: 30
-                                                height: 30
-                                                radius: 15
-                                                color: "#18ffffff"
-                                                border.width: 0
+                                                id: notificationIconBox
+                                                anchors.left: parent.left
+                                                anchors.verticalCenter: notificationTextColumn.verticalCenter
+                                                width: 34
+                                                height: 34
+                                                radius: 17
+                                                color: notificationImage.status === Image.Ready ? "#18ffffff" : "#22ffffff"
+                                                border.width: notificationImage.status === Image.Ready ? 0 : 1
+                                                border.color: "#20ffffff"
                                                 antialiasing: true
+                                                clip: true
+
+                                                readonly property string iconSource: root.notificationIconSource(modelData)
+
+                                                Image {
+                                                    id: notificationImage
+                                                    anchors.fill: parent
+                                                    anchors.margins: 4
+                                                    source: notificationIconBox.iconSource
+                                                    visible: status === Image.Ready
+                                                    fillMode: Image.PreserveAspectFit
+                                                    asynchronous: true
+                                                    cache: true
+                                                    smooth: true
+                                                    mipmap: true
+                                                }
+
+                                                Rectangle {
+                                                    anchors.centerIn: parent
+                                                    width: 20
+                                                    height: 20
+                                                    radius: 10
+                                                    visible: notificationImage.status !== Image.Ready
+                                                    color: "#18ffffff"
+                                                    border.width: 0
+                                                    antialiasing: true
+                                                }
 
                                                 Components.StyledText {
                                                     anchors.centerIn: parent
-                                                    text: (modelData.app || "N").substring(0, 1).toUpperCase()
-                                                    color: "#eef3f8"
-                                                    font.pixelSize: 12
+                                                    visible: notificationImage.status !== Image.Ready
+                                                    text: Services.SystemStatus.distroInitial
+                                                    color: "#f4f7fb"
+                                                    font.pixelSize: 13
                                                     font.weight: Font.DemiBold
                                                 }
                                             }
 
                                             Column {
                                                 id: notificationTextColumn
-                                                Layout.fillWidth: true
-                                                spacing: 2
+                                                anchors.left: notificationIconBox.right
+                                                anchors.leftMargin: 10
+                                                anchors.right: closeNotificationButton.left
+                                                anchors.rightMargin: 8
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                spacing: 1
 
                                                 RowLayout {
                                                     width: parent.width
-                                                    height: 16
+                                                    height: 15
 
                                                     Components.StyledText {
                                                         Layout.fillWidth: true
@@ -728,8 +784,10 @@ PopupWindow {
                                             }
 
                                             Rectangle {
+                                                id: closeNotificationButton
                                                 z: 2
-                                                Layout.alignment: Qt.AlignTop
+                                                anchors.right: parent.right
+                                                anchors.top: parent.top
                                                 width: 22
                                                 height: 22
                                                 radius: 11

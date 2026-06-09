@@ -482,6 +482,123 @@ def extract_desktop_entry(item):
     return ""
 
 
+def resolve_icon_file(icon_name):
+    name = str(icon_name or "").strip()
+    if not name:
+        return ""
+
+    if name.startswith("file://"):
+        path = Path(name.replace("file://", "", 1))
+        return str(path) if path.exists() else ""
+
+    path = Path(name)
+    if path.is_absolute():
+        return str(path) if path.exists() else ""
+
+    name = re.sub(r"\\.desktop$", "", name, flags=re.I)
+    candidates = []
+    home = Path.home()
+
+    base_dirs = [
+        home / ".local/share/icons",
+        home / ".icons",
+        Path("/usr/share/icons"),
+        Path("/usr/local/share/icons"),
+        Path("/usr/share/pixmaps"),
+    ]
+
+    lookup_names = [name]
+    lowered = name.lower()
+    if lowered not in lookup_names:
+        lookup_names.append(lowered)
+
+    for base in base_dirs:
+        if not base.exists():
+            continue
+
+        for lookup in lookup_names:
+            for ext in (".png", ".webp", ".jpg", ".jpeg", ".svg", ".xpm"):
+                direct = base / (lookup + ext)
+                if direct.exists() and "symbolic" not in str(direct).lower():
+                    candidates.append(direct)
+
+        try:
+            for child in base.rglob("*"):
+                if not child.is_file():
+                    continue
+
+                lower_path = str(child).lower()
+                if "symbolic" in lower_path:
+                    continue
+
+                stem = child.stem.lower()
+                suffix = child.suffix.lower()
+                if suffix not in (".png", ".webp", ".jpg", ".jpeg", ".svg", ".xpm"):
+                    continue
+
+                if stem in [x.lower() for x in lookup_names]:
+                    candidates.append(child)
+        except Exception:
+            continue
+
+    if not candidates:
+        return ""
+
+    def score(path):
+        lower = str(path).lower()
+        score_value = 0
+
+        if path.suffix.lower() in (".png", ".webp", ".jpg", ".jpeg"):
+            score_value += 80
+        if "/apps/" in lower:
+            score_value += 30
+        if "hicolor" in lower:
+            score_value += 20
+        if "papirus" in lower:
+            score_value += 15
+
+        size_match = re.search(r"/(\\d+)x\\d+/", lower)
+        if size_match:
+            score_value += min(int(size_match.group(1)), 256)
+
+        return score_value
+
+    candidates.sort(key=score, reverse=True)
+    return str(candidates[0])
+
+
+def extract_notification_icon(item, app="", desktop_entry=""):
+    if not isinstance(item, dict):
+        return ""
+
+    raw_values = []
+
+    for key in ("app_icon", "appicon", "icon", "icon_path", "image_path", "desktop_entry", "desktop-entry", "desktopEntry"):
+        value = extract_dunst_value(item.get(key))
+        if value:
+            raw_values.append(str(value))
+
+    hints = item.get("hints")
+    if isinstance(hints, dict):
+        for key in ("desktop-entry", "image-path", "image_path", "app-icon"):
+            value = extract_dunst_value(hints.get(key))
+            if value:
+                raw_values.append(str(value))
+
+    if desktop_entry:
+        raw_values.append(str(desktop_entry))
+
+    if app:
+        raw_values.append(str(app).strip().lower().replace(" ", "-"))
+
+    for value in raw_values:
+        resolved = resolve_icon_file(value)
+        if resolved:
+            return resolved
+
+    return ""
+
+
 def extract_actions(value):
     raw = extract_dunst_value(value)
     actions = []
@@ -552,6 +669,7 @@ def notifications_status():
                 actions = extract_actions(item.get("actions") or item.get("action"))
                 url = extract_first_url(item.get("urls"), body, summary)
                 desktop_entry = extract_desktop_entry(item)
+                icon = extract_notification_icon(item, app, desktop_entry)
                 result["items"].append({
                     "id": str(nid),
                     "app": clean_notification_text(app),
@@ -562,6 +680,7 @@ def notifications_status():
                     "action": default_action_id(actions),
                     "url": url,
                     "desktopEntry": desktop_entry,
+                    "icon": icon,
                 })
         except Exception:
             result["items"] = []
@@ -584,6 +703,7 @@ def notifications_status():
                 "action": "",
                 "url": extract_first_url(line),
                 "desktopEntry": "",
+                "icon": "",
             } for i, line in enumerate(lines[:8])]
         result["count"] = len(result["items"])
         return result
@@ -591,8 +711,34 @@ def notifications_status():
     return result
 
 
+def distro_status():
+    name = ""
+    try:
+        for line in Path("/etc/os-release").read_text(encoding="utf-8", errors="ignore").splitlines():
+            if line.startswith("NAME="):
+                name = line.split("=", 1)[1].strip().strip('"')
+                break
+    except Exception:
+        name = ""
+
+    if not name:
+        name = run(["sh", "-c", "uname -s"], timeout=0.5) or "Linux"
+
+    first = ""
+    for ch in name.strip():
+        if ch.isalnum():
+            first = ch.upper()
+            break
+
+    return {
+        "name": name or "Linux",
+        "initial": first or "L",
+    }
+
+
 def status():
     return {
+        "distro": distro_status(),
         "network": network_status(),
         "audio": audio_status(),
         "battery": battery_status(),
