@@ -10,10 +10,16 @@ PopupWindow {
     property var controller: null
     property var hostWindow: null
     property string mode: ""
+    property string displayMode: ""
     property real popupX: 0
     property real popupY: 44
     property bool targetVisible: controller ? (controller.targetVisible && mode !== "") : false
     property real reveal: popupState.reveal
+
+    readonly property int rowHeight: 28
+    readonly property int rowSpacing: 5
+    readonly property int outerMargin: 10
+    readonly property int listPadding: 8
 
     function rowIcon(name) {
         return Qt.resolvedUrl("icons/" + name + ".svg");
@@ -31,22 +37,41 @@ PopupWindow {
         return Services.SystemStatus.ethernetDevice !== "" ? Services.SystemStatus.ethernetDevice + " · кабель не подключен" : "Кабель не подключен";
     }
 
+    function listHeight(rowCount) {
+        const rows = Math.max(1, rowCount);
+        return outerMargin * 2 + listPadding * 2 + rows * rowHeight + Math.max(0, rows - 1) * rowSpacing;
+    }
+
     function wifiHeight() {
-        return Math.min(232, 18 + Math.max(1, Services.SystemStatus.wifiNetworks.length) * 33);
+        return Math.min(232, listHeight(Services.SystemStatus.wifiNetworks.length));
     }
 
     function bluetoothHeight() {
-        return Math.min(220, 18 + Math.max(1, Services.SystemStatus.bluetoothDevices.length) * 33);
+        return Math.min(220, listHeight(Services.SystemStatus.bluetoothDevices.length));
+    }
+
+    function ethernetHeight() {
+        return outerMargin * 2 + listPadding * 2 + 22 + 20 + rowSpacing;
     }
 
     implicitWidth: 260
-    implicitHeight: mode === "wifi" ? wifiHeight() : (mode === "bluetooth" ? bluetoothHeight() : 74)
+    implicitHeight: displayMode === "wifi" ? wifiHeight() : (displayMode === "bluetooth" ? bluetoothHeight() : ethernetHeight())
     anchor.window: hostWindow
     anchor.rect.x: popupX
     anchor.rect.y: popupY
     visible: popupState.renderVisible
     color: "transparent"
     surfaceFormat.opaque: false
+
+    onModeChanged: {
+        if (mode !== "")
+            displayMode = mode;
+    }
+
+    onVisibleChanged: {
+        if (!visible && mode === "")
+            displayMode = "";
+    }
 
     Components.AnimatedPopupState {
         id: popupState
@@ -92,25 +117,35 @@ PopupWindow {
             onClicked: function(mouse) { mouse.accepted = true; }
         }
 
-        Flickable {
+        Rectangle {
+            id: detailListPanel
             anchors.fill: parent
-            anchors.margins: 9
+            anchors.margins: root.outerMargin
+            radius: 16
+            color: "#1019232f"
+            border.width: 0
+            antialiasing: true
             clip: true
-            contentWidth: width
-            contentHeight: detailColumn.implicitHeight
-            boundsBehavior: Flickable.StopAtBounds
-            interactive: contentHeight > height
-            opacity: root.clamp01((root.reveal - 0.08) / 0.92)
+            opacity: root.clamp01((root.reveal - 0.10) / 0.90)
 
-            Column {
-                id: detailColumn
-                width: parent.width
-                spacing: 5
+            Flickable {
+                anchors.fill: parent
+                anchors.margins: root.listPadding
+                clip: true
+                contentWidth: width
+                contentHeight: detailColumn.implicitHeight
+                boundsBehavior: Flickable.StopAtBounds
+                interactive: contentHeight > height
+
+                Column {
+                    id: detailColumn
+                    width: parent.width
+                    spacing: root.rowSpacing
 
                 Components.StyledText {
                     width: parent.width
-                    height: root.mode === "ethernet" ? 22 : 0
-                    visible: root.mode === "ethernet"
+                    height: root.displayMode === "ethernet" ? 22 : 0
+                    visible: root.displayMode === "ethernet"
                     text: Services.SystemStatus.ethernetActive ? "Ethernet активен" : "Ethernet не подключен"
                     color: "#eef3f8"
                     font.pixelSize: 11
@@ -120,8 +155,8 @@ PopupWindow {
 
                 Components.StyledText {
                     width: parent.width
-                    height: root.mode === "ethernet" ? 20 : 0
-                    visible: root.mode === "ethernet"
+                    height: root.displayMode === "ethernet" ? 20 : 0
+                    visible: root.displayMode === "ethernet"
                     text: root.ethernetText()
                     color: "#aeb8c6"
                     font.pixelSize: 10
@@ -130,8 +165,8 @@ PopupWindow {
 
                 Components.StyledText {
                     width: parent.width
-                    height: root.mode === "wifi" && Services.SystemStatus.wifiNetworks.length === 0 ? 30 : 0
-                    visible: root.mode === "wifi" && Services.SystemStatus.wifiNetworks.length === 0
+                    height: root.displayMode === "wifi" && Services.SystemStatus.wifiNetworks.length === 0 ? 30 : 0
+                    visible: root.displayMode === "wifi" && Services.SystemStatus.wifiNetworks.length === 0
                     text: Services.SystemStatus.wifiEnabled ? "Сети не найдены" : "Wi-Fi выключен"
                     color: "#aeb8c6"
                     font.pixelSize: 11
@@ -140,7 +175,7 @@ PopupWindow {
                 }
 
                 Repeater {
-                    model: root.mode === "wifi" ? Services.SystemStatus.wifiNetworks : []
+                    model: root.displayMode === "wifi" ? Services.SystemStatus.wifiNetworks : []
 
                     delegate: Rectangle {
                         required property var modelData
@@ -198,8 +233,8 @@ PopupWindow {
 
                 Components.StyledText {
                     width: parent.width
-                    height: root.mode === "bluetooth" && Services.SystemStatus.bluetoothDevices.length === 0 ? 30 : 0
-                    visible: root.mode === "bluetooth" && Services.SystemStatus.bluetoothDevices.length === 0
+                    height: root.displayMode === "bluetooth" && Services.SystemStatus.bluetoothDevices.length === 0 ? 30 : 0
+                    visible: root.displayMode === "bluetooth" && Services.SystemStatus.bluetoothDevices.length === 0
                     text: Services.SystemStatus.bluetoothEnabled ? "Устройства не найдены" : "Bluetooth выключен"
                     color: "#aeb8c6"
                     font.pixelSize: 11
@@ -208,7 +243,7 @@ PopupWindow {
                 }
 
                 Repeater {
-                    model: root.mode === "bluetooth" ? Services.SystemStatus.bluetoothDevices : []
+                    model: root.displayMode === "bluetooth" ? Services.SystemStatus.bluetoothDevices : []
 
                     delegate: Rectangle {
                         required property var modelData
@@ -256,6 +291,7 @@ PopupWindow {
                     }
                 }
             }
+        }
         }
     }
 }
