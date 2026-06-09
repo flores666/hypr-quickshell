@@ -4,6 +4,7 @@ import "./services" as Services
 import "./modules/bar" as Bar
 import "./modules/tray" as Tray
 import "./modules/launcher" as Launcher
+import "./modules/roundedCorners" as RoundedCorners
 
 Scope {
     id: root
@@ -13,6 +14,8 @@ Scope {
     Services.TrayBridge {}
 
     Bar.Bar {}
+
+    RoundedCorners.ScreenCorners {}
 
     // Пока скрытые панели. Их потом можно открывать через hotkeys или IPC.
     Tray.TrayPanel {
