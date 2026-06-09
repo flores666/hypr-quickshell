@@ -1,5 +1,6 @@
 import Quickshell
 import QtQuick
+import QtQuick.Window
 import QtQuick.Layouts
 import "../../components" as Components
 import "../../services" as Services
@@ -14,6 +15,10 @@ PopupWindow {
     property bool targetVisible: controller ? controller.popupOpen : false
     property real reveal: popupState.reveal
     property string detailMode: ""
+
+    readonly property real popupBottomMargin: 2
+    readonly property real maxPopupHeight: Math.max(180, Screen.height - popupY - popupBottomMargin)
+    readonly property real contentPopupHeight: contentColumn.implicitHeight + 32
 
     function clamp01(value) {
         return Math.max(0, Math.min(1, value));
@@ -88,7 +93,7 @@ PopupWindow {
     anchor.rect.x: popupX
     anchor.rect.y: popupY
     implicitWidth: 398
-    implicitHeight: 720
+    implicitHeight: Math.min(maxPopupHeight, Math.max(260, contentPopupHeight))
     visible: popupState.renderVisible
     color: "transparent"
     surfaceFormat.opaque: false
@@ -108,9 +113,7 @@ PopupWindow {
         closeSafetyDelay: 340
     }
 
-    Components.AnimationTokens {
-        id: motion
-    }
+    Components.AnimationTokens { id: motion }
 
     Item {
         id: popupMotionLayer
@@ -140,10 +143,7 @@ PopupWindow {
             antialiasing: true
 
             Behavior on color {
-                ColorAnimation {
-                    duration: popupMouse.pressed ? motion.pressDuration : motion.releaseDuration
-                    easing.type: Easing.OutCubic
-                }
+                ColorAnimation { duration: popupMouse.pressed ? motion.pressDuration : motion.releaseDuration; easing.type: Easing.OutCubic }
             }
         }
 
@@ -153,9 +153,7 @@ PopupWindow {
             acceptedButtons: Qt.LeftButton
             hoverEnabled: true
             cursorShape: Qt.ArrowCursor
-            onClicked: function (mouse) {
-                mouse.accepted = true;
-            }
+            onClicked: function(mouse) { mouse.accepted = true; }
         }
 
         Flickable {
@@ -181,21 +179,9 @@ PopupWindow {
 
                     Repeater {
                         model: [
-                            {
-                                action: "poweroff",
-                                icon: "power",
-                                label: "Выключение"
-                            },
-                            {
-                                action: "reboot",
-                                icon: "reboot",
-                                label: "Перезагрузка"
-                            },
-                            {
-                                action: "logout",
-                                icon: "logout",
-                                label: "Выход"
-                            }
+                            { action: "poweroff", icon: "power", label: "Выключение" },
+                            { action: "reboot", icon: "reboot", label: "Перезагрузка" },
+                            { action: "logout", icon: "logout", label: "Выход" }
                         ]
 
                         delegate: Rectangle {
@@ -208,12 +194,7 @@ PopupWindow {
                             border.width: 0
                             antialiasing: true
 
-                            Behavior on color {
-                                ColorAnimation {
-                                    duration: motion.hoverDuration
-                                    easing.type: Easing.OutCubic
-                                }
-                            }
+                            Behavior on color { ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic } }
 
                             SystemIcon {
                                 anchors.centerIn: parent
@@ -261,27 +242,14 @@ PopupWindow {
                                 border.width: 0
                                 antialiasing: true
 
-                                Behavior on color {
-                                    ColorAnimation {
-                                        duration: motion.hoverDuration
-                                        easing.type: Easing.OutCubic
-                                    }
-                                }
-                                Behavior on opacity {
-                                    NumberAnimation {
-                                        duration: 170
-                                        easing.type: Easing.OutCubic
-                                    }
-                                }
+                                Behavior on color { ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic } }
+                                Behavior on opacity { NumberAnimation { duration: 170; easing.type: Easing.OutCubic } }
 
                                 RowLayout {
                                     anchors.centerIn: parent
                                     spacing: 7
 
-                                    SystemIcon {
-                                        source: root.wifiIcon()
-                                        iconOpacity: 0.95
-                                    }
+                                    SystemIcon { source: root.wifiIcon(); iconOpacity: 0.95 }
 
                                     Components.StyledText {
                                         text: "Wi-Fi"
@@ -297,7 +265,7 @@ PopupWindow {
                                     hoverEnabled: true
                                     acceptedButtons: Qt.LeftButton | Qt.RightButton
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: function (mouse) {
+                                    onClicked: function(mouse) {
                                         if (mouse.button === Qt.RightButton)
                                             root.detailMode = root.detailMode === "wifi" ? "" : "wifi";
                                         else
@@ -317,27 +285,14 @@ PopupWindow {
                                 border.width: 0
                                 antialiasing: true
 
-                                Behavior on color {
-                                    ColorAnimation {
-                                        duration: motion.hoverDuration
-                                        easing.type: Easing.OutCubic
-                                    }
-                                }
-                                Behavior on opacity {
-                                    NumberAnimation {
-                                        duration: 170
-                                        easing.type: Easing.OutCubic
-                                    }
-                                }
+                                Behavior on color { ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic } }
+                                Behavior on opacity { NumberAnimation { duration: 170; easing.type: Easing.OutCubic } }
 
                                 RowLayout {
                                     anchors.centerIn: parent
                                     spacing: 7
 
-                                    SystemIcon {
-                                        source: root.rowIcon("ethernet")
-                                        iconOpacity: 0.95
-                                    }
+                                    SystemIcon { source: root.rowIcon("ethernet"); iconOpacity: 0.95 }
 
                                     Components.StyledText {
                                         text: "Ethernet"
@@ -366,27 +321,14 @@ PopupWindow {
                                 border.width: 0
                                 antialiasing: true
 
-                                Behavior on color {
-                                    ColorAnimation {
-                                        duration: motion.hoverDuration
-                                        easing.type: Easing.OutCubic
-                                    }
-                                }
-                                Behavior on opacity {
-                                    NumberAnimation {
-                                        duration: 170
-                                        easing.type: Easing.OutCubic
-                                    }
-                                }
+                                Behavior on color { ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic } }
+                                Behavior on opacity { NumberAnimation { duration: 170; easing.type: Easing.OutCubic } }
 
                                 RowLayout {
                                     anchors.centerIn: parent
                                     spacing: 7
 
-                                    SystemIcon {
-                                        source: root.rowIcon("bluetooth")
-                                        iconOpacity: 0.95
-                                    }
+                                    SystemIcon { source: root.rowIcon("bluetooth"); iconOpacity: 0.95 }
 
                                     Components.StyledText {
                                         text: "Bluetooth"
@@ -402,7 +344,7 @@ PopupWindow {
                                     hoverEnabled: true
                                     acceptedButtons: Qt.LeftButton | Qt.RightButton
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: function (mouse) {
+                                    onClicked: function(mouse) {
                                         if (mouse.button === Qt.RightButton)
                                             root.detailMode = root.detailMode === "bluetooth" ? "" : "bluetooth";
                                         else
@@ -423,12 +365,7 @@ PopupWindow {
                             antialiasing: true
                             clip: true
 
-                            Behavior on height {
-                                NumberAnimation {
-                                    duration: 190
-                                    easing.type: Easing.OutCubic
-                                }
-                            }
+                            Behavior on height { NumberAnimation { duration: 190; easing.type: Easing.OutCubic } }
 
                             Flickable {
                                 anchors.fill: parent
@@ -466,12 +403,7 @@ PopupWindow {
                                             border.width: 0
                                             antialiasing: true
 
-                                            Behavior on color {
-                                                ColorAnimation {
-                                                    duration: motion.hoverDuration
-                                                    easing.type: Easing.OutCubic
-                                                }
-                                            }
+                                            Behavior on color { ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic } }
 
                                             RowLayout {
                                                 anchors.fill: parent
@@ -526,12 +458,7 @@ PopupWindow {
                             antialiasing: true
                             clip: true
 
-                            Behavior on height {
-                                NumberAnimation {
-                                    duration: 190
-                                    easing.type: Easing.OutCubic
-                                }
-                            }
+                            Behavior on height { NumberAnimation { duration: 190; easing.type: Easing.OutCubic } }
 
                             Column {
                                 anchors.fill: parent
@@ -567,12 +494,7 @@ PopupWindow {
                             antialiasing: true
                             clip: true
 
-                            Behavior on height {
-                                NumberAnimation {
-                                    duration: 190
-                                    easing.type: Easing.OutCubic
-                                }
-                            }
+                            Behavior on height { NumberAnimation { duration: 190; easing.type: Easing.OutCubic } }
 
                             Flickable {
                                 anchors.fill: parent
@@ -610,12 +532,7 @@ PopupWindow {
                                             border.width: 0
                                             antialiasing: true
 
-                                            Behavior on color {
-                                                ColorAnimation {
-                                                    duration: motion.hoverDuration
-                                                    easing.type: Easing.OutCubic
-                                                }
-                                            }
+                                            Behavior on color { ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic } }
 
                                             RowLayout {
                                                 anchors.fill: parent
@@ -623,10 +540,7 @@ PopupWindow {
                                                 anchors.rightMargin: 8
                                                 spacing: 8
 
-                                                SystemIcon {
-                                                    source: root.rowIcon("bluetooth")
-                                                    iconOpacity: modelData.connected ? 1.0 : 0.62
-                                                }
+                                                SystemIcon { source: root.rowIcon("bluetooth"); iconOpacity: modelData.connected ? 1.0 : 0.62 }
 
                                                 Components.StyledText {
                                                     Layout.fillWidth: true
@@ -678,10 +592,7 @@ PopupWindow {
                             height: 26
                             spacing: 10
 
-                            SystemIcon {
-                                source: root.volumeIcon()
-                                iconOpacity: 0.95
-                            }
+                            SystemIcon { source: root.volumeIcon(); iconOpacity: 0.95 }
 
                             Components.StyledText {
                                 Layout.fillWidth: true
@@ -708,18 +619,8 @@ PopupWindow {
                                 antialiasing: true
                                 opacity: Services.SystemStatus.hasAudio ? 1.0 : 0.45
 
-                                Behavior on color {
-                                    ColorAnimation {
-                                        duration: motion.hoverDuration
-                                        easing.type: Easing.OutCubic
-                                    }
-                                }
-                                Behavior on opacity {
-                                    NumberAnimation {
-                                        duration: 160
-                                        easing.type: Easing.OutCubic
-                                    }
-                                }
+                                Behavior on color { ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic } }
+                                Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
 
                                 Components.StyledText {
                                     anchors.centerIn: parent
@@ -746,7 +647,7 @@ PopupWindow {
                             minValue: 0
                             maxValue: 100
                             opacity: Services.SystemStatus.hasAudio ? 1.0 : 0.38
-                            onValueCommitted: function (value) {
+                            onValueCommitted: function(value) {
                                 if (Services.SystemStatus.hasAudio)
                                     Services.SystemStatus.setVolume(value);
                             }
@@ -815,7 +716,7 @@ PopupWindow {
                                             value: modelData.volume || 0
                                             minValue: 0
                                             maxValue: 100
-                                            onValueCommitted: function (value) {
+                                            onValueCommitted: function(value) {
                                                 Services.SystemStatus.setAppVolume(modelData.index, value);
                                             }
                                         }
@@ -850,12 +751,7 @@ PopupWindow {
                                         border.width: 0
                                         antialiasing: true
 
-                                        Behavior on color {
-                                            ColorAnimation {
-                                                duration: motion.hoverDuration
-                                                easing.type: Easing.OutCubic
-                                            }
-                                        }
+                                        Behavior on color { ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic } }
 
                                         RowLayout {
                                             anchors.fill: parent
@@ -915,10 +811,7 @@ PopupWindow {
                             height: 24
                             spacing: 8
 
-                            SystemIcon {
-                                source: root.rowIcon("bell")
-                                iconOpacity: 0.88
-                            }
+                            SystemIcon { source: root.rowIcon("bell"); iconOpacity: 0.88 }
 
                             Components.StyledText {
                                 Layout.fillWidth: true
@@ -972,12 +865,7 @@ PopupWindow {
                                         border.width: 0
                                         antialiasing: true
 
-                                        Behavior on color {
-                                            ColorAnimation {
-                                                duration: motion.hoverDuration
-                                                easing.type: Easing.OutCubic
-                                            }
-                                        }
+                                        Behavior on color { ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic } }
 
                                         RowLayout {
                                             anchors.fill: parent
@@ -1056,18 +944,9 @@ PopupWindow {
                                                 border.width: 0
                                                 antialiasing: true
 
-                                                Behavior on color {
-                                                    ColorAnimation {
-                                                        duration: motion.hoverDuration
-                                                        easing.type: Easing.OutCubic
-                                                    }
-                                                }
+                                                Behavior on color { ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic } }
 
-                                                SystemIcon {
-                                                    anchors.centerIn: parent
-                                                    source: root.rowIcon("x")
-                                                    iconOpacity: 0.78
-                                                }
+                                                SystemIcon { anchors.centerIn: parent; source: root.rowIcon("x"); iconOpacity: 0.78 }
 
                                                 MouseArea {
                                                     id: closeNotificationMouse
@@ -1112,12 +991,7 @@ PopupWindow {
                                 border.width: 0
                                 antialiasing: true
 
-                                Behavior on color {
-                                    ColorAnimation {
-                                        duration: motion.hoverDuration
-                                        easing.type: Easing.OutCubic
-                                    }
-                                }
+                                Behavior on color { ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic } }
 
                                 Components.StyledText {
                                     anchors.centerIn: parent
@@ -1144,12 +1018,7 @@ PopupWindow {
                                 border.width: 0
                                 antialiasing: true
 
-                                Behavior on color {
-                                    ColorAnimation {
-                                        duration: motion.hoverDuration
-                                        easing.type: Easing.OutCubic
-                                    }
-                                }
+                                Behavior on color { ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic } }
 
                                 Components.StyledText {
                                     anchors.centerIn: parent
@@ -1181,18 +1050,8 @@ PopupWindow {
                     antialiasing: true
                     opacity: Services.SystemStatus.hasBattery ? 1.0 : 0.0
 
-                    Behavior on opacity {
-                        NumberAnimation {
-                            duration: 190
-                            easing.type: Easing.OutCubic
-                        }
-                    }
-                    Behavior on height {
-                        NumberAnimation {
-                            duration: 190
-                            easing.type: Easing.OutCubic
-                        }
-                    }
+                    Behavior on opacity { NumberAnimation { duration: 190; easing.type: Easing.OutCubic } }
+                    Behavior on height { NumberAnimation { duration: 190; easing.type: Easing.OutCubic } }
 
                     RowLayout {
                         anchors.fill: parent
@@ -1232,18 +1091,8 @@ PopupWindow {
                                 border.width: 0
                                 antialiasing: true
 
-                                Behavior on width {
-                                    NumberAnimation {
-                                        duration: 260
-                                        easing.type: Easing.OutCubic
-                                    }
-                                }
-                                Behavior on opacity {
-                                    NumberAnimation {
-                                        duration: 180
-                                        easing.type: Easing.OutCubic
-                                    }
-                                }
+                                Behavior on width { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+                                Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
                             }
                         }
                     }

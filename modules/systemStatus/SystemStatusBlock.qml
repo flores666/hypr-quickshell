@@ -179,7 +179,7 @@ Item {
         popupX: root.popupXFor(398)
         popupY: root.popupTopY
         popupWidth: 398
-        popupHeight: 620
+        popupHeight: systemPopup.implicitHeight
     }
 
     SystemPopup {
