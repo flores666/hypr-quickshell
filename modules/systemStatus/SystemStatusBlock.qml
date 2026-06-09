@@ -112,7 +112,7 @@ Item {
         color: root.popupOpen
             ? "#26ffffff"
             : (systemMouse.pressed ? "#1cffffff" : (systemMouse.containsMouse ? "#14ffffff" : "transparent"))
-        scale: systemMouse.pressed ? 0.965 : (systemMouse.containsMouse ? 1.035 : 1.0)
+        scale: systemMouse.pressed ? 0.965 : 1.0
         border.width: 0
         antialiasing: true
         transformOrigin: Item.Center

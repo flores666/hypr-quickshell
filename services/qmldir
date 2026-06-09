@@ -4,3 +4,5 @@ HyprlandService 1.0 HyprlandService.qml
 TrayBridge 1.0 TrayBridge.qml
 
 singleton SystemStatus 1.0 SystemStatus.qml
+
+singleton KeyboardLayoutService 1.0 KeyboardLayoutService.qml

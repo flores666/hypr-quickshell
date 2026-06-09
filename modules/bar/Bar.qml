@@ -6,6 +6,7 @@ import "../calendar" as Calendar
 import "../media-player" as Media
 import "../workspaces" as Workspaces
 import "../systemStatus" as SystemStatus
+import "../keyboardLayout" as KeyboardLayout
 
 PanelWindow {
     id: root
@@ -101,6 +102,16 @@ PanelWindow {
                 calendar.closePopup();
                 systemStatus.closePopup();
             }
+        }
+
+        KeyboardLayout.KeyboardLayoutBlock {
+            id: keyboardLayout
+            z: 1
+            width: implicitWidth
+            height: implicitHeight
+            anchors.right: systemStatus.left
+            anchors.rightMargin: 6
+            anchors.verticalCenter: parent.verticalCenter
         }
 
         SystemStatus.SystemStatusBlock {
