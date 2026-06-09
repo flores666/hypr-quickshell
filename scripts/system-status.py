@@ -8,7 +8,7 @@ from pathlib import Path
 from shutil import which
 
 
-def run(cmd, timeout=1.2):
+def run(cmd, timeout=1.4):
     try:
         p = subprocess.run(cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout)
         return p.stdout.strip() if p.returncode == 0 else ""
@@ -16,7 +16,7 @@ def run(cmd, timeout=1.2):
         return ""
 
 
-def run_ok(cmd, timeout=1.2):
+def run_ok(cmd, timeout=1.4):
     try:
         p = subprocess.run(cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout)
         return p.returncode == 0
@@ -33,7 +33,6 @@ def clamp_int(value, low, high, default=0):
 
 
 def parse_nmcli_line(line, fields):
-    # nmcli -t экранирует ':' как '\:'. Этого достаточно для SSID с двоеточием.
     parts = []
     cur = []
     esc = False
@@ -54,6 +53,74 @@ def parse_nmcli_line(line, fields):
     return parts
 
 
+def human_audio_label(name, props=None):
+    text = ""
+    if props:
+        text = props.get("device.description") or props.get("node.nick") or props.get("media.name") or props.get("application.name") or ""
+    if not text:
+        text = name or "Audio device"
+    text = text.replace("alsa_output.", "").replace("bluez_output.", "")
+    text = text.replace("_", " ").replace(".", " ")
+    text = re.sub(r"\s+", " ", text).strip()
+    return text or "Audio device"
+
+
+def parse_pactl_sink_blocks():
+    text = run(["pactl", "list", "sinks"], timeout=1.8)
+    blocks = re.split(r"\nSink #", "\n" + text)
+    sinks = []
+    for raw in blocks:
+        raw = raw.strip()
+        if not raw:
+            continue
+        first = raw.splitlines()[0].strip()
+        index_match = re.match(r"#?(\d+)", first)
+        index = index_match.group(1) if index_match else ""
+        name_match = re.search(r"\n\s*Name:\s*(.+)", raw)
+        state_match = re.search(r"\n\s*State:\s*(.+)", raw)
+        desc_match = re.search(r"\n\s*Description:\s*(.+)", raw)
+        name = name_match.group(1).strip() if name_match else ""
+        desc = desc_match.group(1).strip() if desc_match else ""
+        state = state_match.group(1).strip() if state_match else ""
+        if name:
+            sinks.append({
+                "index": index,
+                "name": name,
+                "label": human_audio_label(desc or name),
+                "state": state,
+            })
+    return sinks
+
+
+def parse_sink_inputs():
+    text = run(["pactl", "list", "sink-inputs"], timeout=1.8)
+    inputs = []
+    for block in re.split(r"\nSink Input #", "\n" + text):
+        block = block.strip()
+        if not block:
+            continue
+        first = block.splitlines()[0].strip()
+        idx_match = re.match(r"#?(\d+)", first)
+        if not idx_match:
+            continue
+        idx = idx_match.group(1)
+        props = {}
+        for key, value in re.findall(r'\s*([A-Za-z0-9_.-]+)\s*=\s*"?([^"\n]+)"?', block):
+            props[key] = value.strip()
+        app = props.get("application.name") or props.get("media.name") or f"App {idx}"
+        icon = props.get("application.icon_name") or ""
+        vol_match = re.search(r"Volume:.*?(\d+)%", block)
+        mute_match = re.search(r"Mute:\s*(yes|no)", block, re.I)
+        inputs.append({
+            "index": idx,
+            "name": human_audio_label(app, props),
+            "icon": icon,
+            "volume": clamp_int(vol_match.group(1) if vol_match else 100, 0, 150, 100),
+            "muted": bool(mute_match and mute_match.group(1).lower() == "yes"),
+        })
+    return inputs
+
+
 def audio_status():
     result = {
         "hasAudio": False,
@@ -61,6 +128,7 @@ def audio_status():
         "muted": False,
         "device": "",
         "devices": [],
+        "sinkInputs": [],
         "tool": "none",
     }
 
@@ -78,20 +146,14 @@ def audio_status():
         mute_text = run(["pactl", "get-sink-mute", "@DEFAULT_SINK@"]).lower()
         result["muted"] = "yes" in mute_text or "да" in mute_text
 
-        sinks = []
-        for line in run(["pactl", "list", "short", "sinks"]).splitlines():
-            cols = line.split("\t")
-            if len(cols) >= 2:
-                name = cols[1]
-                state = cols[4] if len(cols) > 4 else ""
-                sinks.append({
-                    "name": name,
-                    "label": name.replace("alsa_output.", "").replace("bluez_output.", "").replace("_", " "),
-                    "active": name == default_sink,
-                    "state": state,
-                })
+        sinks = parse_pactl_sink_blocks()
+        for sink in sinks:
+            sink["active"] = sink["name"] == default_sink
+            if sink["active"]:
+                result["device"] = sink["label"]
         result["devices"] = sinks
-        if default_sink:
+        result["sinkInputs"] = parse_sink_inputs()
+        if default_sink or sinks:
             result["hasAudio"] = True
         return result
 
@@ -109,11 +171,25 @@ def audio_status():
     return result
 
 
+def ip_for_device(device):
+    if not device:
+        return ""
+    text = run(["ip", "-4", "addr", "show", "dev", device])
+    m = re.search(r"inet\s+([0-9.]+/\d+)", text)
+    return m.group(1) if m else ""
+
+
 def network_status():
     result = {
         "available": False,
         "hasWifi": False,
         "wifiEnabled": False,
+        "hasEthernet": False,
+        "ethernetActive": False,
+        "ethernetAvailable": False,
+        "ethernetConnection": "",
+        "ethernetDevice": "",
+        "ethernetIp": "",
         "type": "none",
         "state": "offline",
         "connection": "",
@@ -140,17 +216,28 @@ def network_status():
             devices.append({"type": t, "state": state, "connection": conn, "device": dev})
             if t == "wifi":
                 result["hasWifi"] = True
+            if t == "ethernet":
+                result["hasEthernet"] = True
+                result["ethernetAvailable"] = state not in ("unavailable", "unmanaged")
+                if not result["ethernetDevice"]:
+                    result["ethernetDevice"] = dev
 
     connected_eth = next((d for d in devices if d["type"] == "ethernet" and d["state"] == "connected"), None)
     connected_wifi = next((d for d in devices if d["type"] == "wifi" and d["state"] == "connected"), None)
     connecting = next((d for d in devices if "connecting" in d["state"]), None)
 
     if connected_eth:
+        ip = ip_for_device(connected_eth["device"])
         result.update({
             "type": "ethernet",
             "state": "connected",
             "connection": connected_eth["connection"],
             "device": connected_eth["device"],
+            "ethernetActive": True,
+            "ethernetAvailable": True,
+            "ethernetConnection": connected_eth["connection"],
+            "ethernetDevice": connected_eth["device"],
+            "ethernetIp": ip,
         })
     elif connected_wifi:
         result.update({
@@ -188,12 +275,40 @@ def network_status():
                 result["ssid"] = ssid
                 result["signal"] = sig
         networks.sort(key=lambda x: (not x["active"], -x["signal"], x["ssid"].lower()))
-    result["networks"] = networks[:8]
+    result["networks"] = networks[:10]
 
     if result["type"] == "wifi" and result["state"] == "connected" and result["signal"] == 0:
-        # fallback, если nmcli dev wifi list не успел вернуть active сеть
         result["signal"] = 65
 
+    return result
+
+
+def bluetooth_status():
+    result = {
+        "hasBluetooth": False,
+        "enabled": False,
+        "devices": [],
+    }
+    if not which("bluetoothctl"):
+        return result
+    ctl_list = run(["bluetoothctl", "list"])
+    if not ctl_list.strip():
+        return result
+    result["hasBluetooth"] = True
+    show = run(["bluetoothctl", "show"])
+    result["enabled"] = bool(re.search(r"Powered:\s*yes", show, re.I))
+    devices = []
+    for line in run(["bluetoothctl", "devices"], timeout=1.8).splitlines():
+        m = re.match(r"Device\s+([0-9A-Fa-f:]+)\s+(.+)", line)
+        if not m:
+            continue
+        mac, name = m.group(1), m.group(2).strip()
+        info = run(["bluetoothctl", "info", mac], timeout=0.8)
+        connected = bool(re.search(r"Connected:\s*yes", info, re.I))
+        paired = bool(re.search(r"Paired:\s*yes", info, re.I))
+        devices.append({"mac": mac, "name": name, "connected": connected, "paired": paired})
+    devices.sort(key=lambda x: (not x["connected"], x["name"].lower()))
+    result["devices"] = devices[:10]
     return result
 
 
@@ -248,9 +363,9 @@ def battery_status():
 
     bat = batteries[0]
     cap = clamp_int(read_file(bat / "capacity"), 0, 100, 0)
-    status = read_file(bat / "status") or "Unknown"
-    charging = status.lower() == "charging"
-    full = status.lower() == "full" or cap >= 99
+    status_text = read_file(bat / "status") or "Unknown"
+    charging = status_text.lower() == "charging"
+    full = status_text.lower() == "full" or cap >= 99
 
     energy_now = read_file(bat / "energy_now") or read_file(bat / "charge_now")
     energy_full = read_file(bat / "energy_full") or read_file(bat / "charge_full")
@@ -259,11 +374,71 @@ def battery_status():
     return {
         "hasBattery": True,
         "percent": cap,
-        "status": "full" if full else ("charging" if charging else ("discharging" if status.lower() == "discharging" else status.lower())),
+        "status": "full" if full else ("charging" if charging else ("discharging" if status_text.lower() == "discharging" else status_text.lower())),
         "charging": charging,
         "acOnline": ac_online,
-        "time": battery_time_text(status, energy_now, energy_full, power_now),
+        "time": battery_time_text(status_text, energy_now, energy_full, power_now),
     }
+
+
+def extract_dunst_value(value):
+    if isinstance(value, dict):
+        return value.get("data") or value.get("value") or ""
+    return value or ""
+
+
+def notifications_status():
+    result = {
+        "available": False,
+        "count": 0,
+        "silent": False,
+        "items": [],
+    }
+
+    if which("dunstctl"):
+        result["available"] = True
+        paused = run(["dunstctl", "is-paused"]).lower()
+        result["silent"] = paused in ("true", "yes", "1")
+        raw = run(["dunstctl", "history"], timeout=1.6)
+        try:
+            data = json.loads(raw) if raw else {}
+            raw_items = []
+            if isinstance(data, dict):
+                for group in data.get("data", []):
+                    if isinstance(group, list):
+                        raw_items.extend(group)
+                    elif isinstance(group, dict):
+                        raw_items.append(group)
+            for i, item in enumerate(raw_items[:12]):
+                app = extract_dunst_value(item.get("appname") or item.get("app_name")) or "Notification"
+                summary = extract_dunst_value(item.get("summary")) or "Уведомление"
+                body = extract_dunst_value(item.get("body")) or ""
+                ts = extract_dunst_value(item.get("timestamp")) or ""
+                nid = extract_dunst_value(item.get("id")) or str(i)
+                result["items"].append({
+                    "id": str(nid),
+                    "app": str(app),
+                    "title": str(summary),
+                    "body": re.sub(r"<[^>]+>", "", str(body)),
+                    "time": str(ts)[-5:] if str(ts) else "",
+                    "actions": [],
+                })
+        except Exception:
+            result["items"] = []
+        result["count"] = len(result["items"])
+        return result
+
+    if which("makoctl"):
+        result["available"] = True
+        raw = run(["makoctl", "list"], timeout=1.4)
+        # makoctl output format differs between versions. Keep a safe readable fallback.
+        lines = [x.strip() for x in raw.splitlines() if x.strip()]
+        if lines:
+            result["items"] = [{"id": str(i), "app": "Mako", "title": line[:80], "body": "", "time": "", "actions": []} for i, line in enumerate(lines[:8])]
+        result["count"] = len(result["items"])
+        return result
+
+    return result
 
 
 def status():
@@ -271,6 +446,8 @@ def status():
         "network": network_status(),
         "audio": audio_status(),
         "battery": battery_status(),
+        "bluetooth": bluetooth_status(),
+        "notifications": notifications_status(),
     }
 
 
@@ -294,6 +471,10 @@ def action(args):
             return 0 if run_ok(["pactl", "set-sink-mute", "@DEFAULT_SINK@", "toggle"]) else 1
         return 1
 
+    if cmd == "set-app-volume" and len(args) > 2 and which("pactl"):
+        value = f"{clamp_int(args[2], 0, 150, 100)}%"
+        return 0 if run_ok(["pactl", "set-sink-input-volume", args[1], value]) else 1
+
     if cmd == "set-sink" and len(args) > 1 and which("pactl"):
         return 0 if run_ok(["pactl", "set-default-sink", args[1]]) else 1
 
@@ -304,6 +485,49 @@ def action(args):
 
     if cmd == "connect-wifi" and len(args) > 1 and which("nmcli"):
         return 0 if run_ok(["nmcli", "dev", "wifi", "connect", args[1]], timeout=8.0) else 1
+
+    if cmd == "toggle-bluetooth" and which("bluetoothctl"):
+        show = run(["bluetoothctl", "show"])
+        powered = bool(re.search(r"Powered:\s*yes", show, re.I))
+        return 0 if run_ok(["bluetoothctl", "power", "off" if powered else "on"]) else 1
+
+    if cmd == "connect-bluetooth" and len(args) > 1 and which("bluetoothctl"):
+        return 0 if run_ok(["bluetoothctl", "connect", args[1]], timeout=8.0) else 1
+
+    if cmd == "disconnect-bluetooth" and len(args) > 1 and which("bluetoothctl"):
+        return 0 if run_ok(["bluetoothctl", "disconnect", args[1]], timeout=5.0) else 1
+
+    if cmd == "system-poweroff":
+        return 0 if run_ok(["systemctl", "poweroff"], timeout=1.0) else 1
+
+    if cmd == "system-reboot":
+        return 0 if run_ok(["systemctl", "reboot"], timeout=1.0) else 1
+
+    if cmd == "system-logout":
+        if which("hyprctl"):
+            return 0 if run_ok(["hyprctl", "dispatch", "exit"], timeout=1.0) else 1
+        return 1
+
+    if cmd == "notifications-clear":
+        ok = False
+        if which("dunstctl"):
+            ok = run_ok(["dunstctl", "close-all"]) or ok
+            ok = run_ok(["dunstctl", "history-clear"]) or ok
+        if which("makoctl"):
+            ok = run_ok(["makoctl", "dismiss", "-a"]) or ok
+        return 0 if ok else 1
+
+    if cmd == "notifications-toggle-silent":
+        if which("dunstctl"):
+            paused = run(["dunstctl", "is-paused"]).lower() in ("true", "yes", "1")
+            return 0 if run_ok(["dunstctl", "set-paused", "false" if paused else "true"]) else 1
+        if which("makoctl"):
+            return 0 if run_ok(["makoctl", "mode", "-t", "do-not-disturb"]) else 1
+        return 1
+
+    if cmd == "notification-close" and len(args) > 1:
+        # dunstctl does not reliably close arbitrary history items by id across versions.
+        return 0
 
     return 1
 

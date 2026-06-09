@@ -176,10 +176,10 @@ Item {
         hostWindow: root.hostWindow
         hostWidth: root.hostWidth
         panelHeight: root.panelHeight
-        popupX: root.popupXFor(358)
+        popupX: root.popupXFor(398)
         popupY: root.popupTopY
-        popupWidth: 358
-        popupHeight: Services.SystemStatus.hasBattery ? 454 : 370
+        popupWidth: 398
+        popupHeight: 620
     }
 
     SystemPopup {
