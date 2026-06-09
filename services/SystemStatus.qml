@@ -52,6 +52,135 @@ Item {
     property bool notificationsSilent: false
     property int notificationsCount: 0
     property var notifications: []
+    property var historyNotifications: []
+    property var liveNotifications: []
+
+    property bool notificationCaptureActive: false
+    property bool notificationCaptureDone: false
+    property var notificationStringValues: []
+    property int liveNotificationSerial: 0
+
+    function stripNotificationMarkup(text) {
+        return String(text || "")
+            .replace(/<[^>]+>/g, "")
+            .replace(/\s+/g, " ")
+            .trim();
+    }
+
+    function notificationKey(notification) {
+        if (!notification)
+            return "";
+
+        return [
+            String(notification.app || ""),
+            String(notification.title || ""),
+            String(notification.body || "")
+        ].join("|").toLowerCase();
+    }
+
+    function mergeNotifications(preferredCount) {
+        var merged = [];
+        var seen = {};
+
+        function appendList(list) {
+            for (var i = 0; i < list.length; i++) {
+                var item = list[i];
+                var key = notificationKey(item);
+                if (key.length === 0 || seen[key])
+                    continue;
+
+                seen[key] = true;
+                merged.push(item);
+
+                if (merged.length >= 12)
+                    return;
+            }
+        }
+
+        appendList(liveNotifications || []);
+        appendList(historyNotifications || []);
+
+        notifications = merged;
+        notificationsCount = Math.max(Number(preferredCount || 0), merged.length);
+    }
+
+    function addLiveNotification(app, title, body, icon) {
+        var cleanApp = stripNotificationMarkup(app || "Notification");
+        var cleanTitle = stripNotificationMarkup(title || "Уведомление");
+        var cleanBody = stripNotificationMarkup(body || "");
+
+        if (cleanApp.length === 0 && cleanTitle.length === 0 && cleanBody.length === 0)
+            return;
+
+        var item = {
+            id: "live-" + Date.now() + "-" + liveNotificationSerial,
+            app: cleanApp.length > 0 ? cleanApp : "Notification",
+            title: cleanTitle.length > 0 ? cleanTitle : "Уведомление",
+            body: cleanBody,
+            time: Qt.formatDateTime(new Date(), "hh:mm"),
+            actions: [],
+            action: "",
+            url: "",
+            desktopEntry: "",
+            icon: String(icon || "")
+        };
+
+        liveNotificationSerial += 1;
+
+        var nextLive = [item];
+        var key = notificationKey(item);
+        for (var i = 0; i < liveNotifications.length; i++) {
+            if (notificationKey(liveNotifications[i]) !== key)
+                nextLive.push(liveNotifications[i]);
+            if (nextLive.length >= 12)
+                break;
+        }
+
+        liveNotifications = nextLive;
+        mergeNotifications(notificationsCount + 1);
+    }
+
+    function parseDbusStringLine(line) {
+        var match = String(line || "").match(/^\s*string\s+"(.*)"\s*$/);
+        if (!match)
+            return null;
+
+        return match[1]
+            .replace(/\\"/g, "\"")
+            .replace(/\\n/g, " ")
+            .replace(/\\t/g, " ")
+            .replace(/\\\\/g, "\\");
+    }
+
+    function handleNotificationBusLine(line) {
+        var text = String(line || "");
+
+        if (text.indexOf("member=Notify") !== -1 && text.indexOf("org.freedesktop.Notifications") !== -1) {
+            notificationCaptureActive = true;
+            notificationCaptureDone = false;
+            notificationStringValues = [];
+            return;
+        }
+
+        if (!notificationCaptureActive || notificationCaptureDone)
+            return;
+
+        var value = parseDbusStringLine(text);
+        if (value === null)
+            return;
+
+        var values = notificationStringValues;
+        values.push(value);
+        notificationStringValues = values;
+
+        // Notify signature: app_name, replaces_id, app_icon, summary, body, actions, hints, expire_timeout.
+        // The first four string arguments are app name, app icon, summary and body.
+        if (values.length >= 4) {
+            addLiveNotification(values[0], values[2], values[3], values[1]);
+            notificationCaptureDone = true;
+            notificationCaptureActive = false;
+        }
+    }
 
     function requestRefresh() {
         if (refreshProc.running) {
@@ -104,8 +233,8 @@ Item {
         var notificationsData = data.notifications || {};
         notificationsAvailable = !!notificationsData.available;
         notificationsSilent = !!notificationsData.silent;
-        notificationsCount = Number(notificationsData.count || 0);
-        notifications = notificationsData.items || [];
+        historyNotifications = notificationsData.items || [];
+        mergeNotifications(Number(notificationsData.count || 0));
 
         ready = true;
     }
@@ -180,6 +309,8 @@ Item {
     }
 
     function clearNotifications() {
+        liveNotifications = [];
+        historyNotifications = [];
         notifications = [];
         notificationsCount = 0;
         runAction(["notifications-clear"]);
@@ -191,14 +322,24 @@ Item {
     }
 
     function closeNotification(notificationId) {
-        var next = [];
-        for (var i = 0; i < notifications.length; i++) {
-            if (String(notifications[i].id) !== String(notificationId))
-                next.push(notifications[i]);
+        var id = String(notificationId);
+        var nextLive = [];
+        var nextHistory = [];
+
+        for (var i = 0; i < liveNotifications.length; i++) {
+            if (String(liveNotifications[i].id) !== id)
+                nextLive.push(liveNotifications[i]);
         }
-        notifications = next;
-        notificationsCount = next.length;
-        runAction(["notification-close", String(notificationId)]);
+
+        for (var j = 0; j < historyNotifications.length; j++) {
+            if (String(historyNotifications[j].id) !== id)
+                nextHistory.push(historyNotifications[j]);
+        }
+
+        liveNotifications = nextLive;
+        historyNotifications = nextHistory;
+        mergeNotifications(Math.max(0, notificationsCount - 1));
+        runAction(["notification-close", id]);
     }
 
     function openNotification(notification) {
@@ -215,13 +356,27 @@ Item {
         ]);
     }
 
-    Component.onCompleted: requestRefresh()
+    Component.onCompleted: {
+        requestRefresh();
+        notificationWatchProcess.running = true;
+    }
 
-    Timer {
-        interval: 1600
-        repeat: true
-        running: true
-        onTriggered: root.requestRefresh()
+    Process {
+        id: notificationWatchProcess
+        running: false
+        command: [
+            "dbus-monitor",
+            "--session",
+            "type='method_call',interface='org.freedesktop.Notifications',member='Notify'"
+        ]
+
+        stdout: SplitParser {
+            onRead: function(line) {
+                root.handleNotificationBusLine(line);
+            }
+        }
+
+        onExited: running = false
     }
 
     Process {
