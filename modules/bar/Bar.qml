@@ -31,6 +31,7 @@ PanelWindow {
     function closePopups() {
         calendar.closePopup();
         mediaPlayer.closePopup();
+        keyboardLayout.closePopup();
         systemStatus.closePopup();
     }
 
@@ -82,6 +83,7 @@ PanelWindow {
             popupBaseX: barContent.x + x
             onPopupOpened: {
                 mediaPlayer.closePopup();
+                keyboardLayout.closePopup();
                 systemStatus.closePopup();
             }
         }
@@ -100,6 +102,7 @@ PanelWindow {
             popupBaseX: barContent.x + x
             onPopupOpened: {
                 calendar.closePopup();
+                keyboardLayout.closePopup();
                 systemStatus.closePopup();
             }
         }
@@ -112,6 +115,15 @@ PanelWindow {
             anchors.right: systemStatus.left
             anchors.rightMargin: 6
             anchors.verticalCenter: parent.verticalCenter
+            hostWindow: root
+            hostWidth: root.width
+            panelHeight: root.implicitHeight
+            popupBaseX: barContent.x + x
+            onPopupOpened: {
+                calendar.closePopup();
+                mediaPlayer.closePopup();
+                systemStatus.closePopup();
+            }
         }
 
         SystemStatus.SystemStatusBlock {
@@ -128,6 +140,7 @@ PanelWindow {
             onPopupOpened: {
                 calendar.closePopup();
                 mediaPlayer.closePopup();
+                keyboardLayout.closePopup();
             }
         }
     }
