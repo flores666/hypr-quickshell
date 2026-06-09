@@ -387,6 +387,66 @@ def extract_dunst_value(value):
     return value or ""
 
 
+def clean_notification_text(value):
+    text = re.sub(r"<[^>]+>", "", str(value or ""))
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def extract_first_url(*values):
+    for value in values:
+        match = re.search(r"https?://[^\s<>\"']+", str(value or ""))
+        if match:
+            return match.group(0).rstrip(".,);]")
+    return ""
+
+
+def extract_desktop_entry(item):
+    for key in ("desktop_entry", "desktop-entry", "desktopEntry"):
+        value = extract_dunst_value(item.get(key)) if isinstance(item, dict) else ""
+        if value:
+            return str(value)
+    return ""
+
+
+def extract_actions(value):
+    raw = extract_dunst_value(value)
+    actions = []
+
+    if isinstance(raw, dict):
+        for key, label in raw.items():
+            if key:
+                actions.append({"id": str(key), "label": str(label or key)})
+        return actions
+
+    if isinstance(raw, list):
+        # D-Bus actions are usually [id, label, id, label].
+        for i in range(0, len(raw), 2):
+            action_id = str(raw[i] or "")
+            if not action_id:
+                continue
+            label = str(raw[i + 1]) if i + 1 < len(raw) else action_id
+            actions.append({"id": action_id, "label": label})
+        return actions
+
+    if isinstance(raw, str) and raw.strip():
+        parts = [p for p in raw.split("\x00") if p]
+        for i in range(0, len(parts), 2):
+            action_id = parts[i]
+            label = parts[i + 1] if i + 1 < len(parts) else action_id
+            actions.append({"id": action_id, "label": label})
+
+    return actions
+
+
+def default_action_id(actions):
+    if not actions:
+        return ""
+    for action in actions:
+        if str(action.get("id", "")).lower() in ("default", "open"):
+            return str(action.get("id", ""))
+    return str(actions[0].get("id", ""))
+
+
 def notifications_status():
     result = {
         "available": False,
@@ -415,13 +475,19 @@ def notifications_status():
                 body = extract_dunst_value(item.get("body")) or ""
                 ts = extract_dunst_value(item.get("timestamp")) or ""
                 nid = extract_dunst_value(item.get("id")) or str(i)
+                actions = extract_actions(item.get("actions") or item.get("action"))
+                url = extract_first_url(item.get("urls"), body, summary)
+                desktop_entry = extract_desktop_entry(item)
                 result["items"].append({
                     "id": str(nid),
-                    "app": str(app),
-                    "title": str(summary),
-                    "body": re.sub(r"<[^>]+>", "", str(body)),
+                    "app": clean_notification_text(app),
+                    "title": clean_notification_text(summary),
+                    "body": clean_notification_text(body),
                     "time": str(ts)[-5:] if str(ts) else "",
-                    "actions": [],
+                    "actions": actions,
+                    "action": default_action_id(actions),
+                    "url": url,
+                    "desktopEntry": desktop_entry,
                 })
         except Exception:
             result["items"] = []
@@ -434,7 +500,17 @@ def notifications_status():
         # makoctl output format differs between versions. Keep a safe readable fallback.
         lines = [x.strip() for x in raw.splitlines() if x.strip()]
         if lines:
-            result["items"] = [{"id": str(i), "app": "Mako", "title": line[:80], "body": "", "time": "", "actions": []} for i, line in enumerate(lines[:8])]
+            result["items"] = [{
+                "id": str(i),
+                "app": "Mako",
+                "title": clean_notification_text(line[:80]),
+                "body": "",
+                "time": "",
+                "actions": [],
+                "action": "",
+                "url": extract_first_url(line),
+                "desktopEntry": "",
+            } for i, line in enumerate(lines[:8])]
         result["count"] = len(result["items"])
         return result
 
@@ -449,6 +525,54 @@ def status():
         "bluetooth": bluetooth_status(),
         "notifications": notifications_status(),
     }
+
+
+def focus_existing_window(app_name="", desktop_entry=""):
+    if not which("hyprctl"):
+        return False
+
+    raw = run(["hyprctl", "clients", "-j"], timeout=1.6)
+    try:
+        clients = json.loads(raw) if raw else []
+    except Exception:
+        clients = []
+
+    candidates = []
+    for value in (desktop_entry, app_name):
+        value = str(value or "").strip()
+        if not value:
+            continue
+        value = re.sub(r"\.desktop$", "", value, flags=re.I)
+        value = value.lower()
+        if value and value not in candidates:
+            candidates.append(value)
+
+    if not candidates:
+        return False
+
+    for client in clients:
+        cls = str(client.get("class") or "").lower()
+        title = str(client.get("title") or "").lower()
+        initial_class = str(client.get("initialClass") or "").lower()
+        haystack = " ".join([cls, title, initial_class])
+        if any(candidate in haystack for candidate in candidates):
+            address = str(client.get("address") or "")
+            if address:
+                return run_ok(["hyprctl", "dispatch", "focuswindow", f"address:{address}"], timeout=1.0)
+
+    return False
+
+
+def launch_desktop_entry(desktop_entry):
+    entry = str(desktop_entry or "").strip()
+    if not entry:
+        return False
+    entry = re.sub(r"\.desktop$", "", entry, flags=re.I)
+
+    if which("gtk-launch") and run_ok(["gtk-launch", entry], timeout=1.2):
+        return True
+
+    return False
 
 
 def action(args):
@@ -524,6 +648,30 @@ def action(args):
         if which("makoctl"):
             return 0 if run_ok(["makoctl", "mode", "-t", "do-not-disturb"]) else 1
         return 1
+
+    if cmd == "notification-open" and len(args) > 1:
+        notification_id = args[1] if len(args) > 1 else ""
+        action_id = args[2] if len(args) > 2 else ""
+        url = args[3] if len(args) > 3 else ""
+        desktop_entry = args[4] if len(args) > 4 else ""
+        app_name = args[5] if len(args) > 5 else ""
+
+        if which("dunstctl") and notification_id:
+            action_candidates = [action_id, "default", "open"]
+            for action_name in [x for x in action_candidates if x]:
+                if run_ok(["dunstctl", "action", notification_id, action_name], timeout=1.2):
+                    return 0
+
+        if url and which("xdg-open") and run_ok(["xdg-open", url], timeout=1.0):
+            return 0
+
+        if focus_existing_window(app_name, desktop_entry):
+            return 0
+
+        if launch_desktop_entry(desktop_entry):
+            return 0
+
+        return 0
 
     if cmd == "notification-close" and len(args) > 1:
         # dunstctl does not reliably close arbitrary history items by id across versions.

@@ -201,6 +201,20 @@ Item {
         runAction(["notification-close", String(notificationId)]);
     }
 
+    function openNotification(notification) {
+        if (!notification)
+            return;
+
+        runAction([
+            "notification-open",
+            String(notification.id || ""),
+            String(notification.action || ""),
+            String(notification.url || ""),
+            String(notification.desktopEntry || ""),
+            String(notification.app || "")
+        ]);
+    }
+
     Component.onCompleted: requestRefresh()
 
     Timer {

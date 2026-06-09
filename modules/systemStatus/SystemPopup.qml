@@ -794,7 +794,7 @@ PopupWindow {
 
                 Rectangle {
                     width: parent.width
-                    height: 224
+                    height: 374
                     radius: 16
                     color: "#1019232f"
                     border.width: 0
@@ -830,7 +830,7 @@ PopupWindow {
 
                         Flickable {
                             width: parent.width
-                            height: 142
+                            height: 292
                             clip: true
                             contentWidth: width
                             contentHeight: notificationColumn.implicitHeight
@@ -868,6 +868,7 @@ PopupWindow {
                                         Behavior on color { ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic } }
 
                                         RowLayout {
+                                            z: 1
                                             anchors.fill: parent
                                             anchors.margins: 9
                                             spacing: 9
@@ -936,6 +937,7 @@ PopupWindow {
                                             }
 
                                             Rectangle {
+                                                z: 2
                                                 Layout.alignment: Qt.AlignTop
                                                 width: 22
                                                 height: 22
@@ -961,9 +963,16 @@ PopupWindow {
                                         MouseArea {
                                             id: notificationMouse
                                             anchors.fill: parent
+                                            z: 0
                                             hoverEnabled: true
-                                            acceptedButtons: Qt.NoButton
-                                            cursorShape: Qt.ArrowCursor
+                                            acceptedButtons: Qt.LeftButton
+                                            cursorShape: Qt.PointingHandCursor
+
+                                            onClicked: {
+                                                Services.SystemStatus.openNotification(modelData);
+                                                if (root.controller)
+                                                    root.controller.closePopup();
+                                            }
                                         }
                                     }
                                 }
