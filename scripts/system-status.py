@@ -828,7 +828,19 @@ def action(args):
         return 0 if run_ok(["pactl", "set-sink-input-volume", args[1], value]) else 1
 
     if cmd == "set-sink" and len(args) > 1 and which("pactl"):
-        return 0 if run_ok(["pactl", "set-default-sink", args[1]]) else 1
+        sink_name = args[1]
+        ok = run_ok(["pactl", "set-default-sink", sink_name])
+
+        # Move currently playing streams too. Without this, PulseAudio/PipeWire may
+        # keep existing apps on the old output while only new streams use the new sink.
+        inputs = run(["pactl", "list", "short", "sink-inputs"], timeout=1.2)
+        for line in inputs.splitlines():
+            parts = line.split()
+            if not parts:
+                continue
+            run_ok(["pactl", "move-sink-input", parts[0], sink_name], timeout=0.8)
+
+        return 0 if ok else 1
 
     if cmd == "toggle-wifi" and which("nmcli"):
         state = run(["nmcli", "radio", "wifi"]).lower()

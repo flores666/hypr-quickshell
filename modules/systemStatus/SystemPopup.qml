@@ -591,8 +591,7 @@ PopupWindow {
                                             hoverEnabled: true
                                             cursorShape: Qt.PointingHandCursor
                                             onClicked: {
-                                                if (!modelData.active)
-                                                    Services.SystemStatus.setSink(modelData.name);
+                                                Services.SystemStatus.setSink(modelData.name, modelData.label || modelData.name || "");
                                             }
                                         }
                                     }
