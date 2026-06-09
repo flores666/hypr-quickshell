@@ -9,6 +9,8 @@ import "../workspaces" as Workspaces
 PanelWindow {
     id: root
 
+    property int panelSideInset: 5
+
     anchors {
         top: true
         left: true
@@ -31,9 +33,14 @@ PanelWindow {
 
     Components.GlassPanel {
         id: background
-        anchors.fill: parent
-        anchors.margins: 2
-        radiusSize: 12
+        anchors {
+            fill: parent
+            topMargin: 2
+            bottomMargin: 2
+            leftMargin: root.panelSideInset
+            rightMargin: root.panelSideInset
+        }
+        radiusSize: 28
         glassColor: "#b010131a"
     }
 

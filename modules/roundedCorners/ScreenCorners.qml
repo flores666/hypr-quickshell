@@ -25,6 +25,7 @@ Scope {
         implicitHeight: root.cornerSize
         color: "transparent"
         surfaceFormat.opaque: false
+        mask: Region { width: 0; height: 0 }
         exclusionMode: ExclusionMode.Ignore
         aboveWindows: true
 
@@ -72,6 +73,7 @@ Scope {
         implicitHeight: root.cornerSize
         color: "transparent"
         surfaceFormat.opaque: false
+        mask: Region { width: 0; height: 0 }
         exclusionMode: ExclusionMode.Ignore
         aboveWindows: true
 
@@ -119,6 +121,7 @@ Scope {
         implicitHeight: root.cornerSize
         color: "transparent"
         surfaceFormat.opaque: false
+        mask: Region { width: 0; height: 0 }
         exclusionMode: ExclusionMode.Ignore
         aboveWindows: true
 
@@ -166,6 +169,7 @@ Scope {
         implicitHeight: root.cornerSize
         color: "transparent"
         surfaceFormat.opaque: false
+        mask: Region { width: 0; height: 0 }
         exclusionMode: ExclusionMode.Ignore
         aboveWindows: true
 
