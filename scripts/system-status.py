@@ -800,6 +800,14 @@ def action(args):
         return 0
     cmd = args[0]
 
+    if cmd == "resolve-icon":
+        icon_name = args[1] if len(args) > 1 else ""
+        app_name = args[2] if len(args) > 2 else ""
+        resolved = resolve_icon_file(icon_name) or resolve_icon_file(app_name.strip().lower().replace(" ", "-")) or resolve_icon_file(app_name)
+        if resolved:
+            print(resolved)
+        return 0
+
     if cmd == "set-volume" and len(args) > 1:
         value = f"{clamp_int(args[1], 0, 150, 50)}%"
         if which("wpctl"):

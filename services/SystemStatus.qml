@@ -62,6 +62,10 @@ Item {
     property bool notificationCaptureDone: false
     property var notificationStringValues: []
     property int liveNotificationSerial: 0
+    property var pendingLiveNotifications: []
+    property var activeLiveNotification: null
+    property bool iconResolveReceived: false
+    property string iconResolveResult: ""
 
     function stripNotificationMarkup(text) {
         return String(text || "")
@@ -105,6 +109,41 @@ Item {
 
         notifications = merged;
         notificationsCount = Math.max(Number(preferredCount || 0), merged.length);
+    }
+
+    function enqueueLiveNotification(app, title, body, icon) {
+        var item = {
+            app: String(app || "Notification"),
+            title: String(title || "Уведомление"),
+            body: String(body || ""),
+            icon: String(icon || "")
+        };
+
+        var queue = pendingLiveNotifications.slice();
+        queue.push(item);
+        pendingLiveNotifications = queue;
+
+        processNextLiveNotification();
+    }
+
+    function processNextLiveNotification() {
+        if (iconResolveProcess.running || pendingLiveNotifications.length === 0)
+            return;
+
+        var queue = pendingLiveNotifications.slice();
+        activeLiveNotification = queue.shift();
+        pendingLiveNotifications = queue;
+
+        iconResolveReceived = false;
+        iconResolveResult = "";
+        iconResolveProcess.command = [
+            "python3",
+            scriptPath,
+            "resolve-icon",
+            String(activeLiveNotification.icon || ""),
+            String(activeLiveNotification.app || "")
+        ];
+        iconResolveProcess.running = true;
     }
 
     function addLiveNotification(app, title, body, icon) {
@@ -179,7 +218,7 @@ Item {
         // Notify signature: app_name, replaces_id, app_icon, summary, body, actions, hints, expire_timeout.
         // The first four string arguments are app name, app icon, summary and body.
         if (values.length >= 4) {
-            addLiveNotification(values[0], values[2], values[3], values[1]);
+            enqueueLiveNotification(values[0], values[2], values[3], values[1]);
             notificationCaptureDone = true;
             notificationCaptureActive = false;
         }
@@ -384,6 +423,36 @@ Item {
         }
 
         onExited: running = false
+    }
+
+    Process {
+        id: iconResolveProcess
+        running: false
+
+        stdout: StdioCollector {
+            onStreamFinished: {
+                root.iconResolveReceived = true;
+                root.iconResolveResult = this.text.trim();
+            }
+        }
+
+        onExited: {
+            running = false;
+
+            if (root.activeLiveNotification) {
+                root.addLiveNotification(
+                    root.activeLiveNotification.app,
+                    root.activeLiveNotification.title,
+                    root.activeLiveNotification.body,
+                    root.iconResolveReceived ? root.iconResolveResult : ""
+                );
+            }
+
+            root.activeLiveNotification = null;
+            root.iconResolveReceived = false;
+            root.iconResolveResult = "";
+            root.processNextLiveNotification();
+        }
     }
 
     Process {
