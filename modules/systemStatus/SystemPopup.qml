@@ -268,8 +268,10 @@ PopupWindow {
                                     onClicked: function(mouse) {
                                         if (mouse.button === Qt.RightButton)
                                             root.detailMode = root.detailMode === "wifi" ? "" : "wifi";
-                                        else
+                                        else {
+                                            root.detailMode = "";
                                             Services.SystemStatus.toggleWifi();
+                                        }
                                         mouse.accepted = true;
                                     }
                                 }
@@ -347,235 +349,22 @@ PopupWindow {
                                     onClicked: function(mouse) {
                                         if (mouse.button === Qt.RightButton)
                                             root.detailMode = root.detailMode === "bluetooth" ? "" : "bluetooth";
-                                        else
+                                        else {
+                                            root.detailMode = "";
                                             Services.SystemStatus.toggleBluetooth();
+                                        }
                                         mouse.accepted = true;
                                     }
                                 }
                             }
                         }
 
-                        Rectangle {
-                            width: parent.width
-                            height: root.detailMode === "wifi" ? 158 : 0
-                            visible: root.detailMode === "wifi"
-                            radius: 14
-                            color: "#0bffffff"
-                            border.width: 0
-                            antialiasing: true
-                            clip: true
-
-                            Behavior on height { NumberAnimation { duration: 190; easing.type: Easing.OutCubic } }
-
-                            Flickable {
-                                anchors.fill: parent
-                                anchors.margins: 7
-                                contentWidth: width
-                                contentHeight: wifiListColumn.implicitHeight
-                                clip: true
-                                boundsBehavior: Flickable.StopAtBounds
-
-                                Column {
-                                    id: wifiListColumn
-                                    width: parent.width
-                                    spacing: 5
-
-                                    Components.StyledText {
-                                        width: parent.width
-                                        height: Services.SystemStatus.wifiNetworks.length === 0 ? 28 : 0
-                                        visible: Services.SystemStatus.wifiNetworks.length === 0
-                                        text: Services.SystemStatus.wifiEnabled ? "Сети не найдены" : "Wi-Fi выключен"
-                                        color: "#aeb8c6"
-                                        font.pixelSize: 11
-                                        horizontalAlignment: Text.AlignHCenter
-                                        verticalAlignment: Text.AlignVCenter
-                                    }
-
-                                    Repeater {
-                                        model: Services.SystemStatus.wifiNetworks
-                                        delegate: Rectangle {
-                                            required property var modelData
-
-                                            width: parent.width
-                                            height: 28
-                                            radius: 12
-                                            color: wifiItemMouse.pressed ? "#22ffffff" : (wifiItemMouse.containsMouse ? "#14ffffff" : (modelData.active ? "#1cffffff" : "transparent"))
-                                            border.width: 0
-                                            antialiasing: true
-
-                                            Behavior on color { ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic } }
-
-                                            RowLayout {
-                                                anchors.fill: parent
-                                                anchors.leftMargin: 8
-                                                anchors.rightMargin: 8
-                                                spacing: 8
-
-                                                SystemIcon {
-                                                    source: modelData.signal <= 25 ? root.rowIcon("wifi-0") : (modelData.signal <= 45 ? root.rowIcon("wifi-1") : (modelData.signal <= 70 ? root.rowIcon("wifi-2") : root.rowIcon("wifi-3")))
-                                                    iconOpacity: modelData.active ? 1.0 : 0.72
-                                                }
-
-                                                Components.StyledText {
-                                                    Layout.fillWidth: true
-                                                    text: modelData.ssid || "Wi-Fi"
-                                                    color: modelData.active ? "#f4f7fb" : "#c4ceda"
-                                                    font.pixelSize: 11
-                                                    font.weight: modelData.active ? Font.DemiBold : Font.Medium
-                                                    elide: Text.ElideRight
-                                                }
-
-                                                Components.StyledText {
-                                                    text: modelData.active ? "активно" : (modelData.signal + "%")
-                                                    color: "#8f9aa8"
-                                                    font.pixelSize: 10
-                                                }
-                                            }
-
-                                            MouseArea {
-                                                id: wifiItemMouse
-                                                anchors.fill: parent
-                                                hoverEnabled: true
-                                                cursorShape: Qt.PointingHandCursor
-                                                onClicked: {
-                                                    if (!modelData.active)
-                                                        Services.SystemStatus.connectWifi(modelData.ssid);
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        Rectangle {
-                            width: parent.width
-                            height: root.detailMode === "ethernet" ? 58 : 0
-                            visible: root.detailMode === "ethernet"
-                            radius: 14
-                            color: "#0bffffff"
-                            border.width: 0
-                            antialiasing: true
-                            clip: true
-
-                            Behavior on height { NumberAnimation { duration: 190; easing.type: Easing.OutCubic } }
-
-                            Column {
-                                anchors.fill: parent
-                                anchors.margins: 9
-                                spacing: 3
-
-                                Components.StyledText {
-                                    width: parent.width
-                                    text: Services.SystemStatus.ethernetActive ? "Ethernet активен" : "Ethernet не подключен"
-                                    color: "#eef3f8"
-                                    font.pixelSize: 11
-                                    font.weight: Font.DemiBold
-                                    elide: Text.ElideRight
-                                }
-
-                                Components.StyledText {
-                                    width: parent.width
-                                    text: root.ethernetText()
-                                    color: "#aeb8c6"
-                                    font.pixelSize: 10
-                                    elide: Text.ElideRight
-                                }
-                            }
-                        }
-
-                        Rectangle {
-                            width: parent.width
-                            height: root.detailMode === "bluetooth" ? 136 : 0
-                            visible: root.detailMode === "bluetooth"
-                            radius: 14
-                            color: "#0bffffff"
-                            border.width: 0
-                            antialiasing: true
-                            clip: true
-
-                            Behavior on height { NumberAnimation { duration: 190; easing.type: Easing.OutCubic } }
-
-                            Flickable {
-                                anchors.fill: parent
-                                anchors.margins: 7
-                                contentWidth: width
-                                contentHeight: bluetoothListColumn.implicitHeight
-                                clip: true
-                                boundsBehavior: Flickable.StopAtBounds
-
-                                Column {
-                                    id: bluetoothListColumn
-                                    width: parent.width
-                                    spacing: 5
-
-                                    Components.StyledText {
-                                        width: parent.width
-                                        height: Services.SystemStatus.bluetoothDevices.length === 0 ? 28 : 0
-                                        visible: Services.SystemStatus.bluetoothDevices.length === 0
-                                        text: Services.SystemStatus.bluetoothEnabled ? "Устройства не найдены" : "Bluetooth выключен"
-                                        color: "#aeb8c6"
-                                        font.pixelSize: 11
-                                        horizontalAlignment: Text.AlignHCenter
-                                        verticalAlignment: Text.AlignVCenter
-                                    }
-
-                                    Repeater {
-                                        model: Services.SystemStatus.bluetoothDevices
-                                        delegate: Rectangle {
-                                            required property var modelData
-
-                                            width: parent.width
-                                            height: 28
-                                            radius: 12
-                                            color: bluetoothItemMouse.pressed ? "#22ffffff" : (bluetoothItemMouse.containsMouse ? "#14ffffff" : (modelData.connected ? "#1cffffff" : "transparent"))
-                                            border.width: 0
-                                            antialiasing: true
-
-                                            Behavior on color { ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic } }
-
-                                            RowLayout {
-                                                anchors.fill: parent
-                                                anchors.leftMargin: 8
-                                                anchors.rightMargin: 8
-                                                spacing: 8
-
-                                                SystemIcon { source: root.rowIcon("bluetooth"); iconOpacity: modelData.connected ? 1.0 : 0.62 }
-
-                                                Components.StyledText {
-                                                    Layout.fillWidth: true
-                                                    text: modelData.name || "Bluetooth"
-                                                    color: modelData.connected ? "#f4f7fb" : "#c4ceda"
-                                                    font.pixelSize: 11
-                                                    font.weight: modelData.connected ? Font.DemiBold : Font.Medium
-                                                    elide: Text.ElideRight
-                                                }
-
-                                                Components.StyledText {
-                                                    text: modelData.connected ? "подключено" : ""
-                                                    color: "#8f9aa8"
-                                                    font.pixelSize: 10
-                                                }
-                                            }
-
-                                            MouseArea {
-                                                id: bluetoothItemMouse
-                                                anchors.fill: parent
-                                                hoverEnabled: true
-                                                cursorShape: Qt.PointingHandCursor
-                                                onClicked: Services.SystemStatus.toggleBluetoothDevice(modelData)
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
                     }
                 }
 
                 Rectangle {
                     width: parent.width
-                    height: 244
+                    height: audioContentColumn.implicitHeight + 24
                     radius: 16
                     color: "#1019232f"
                     border.width: 0
@@ -583,9 +372,10 @@ PopupWindow {
                     clip: true
 
                     Column {
+                        id: audioContentColumn
                         anchors.fill: parent
                         anchors.margins: 12
-                        spacing: 9
+                        spacing: 8
 
                         RowLayout {
                             width: parent.width
@@ -655,7 +445,7 @@ PopupWindow {
 
                         Flickable {
                             width: parent.width
-                            height: 76
+                            height: Services.SystemStatus.sinkInputs.length === 0 ? 24 : Math.min(76, Services.SystemStatus.sinkInputs.length * 36)
                             clip: true
                             contentWidth: width
                             contentHeight: appVolumeColumn.implicitHeight
@@ -727,7 +517,8 @@ PopupWindow {
 
                         Flickable {
                             width: parent.width
-                            height: 66
+                            height: Services.SystemStatus.audioDevices.length === 0 ? 0 : Math.min(66, Math.max(28, Services.SystemStatus.audioDevices.length * 33))
+                            visible: Services.SystemStatus.audioDevices.length > 0
                             clip: true
                             contentWidth: width
                             contentHeight: outputColumn.implicitHeight
@@ -1109,4 +900,14 @@ PopupWindow {
             }
         }
     }
+    SystemDetailPopup {
+        id: detailPopup
+        controller: root
+        hostWindow: root.hostWindow
+        mode: root.detailMode
+        popupX: Math.max(6, root.popupX - implicitWidth - 8)
+        popupY: root.popupY + 64
+    }
+
+
 }

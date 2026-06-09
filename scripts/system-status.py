@@ -32,6 +32,57 @@ def clamp_int(value, low, high, default=0):
     return max(low, min(high, n))
 
 
+def has_wifi_adapter():
+    for iface in Path("/sys/class/net").glob("*"):
+        if (iface / "wireless").exists():
+            return True
+
+    if which("iw") and run(["iw", "dev"], timeout=1.0).strip():
+        return True
+
+    if which("rfkill"):
+        rfkill = run(["rfkill", "list"], timeout=1.0).lower()
+        if "wireless lan" in rfkill or "wlan" in rfkill or "wifi" in rfkill:
+            return True
+
+    return False
+
+
+def has_bluetooth_adapter():
+    for dev in Path("/sys/class/bluetooth").glob("*"):
+        if dev.name.startswith("hci"):
+            return True
+
+    if which("rfkill"):
+        rfkill = run(["rfkill", "list"], timeout=1.0).lower()
+        if "bluetooth" in rfkill:
+            return True
+
+    return False
+
+
+def is_real_system_battery(supply):
+    typ = read_file(supply / "type").lower()
+    scope = read_file(supply / "scope").lower()
+    name = supply.name.lower()
+
+    if typ != "battery":
+        return False
+
+    # Wireless mice/keyboards/headsets often expose their own battery through power_supply.
+    # They must not create a laptop battery indicator in the panel.
+    if scope == "device":
+        return False
+
+    if any(token in name for token in ("hidpp", "mouse", "keyboard", "headset", "sony", "logitech")):
+        return False
+
+    has_energy_info = any((supply / field).exists() for field in ("energy_full", "charge_full", "energy_now", "charge_now"))
+    has_capacity = (supply / "capacity").exists()
+
+    return supply.name.startswith("BAT") or (has_capacity and has_energy_info)
+
+
 def parse_nmcli_line(line, fields):
     parts = []
     cur = []
@@ -200,6 +251,9 @@ def network_status():
         "error": "",
     }
 
+    wifi_adapter_present = has_wifi_adapter()
+    result["hasWifi"] = wifi_adapter_present
+
     if not which("nmcli"):
         result["state"] = "error"
         result["error"] = "nmcli not found"
@@ -207,7 +261,7 @@ def network_status():
 
     result["available"] = True
     wifi_radio = run(["nmcli", "-t", "-f", "WIFI", "g"]).lower()
-    result["wifiEnabled"] = wifi_radio in ("enabled", "включено")
+    result["wifiEnabled"] = wifi_radio in ("enabled", "включено") or (wifi_adapter_present and wifi_radio not in ("disabled", "выключено"))
 
     devices = []
     for line in run(["nmcli", "-t", "-f", "TYPE,STATE,CONNECTION,DEVICE", "dev", "status"]).splitlines():
@@ -218,9 +272,12 @@ def network_status():
                 result["hasWifi"] = True
             if t == "ethernet":
                 result["hasEthernet"] = True
-                result["ethernetAvailable"] = state not in ("unavailable", "unmanaged")
+                result["ethernetAvailable"] = state not in ("unavailable", "unmanaged", "недоступно")
                 if not result["ethernetDevice"]:
                     result["ethernetDevice"] = dev
+
+    if not result["hasWifi"]:
+        result["hasWifi"] = wifi_adapter_present
 
     connected_eth = next((d for d in devices if d["type"] == "ethernet" and d["state"] == "connected"), None)
     connected_wifi = next((d for d in devices if d["type"] == "wifi" and d["state"] == "connected"), None)
@@ -289,14 +346,30 @@ def bluetooth_status():
         "enabled": False,
         "devices": [],
     }
+
+    adapter_present = has_bluetooth_adapter()
+    result["hasBluetooth"] = adapter_present
+
     if not which("bluetoothctl"):
         return result
+
     ctl_list = run(["bluetoothctl", "list"])
-    if not ctl_list.strip():
+    if ctl_list.strip():
+        result["hasBluetooth"] = True
+
+    if not result["hasBluetooth"]:
         return result
-    result["hasBluetooth"] = True
+
     show = run(["bluetoothctl", "show"])
-    result["enabled"] = bool(re.search(r"Powered:\s*yes", show, re.I))
+    powered = bool(re.search(r"Powered:\s*yes", show, re.I))
+
+    if not powered and which("rfkill"):
+        rfkill = run(["rfkill", "list", "bluetooth"], timeout=1.0).lower()
+        if "soft blocked: no" in rfkill and "hard blocked: no" in rfkill:
+            powered = True
+
+    result["enabled"] = powered
+
     devices = []
     for line in run(["bluetoothctl", "devices"], timeout=1.8).splitlines():
         m = re.match(r"Device\s+([0-9A-Fa-f:]+)\s+(.+)", line)
@@ -344,12 +417,13 @@ def battery_status():
     supplies = list(Path("/sys/class/power_supply").glob("*"))
     batteries = []
     ac_online = False
+
     for supply in supplies:
         typ = read_file(supply / "type").lower()
-        if typ == "battery" or supply.name.startswith("BAT"):
-            batteries.append(supply)
-        elif read_file(supply / "online") == "1":
+        if typ in ("mains", "usb", "usb_c", "usb_pd", "ups") and read_file(supply / "online") == "1":
             ac_online = True
+        if is_real_system_battery(supply):
+            batteries.append(supply)
 
     if not batteries:
         return {
