@@ -25,6 +25,7 @@ Item {
     property double audioLastRefreshAt: 0
     property double batteryLastRefreshAt: 0
     property double notificationsLastRefreshAt: 0
+    property bool popupOpening: false
 
     property string distroName: "Linux"
     property string distroInitial: "L"
@@ -392,19 +393,42 @@ Item {
         return lastRefreshAt <= 0 || (Date.now() - lastRefreshAt) > ttlMs;
     }
 
+    function preparePopupOpen() {
+        popupOpening = true;
+        popupOpeningReset.restart();
+    }
+
     function requestInteractiveRefresh() {
+        requestInteractiveRefreshDeferred();
+    }
+
+    function requestInteractiveRefreshDeferred() {
         if (isRefreshStale(distroLastRefreshAt, 3600000))
             requestDistroRefresh();
-        if (isRefreshStale(networkLastRefreshAt, 1800))
-            scheduleNetworkRefresh();
-        if (isRefreshStale(audioLastRefreshAt, 700))
-            scheduleAudioRefresh();
-        if (isRefreshStale(batteryLastRefreshAt, 30000))
-            scheduleBatteryRefresh();
-        if (isRefreshStale(bluetoothLastRefreshAt, 2600))
-            scheduleBluetoothRefresh();
-        if (isRefreshStale(notificationsLastRefreshAt, 2200))
-            scheduleNotificationsRefresh();
+
+        if (isRefreshStale(audioLastRefreshAt, 900))
+            scheduleAudioRefresh(30);
+        if (isRefreshStale(networkLastRefreshAt, 2200))
+            scheduleNetworkRefresh(160);
+        if (isRefreshStale(bluetoothLastRefreshAt, 3600))
+            scheduleBluetoothRefresh(320);
+        if (isRefreshStale(batteryLastRefreshAt, 35000))
+            scheduleBatteryRefresh(520);
+        if (isRefreshStale(notificationsLastRefreshAt, 8000))
+            scheduleNotificationsRefresh(760);
+    }
+
+    function requestWarmRefresh() {
+        if (isRefreshStale(audioLastRefreshAt, 12000))
+            scheduleAudioRefresh(0);
+        if (isRefreshStale(networkLastRefreshAt, 20000))
+            scheduleNetworkRefresh(220);
+        if (isRefreshStale(bluetoothLastRefreshAt, 45000))
+            scheduleBluetoothRefresh(460);
+        if (isRefreshStale(notificationsLastRefreshAt, 60000))
+            scheduleNotificationsRefresh(760);
+        if (isRefreshStale(batteryLastRefreshAt, 90000))
+            scheduleBatteryRefresh(1060);
     }
 
     function requestDistroRefresh() {
@@ -463,28 +487,28 @@ Item {
         return Math.max(baseDelay, minGap - elapsed);
     }
 
-    function scheduleNetworkRefresh() {
-        networkEventDebounce.interval = cooldownDelay(networkLastRefreshAt, 140, 650);
+    function scheduleNetworkRefresh(baseDelay) {
+        networkEventDebounce.interval = cooldownDelay(networkLastRefreshAt, baseDelay === undefined ? 140 : baseDelay, 650);
         networkEventDebounce.restart();
     }
 
-    function scheduleBluetoothRefresh() {
-        bluetoothEventDebounce.interval = cooldownDelay(bluetoothLastRefreshAt, 160, 750);
+    function scheduleBluetoothRefresh(baseDelay) {
+        bluetoothEventDebounce.interval = cooldownDelay(bluetoothLastRefreshAt, baseDelay === undefined ? 160 : baseDelay, 750);
         bluetoothEventDebounce.restart();
     }
 
-    function scheduleAudioRefresh() {
-        audioEventDebounce.interval = cooldownDelay(audioLastRefreshAt, 90, 180);
+    function scheduleAudioRefresh(baseDelay) {
+        audioEventDebounce.interval = cooldownDelay(audioLastRefreshAt, baseDelay === undefined ? 90 : baseDelay, 180);
         audioEventDebounce.restart();
     }
 
-    function scheduleBatteryRefresh() {
-        batteryEventDebounce.interval = cooldownDelay(batteryLastRefreshAt, 450, 1600);
+    function scheduleBatteryRefresh(baseDelay) {
+        batteryEventDebounce.interval = cooldownDelay(batteryLastRefreshAt, baseDelay === undefined ? 450 : baseDelay, 1600);
         batteryEventDebounce.restart();
     }
 
-    function scheduleNotificationsRefresh() {
-        notificationsEventDebounce.interval = cooldownDelay(notificationsLastRefreshAt, 300, 2200);
+    function scheduleNotificationsRefresh(baseDelay) {
+        notificationsEventDebounce.interval = cooldownDelay(notificationsLastRefreshAt, baseDelay === undefined ? 300 : baseDelay, 2200);
         notificationsEventDebounce.restart();
     }
 
@@ -886,6 +910,7 @@ Item {
         batteryWatchProcess.running = true;
         notificationWatchProcess.running = true;
         batterySlowRefresh.start();
+        warmRefreshTimer.start();
     }
 
     Timer {
@@ -929,6 +954,22 @@ Item {
         repeat: true
         running: false
         onTriggered: root.requestBatteryRefresh()
+    }
+
+    Timer {
+        id: warmRefreshTimer
+        interval: 15000
+        repeat: true
+        running: false
+        triggeredOnStart: false
+        onTriggered: root.requestWarmRefresh()
+    }
+
+    Timer {
+        id: popupOpeningReset
+        interval: 900
+        repeat: false
+        onTriggered: root.popupOpening = false
     }
 
     Process {

@@ -81,8 +81,9 @@ Item {
 
     function openPopup() {
         popupOpen = true;
-        Services.SystemStatus.requestInteractiveRefresh();
+        Services.SystemStatus.preparePopupOpen();
         popupOpened();
+        deferredOpenRefresh.restart();
     }
 
     function closePopup() {
@@ -101,6 +102,16 @@ Item {
         interval: motion.cursorDelay
         repeat: false
         onTriggered: root.pointerReady = systemMouse.containsMouse
+    }
+
+    Timer {
+        id: deferredOpenRefresh
+        interval: 130
+        repeat: false
+        onTriggered: {
+            if (root.popupOpen)
+                Services.SystemStatus.requestInteractiveRefreshDeferred();
+        }
     }
 
     Rectangle {
