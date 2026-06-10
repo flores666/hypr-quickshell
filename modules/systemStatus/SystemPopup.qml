@@ -152,9 +152,7 @@ PopupWindow {
     }
 
     onTargetVisibleChanged: {
-        if (targetVisible)
-            Services.SystemStatus.requestRefresh();
-        else
+        if (!targetVisible)
             detailMode = "";
     }
 

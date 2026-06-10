@@ -9,7 +9,6 @@ Item {
     readonly property string scriptPath: decodeURIComponent(Qt.resolvedUrl("../scripts/system-status.py").toString().replace(/^file:\/\//, ""))
 
     property bool ready: false
-    property bool refreshQueued: false
     property bool actionRunning: false
     property var pendingActionArgs: []
     property var runningActionArgs: []
@@ -20,6 +19,7 @@ Item {
     property bool batteryRefreshQueued: false
     property bool notificationsRefreshQueued: false
     property bool audioReady: false
+    property double distroLastRefreshAt: 0
     property double networkLastRefreshAt: 0
     property double bluetoothLastRefreshAt: 0
     property double audioLastRefreshAt: 0
@@ -84,6 +84,7 @@ Item {
     property var activeLiveNotification: null
     property bool iconResolveReceived: false
     property string iconResolveResult: ""
+    property var resolvedIconCache: ({})
 
     function stripNotificationMarkup(text) {
         return String(text || "")
@@ -213,6 +214,38 @@ Item {
         notificationsCount = Math.max(Number(preferredCount || 0), merged.length);
     }
 
+    function iconResolveCacheKey(item) {
+        if (!item)
+            return "";
+
+        return [
+            String(item.icon || ""),
+            String(item.app || "")
+        ].join("|").toLowerCase();
+    }
+
+    function directIconPath(icon) {
+        var value = String(icon || "").trim();
+        if (value.length === 0)
+            return null;
+        if (value.indexOf("file://") === 0 || value.indexOf("/") === 0)
+            return value;
+        return null;
+    }
+
+    function rememberResolvedIcon(key, value) {
+        if (!key)
+            return;
+
+        var next = {};
+        var current = resolvedIconCache || {};
+        for (var oldKey in current)
+            next[oldKey] = current[oldKey];
+
+        next[key] = String(value || "");
+        resolvedIconCache = next;
+    }
+
     function enqueueLiveNotification(app, title, body, icon) {
         var item = {
             app: String(app || "Notification"),
@@ -229,23 +262,40 @@ Item {
     }
 
     function processNextLiveNotification() {
-        if (iconResolveProcess.running || pendingLiveNotifications.length === 0)
+        if (iconResolveProcess.running)
             return;
 
-        var queue = pendingLiveNotifications.slice();
-        activeLiveNotification = queue.shift();
-        pendingLiveNotifications = queue;
+        while (pendingLiveNotifications.length > 0) {
+            var queue = pendingLiveNotifications.slice();
+            var item = queue.shift();
+            pendingLiveNotifications = queue;
 
-        iconResolveReceived = false;
-        iconResolveResult = "";
-        iconResolveProcess.command = [
-            "python3",
-            scriptPath,
-            "resolve-icon",
-            String(activeLiveNotification.icon || ""),
-            String(activeLiveNotification.app || "")
-        ];
-        iconResolveProcess.running = true;
+            var key = iconResolveCacheKey(item);
+            var directPath = directIconPath(item.icon);
+            if (directPath !== null) {
+                addLiveNotification(item.app, item.title, item.body, directPath);
+                continue;
+            }
+
+            if ((resolvedIconCache || {}).hasOwnProperty(key)) {
+                addLiveNotification(item.app, item.title, item.body, resolvedIconCache[key]);
+                continue;
+            }
+
+            activeLiveNotification = item;
+            activeLiveNotification.cacheKey = key;
+            iconResolveReceived = false;
+            iconResolveResult = "";
+            iconResolveProcess.command = [
+                "python3",
+                scriptPath,
+                "resolve-icon",
+                String(activeLiveNotification.icon || ""),
+                String(activeLiveNotification.app || "")
+            ];
+            iconResolveProcess.running = true;
+            return;
+        }
     }
 
     function addLiveNotification(app, title, body, icon) {
@@ -336,6 +386,25 @@ Item {
         requestBatteryRefresh();
         requestBluetoothRefresh();
         requestNotificationsRefresh();
+    }
+
+    function isRefreshStale(lastRefreshAt, ttlMs) {
+        return lastRefreshAt <= 0 || (Date.now() - lastRefreshAt) > ttlMs;
+    }
+
+    function requestInteractiveRefresh() {
+        if (isRefreshStale(distroLastRefreshAt, 3600000))
+            requestDistroRefresh();
+        if (isRefreshStale(networkLastRefreshAt, 1800))
+            scheduleNetworkRefresh();
+        if (isRefreshStale(audioLastRefreshAt, 700))
+            scheduleAudioRefresh();
+        if (isRefreshStale(batteryLastRefreshAt, 30000))
+            scheduleBatteryRefresh();
+        if (isRefreshStale(bluetoothLastRefreshAt, 2600))
+            scheduleBluetoothRefresh();
+        if (isRefreshStale(notificationsLastRefreshAt, 2200))
+            scheduleNotificationsRefresh();
     }
 
     function requestDistroRefresh() {
@@ -627,25 +696,6 @@ Item {
 
         sinkInputs = a.sinkInputs || [];
         ready = true;
-    }
-
-    function applyStatus(data) {
-        data = data || {};
-        applyDistroStatus(data.distro || {});
-        applyNetworkStatus(data.network || {});
-        applyBluetoothStatus(data.bluetooth || {});
-        applyAudioStatus(data.audio || {});
-        applyBatteryStatus(data.battery || {});
-        applyNotificationsStatus(data.notifications || {});
-        ready = true;
-    }
-
-    function updateFromJson(text) {
-        try {
-            applyStatus(JSON.parse(text || "{}"));
-        } catch (e) {
-            console.log("system status parse error", e, text);
-        }
     }
 
     function updateDistroFromJson(text) {
@@ -986,11 +1036,13 @@ Item {
             running = false;
 
             if (root.activeLiveNotification) {
+                var resolvedIcon = root.iconResolveReceived ? root.iconResolveResult : "";
+                root.rememberResolvedIcon(root.activeLiveNotification.cacheKey || "", resolvedIcon);
                 root.addLiveNotification(
                     root.activeLiveNotification.app,
                     root.activeLiveNotification.title,
                     root.activeLiveNotification.body,
-                    root.iconResolveReceived ? root.iconResolveResult : ""
+                    resolvedIcon
                 );
             }
 
@@ -1011,6 +1063,7 @@ Item {
 
         onExited: {
             running = false;
+            root.distroLastRefreshAt = Date.now();
             if (root.distroRefreshQueued) {
                 root.distroRefreshQueued = false;
                 root.requestDistroRefresh();

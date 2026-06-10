@@ -82,7 +82,7 @@ Item {
 
     function openPopup() {
         popupOpen = true;
-        Services.SystemStatus.requestRefresh();
+        Services.SystemStatus.requestInteractiveRefresh();
         popupOpened();
     }
 

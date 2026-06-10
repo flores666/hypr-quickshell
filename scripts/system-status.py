@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
+import atexit
 import json
 import os
 import re
 import subprocess
 import sys
+from functools import lru_cache
 from pathlib import Path
 from shutil import which
+
+
+@lru_cache(maxsize=None)
+def has_cmd(name):
+    return which(name) is not None
 
 
 def run(cmd, timeout=1.4):
@@ -37,10 +44,10 @@ def has_wifi_adapter():
         if (iface / "wireless").exists():
             return True
 
-    if which("iw") and run(["iw", "dev"], timeout=1.0).strip():
+    if has_cmd("iw") and run(["iw", "dev"], timeout=1.0).strip():
         return True
 
-    if which("rfkill"):
+    if has_cmd("rfkill"):
         rfkill = run(["rfkill", "list"], timeout=1.0).lower()
         if "wireless lan" in rfkill or "wlan" in rfkill or "wifi" in rfkill:
             return True
@@ -53,7 +60,7 @@ def has_bluetooth_adapter():
         if dev.name.startswith("hci"):
             return True
 
-    if which("rfkill"):
+    if has_cmd("rfkill"):
         rfkill = run(["rfkill", "list"], timeout=1.0).lower()
         if "bluetooth" in rfkill:
             return True
@@ -130,6 +137,8 @@ def parse_pactl_sink_blocks():
         name_match = re.search(r"\n\s*Name:\s*(.+)", raw)
         state_match = re.search(r"\n\s*State:\s*(.+)", raw)
         desc_match = re.search(r"\n\s*Description:\s*(.+)", raw)
+        vol_match = re.search(r"\n\s*Volume:.*?(\d+)%", raw)
+        mute_match = re.search(r"\n\s*Mute:\s*(yes|no)", raw, re.I)
         name = name_match.group(1).strip() if name_match else ""
         desc = desc_match.group(1).strip() if desc_match else ""
         state = state_match.group(1).strip() if state_match else ""
@@ -139,9 +148,10 @@ def parse_pactl_sink_blocks():
                 "name": name,
                 "label": human_audio_label(desc or name),
                 "state": state,
+                "volume": clamp_int(vol_match.group(1) if vol_match else 0, 0, 150, 0),
+                "muted": bool(mute_match and mute_match.group(1).lower() == "yes"),
             })
     return sinks
-
 
 def parse_sink_inputs():
     text = run(["pactl", "list", "sink-inputs"], timeout=1.8)
@@ -183,32 +193,41 @@ def audio_status():
         "tool": "none",
     }
 
-    if which("pactl"):
+    if has_cmd("pactl"):
         result["tool"] = "pactl"
-        default_sink = run(["pactl", "get-default-sink"])
+        default_sink = run(["pactl", "get-default-sink"], timeout=1.0)
         result["device"] = default_sink
 
-        vol_text = run(["pactl", "get-sink-volume", "@DEFAULT_SINK@"])
-        match = re.search(r"(\d+)%", vol_text)
-        if match:
-            result["volume"] = clamp_int(match.group(1), 0, 150, 0)
-            result["hasAudio"] = True
-
-        mute_text = run(["pactl", "get-sink-mute", "@DEFAULT_SINK@"]).lower()
-        result["muted"] = "yes" in mute_text or "да" in mute_text
-
         sinks = parse_pactl_sink_blocks()
+        active_sink = None
         for sink in sinks:
             sink["active"] = sink["name"] == default_sink
             if sink["active"]:
-                result["device"] = sink["label"]
+                active_sink = sink
+
+        if active_sink:
+            result["device"] = active_sink["label"]
+            result["volume"] = clamp_int(active_sink.get("volume", 0), 0, 150, 0)
+            result["muted"] = bool(active_sink.get("muted", False))
+            result["hasAudio"] = True
+        elif default_sink:
+            # Fallback for unusual pactl output. Normal path already parsed volume/mute
+            # from `pactl list sinks`, so we avoid two extra subprocesses per refresh.
+            vol_text = run(["pactl", "get-sink-volume", "@DEFAULT_SINK@"], timeout=1.0)
+            match = re.search(r"(\d+)%", vol_text)
+            if match:
+                result["volume"] = clamp_int(match.group(1), 0, 150, 0)
+                result["hasAudio"] = True
+            mute_text = run(["pactl", "get-sink-mute", "@DEFAULT_SINK@"], timeout=1.0).lower()
+            result["muted"] = "yes" in mute_text or "да" in mute_text
+
         result["devices"] = sinks
         result["sinkInputs"] = parse_sink_inputs()
         if default_sink or sinks:
             result["hasAudio"] = True
         return result
 
-    if which("wpctl"):
+    if has_cmd("wpctl"):
         result["tool"] = "wpctl"
         text = run(["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"])
         match = re.search(r"Volume:\s*([0-9.]+)", text)
@@ -220,7 +239,6 @@ def audio_status():
         return result
 
     return result
-
 
 def ip_for_device(device):
     if not device:
@@ -254,7 +272,7 @@ def network_status():
     wifi_adapter_present = has_wifi_adapter()
     result["hasWifi"] = wifi_adapter_present
 
-    if not which("nmcli"):
+    if not has_cmd("nmcli"):
         result["state"] = "error"
         result["error"] = "nmcli not found"
         return result
@@ -350,7 +368,7 @@ def bluetooth_status():
     adapter_present = has_bluetooth_adapter()
     result["hasBluetooth"] = adapter_present
 
-    if not which("bluetoothctl"):
+    if not has_cmd("bluetoothctl"):
         return result
 
     ctl_list = run(["bluetoothctl", "list"])
@@ -363,27 +381,51 @@ def bluetooth_status():
     show = run(["bluetoothctl", "show"])
     powered = bool(re.search(r"Powered:\s*yes", show, re.I))
 
-    if not powered and which("rfkill"):
+    if not powered and has_cmd("rfkill"):
         rfkill = run(["rfkill", "list", "bluetooth"], timeout=1.0).lower()
         if "soft blocked: no" in rfkill and "hard blocked: no" in rfkill:
             powered = True
 
     result["enabled"] = powered
 
-    devices = []
-    for line in run(["bluetoothctl", "devices"], timeout=1.8).splitlines():
-        m = re.match(r"Device\s+([0-9A-Fa-f:]+)\s+(.+)", line)
-        if not m:
-            continue
-        mac, name = m.group(1), m.group(2).strip()
-        info = run(["bluetoothctl", "info", mac], timeout=0.8)
-        connected = bool(re.search(r"Connected:\s*yes", info, re.I))
-        paired = bool(re.search(r"Paired:\s*yes", info, re.I))
-        devices.append({"mac": mac, "name": name, "connected": connected, "paired": paired})
+    def parse_device_lines(raw):
+        parsed = []
+        for line in raw.splitlines():
+            m = re.match(r"Device\s+([0-9A-Fa-f:]+)\s+(.+)", line)
+            if m:
+                parsed.append((m.group(1), m.group(2).strip()))
+        return parsed
+
+    all_devices = parse_device_lines(run(["bluetoothctl", "devices"], timeout=1.4))
+    connected = {mac for mac, _ in parse_device_lines(run(["bluetoothctl", "devices", "Connected"], timeout=1.0))}
+    paired = {mac for mac, _ in parse_device_lines(run(["bluetoothctl", "devices", "Paired"], timeout=1.0))}
+
+    # Old bluetoothctl versions can ignore filtered lists. In that case we still
+    # avoid querying every remembered device and inspect only what can be shown.
+    visible_candidates = all_devices[:16]
+    if all_devices and not connected and not paired:
+        checked = []
+        for mac, name in visible_candidates:
+            info = run(["bluetoothctl", "info", mac], timeout=0.55)
+            checked.append({
+                "mac": mac,
+                "name": name,
+                "connected": bool(re.search(r"Connected:\s*yes", info, re.I)),
+                "paired": bool(re.search(r"Paired:\s*yes", info, re.I)),
+            })
+        checked.sort(key=lambda x: (not x["connected"], x["name"].lower()))
+        result["devices"] = checked[:10]
+        return result
+
+    devices = [{
+        "mac": mac,
+        "name": name,
+        "connected": mac in connected,
+        "paired": mac in paired,
+    } for mac, name in all_devices]
     devices.sort(key=lambda x: (not x["connected"], x["name"].lower()))
     result["devices"] = devices[:10]
     return result
-
 
 def battery_time_text(status, energy_now, energy_full, power_now):
     try:
@@ -486,8 +528,60 @@ ICON_EXTENSIONS = (".png", ".webp", ".jpg", ".jpeg", ".svg", ".xpm")
 ICON_SIZE_DIRS = ("256x256", "128x128", "96x96", "64x64", "48x48", "32x32", "scalable", "24x24")
 ICON_THEME_DIRS = ("hicolor", "Papirus", "Papirus-Dark", "Papirus-Light", "Adwaita", "breeze", "breeze-dark")
 ICON_CATEGORIES = ("apps", "devices", "status", "places")
-_icon_cache = {}
-_desktop_icon_cache = {}
+ICON_CACHE_PATH = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / f"hypr-quickshell-icon-cache-{os.getuid()}.json"
+_icon_cache_dirty = False
+
+
+def load_icon_cache():
+    try:
+        if not ICON_CACHE_PATH.is_file() or ICON_CACHE_PATH.stat().st_size > 262144:
+            return {}, {}
+        data = json.loads(ICON_CACHE_PATH.read_text(encoding="utf-8"))
+        return dict(data.get("icons", {})), dict(data.get("desktop", {}))
+    except Exception:
+        return {}, {}
+
+
+def mark_icon_cache_dirty():
+    global _icon_cache_dirty
+    _icon_cache_dirty = True
+
+
+def remember_icon_cache(name, result):
+    cached = _icon_cache.get(name)
+    if cached != result:
+        _icon_cache[name] = result
+        mark_icon_cache_dirty()
+    return result
+
+
+def remember_desktop_icon_cache(name, result):
+    cached = _desktop_icon_cache.get(name)
+    if cached != result:
+        _desktop_icon_cache[name] = result
+        mark_icon_cache_dirty()
+    return result
+
+
+def save_icon_cache():
+    if not _icon_cache_dirty:
+        return
+    try:
+        ICON_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        icon_items = list(_icon_cache.items())[-600:]
+        desktop_items = list(_desktop_icon_cache.items())[-300:]
+        tmp = ICON_CACHE_PATH.with_suffix(".tmp")
+        tmp.write_text(json.dumps({
+            "icons": dict(icon_items),
+            "desktop": dict(desktop_items),
+        }, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+        tmp.replace(ICON_CACHE_PATH)
+    except Exception:
+        pass
+
+
+_icon_cache, _desktop_icon_cache = load_icon_cache()
+atexit.register(save_icon_cache)
 
 
 def read_desktop_icon_name(entry_name):
@@ -511,13 +605,11 @@ def read_desktop_icon_name(entry_name):
                 for line in f:
                     if line.startswith("Icon="):
                         value = line.split("=", 1)[1].strip()
-                        _desktop_icon_cache[name] = value
-                        return value
+                        return remember_desktop_icon_cache(name, value)
         except Exception:
             continue
 
-    _desktop_icon_cache[name] = ""
-    return ""
+    return remember_desktop_icon_cache(name, "")
 
 
 def resolve_icon_file(icon_name):
@@ -532,13 +624,11 @@ def resolve_icon_file(icon_name):
     if name.startswith("file://"):
         path = name.replace("file://", "", 1)
         result = path if os.path.isfile(path) else ""
-        _icon_cache[name] = result
-        return result
+        return remember_icon_cache(name, result)
 
     if os.path.isabs(name):
         result = name if os.path.isfile(name) else ""
-        _icon_cache[name] = result
-        return result
+        return remember_icon_cache(name, result)
 
     clean = re.sub(r"\.desktop$", "", name, flags=re.I).strip()
     lookup_names = []
@@ -556,15 +646,13 @@ def resolve_icon_file(icon_name):
 
     for value in lookup_names:
         if os.path.isabs(value) and os.path.isfile(value):
-            _icon_cache[name] = value
-            return value
+            return remember_icon_cache(name, value)
 
         for base in pixmap_dirs:
             for ext in ICON_EXTENSIONS:
                 path = os.path.join(base, f"{value}{ext}")
                 if os.path.isfile(path):
-                    _icon_cache[name] = path
-                    return path
+                    return remember_icon_cache(name, path)
 
     icon_roots = [
         os.path.join(home, ".local/share/icons"),
@@ -591,11 +679,9 @@ def resolve_icon_file(icon_name):
                             if os.path.isfile(path):
                                 if "symbolic" in path.lower():
                                     continue
-                                _icon_cache[name] = path
-                                return path
+                                return remember_icon_cache(name, path)
 
-    _icon_cache[name] = ""
-    return ""
+    return remember_icon_cache(name, "")
 
 
 def extract_notification_icon(item, app="", desktop_entry=""):
@@ -677,7 +763,7 @@ def notifications_status():
         "items": [],
     }
 
-    if which("dunstctl"):
+    if has_cmd("dunstctl"):
         result["available"] = True
         paused = run(["dunstctl", "is-paused"]).lower()
         result["silent"] = paused in ("true", "yes", "1")
@@ -718,7 +804,7 @@ def notifications_status():
         result["count"] = len(result["items"])
         return result
 
-    if which("makoctl"):
+    if has_cmd("makoctl"):
         result["available"] = True
         raw = run(["makoctl", "list"], timeout=1.4)
         # makoctl output format differs between versions. Keep a safe readable fallback.
@@ -779,7 +865,7 @@ def status():
 
 
 def focus_existing_window(app_name="", desktop_entry=""):
-    if not which("hyprctl"):
+    if not has_cmd("hyprctl"):
         return False
 
     raw = run(["hyprctl", "clients", "-j"], timeout=1.6)
@@ -820,7 +906,7 @@ def launch_desktop_entry(desktop_entry):
         return False
     entry = re.sub(r"\.desktop$", "", entry, flags=re.I)
 
-    if which("gtk-launch") and run_ok(["gtk-launch", entry], timeout=1.2):
+    if has_cmd("gtk-launch") and run_ok(["gtk-launch", entry], timeout=1.2):
         return True
 
     return False
@@ -865,24 +951,24 @@ def action(args):
 
     if cmd == "set-volume" and len(args) > 1:
         value = f"{clamp_int(args[1], 0, 150, 50)}%"
-        if which("wpctl"):
+        if has_cmd("wpctl"):
             return 0 if run_ok(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", value]) else 1
-        if which("pactl"):
+        if has_cmd("pactl"):
             return 0 if run_ok(["pactl", "set-sink-volume", "@DEFAULT_SINK@", value]) else 1
         return 1
 
     if cmd == "toggle-mute":
-        if which("wpctl"):
+        if has_cmd("wpctl"):
             return 0 if run_ok(["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"]) else 1
-        if which("pactl"):
+        if has_cmd("pactl"):
             return 0 if run_ok(["pactl", "set-sink-mute", "@DEFAULT_SINK@", "toggle"]) else 1
         return 1
 
-    if cmd == "set-app-volume" and len(args) > 2 and which("pactl"):
+    if cmd == "set-app-volume" and len(args) > 2 and has_cmd("pactl"):
         value = f"{clamp_int(args[2], 0, 150, 100)}%"
         return 0 if run_ok(["pactl", "set-sink-input-volume", args[1], value]) else 1
 
-    if cmd == "set-sink" and len(args) > 1 and which("pactl"):
+    if cmd == "set-sink" and len(args) > 1 and has_cmd("pactl"):
         sink_name = args[1]
         ok = run_ok(["pactl", "set-default-sink", sink_name])
 
@@ -897,23 +983,23 @@ def action(args):
 
         return 0 if ok else 1
 
-    if cmd == "toggle-wifi" and which("nmcli"):
+    if cmd == "toggle-wifi" and has_cmd("nmcli"):
         state = run(["nmcli", "radio", "wifi"]).lower()
         next_state = "off" if state in ("enabled", "включено") else "on"
         return 0 if run_ok(["nmcli", "radio", "wifi", next_state]) else 1
 
-    if cmd == "connect-wifi" and len(args) > 1 and which("nmcli"):
+    if cmd == "connect-wifi" and len(args) > 1 and has_cmd("nmcli"):
         return 0 if run_ok(["nmcli", "dev", "wifi", "connect", args[1]], timeout=8.0) else 1
 
-    if cmd == "toggle-bluetooth" and which("bluetoothctl"):
+    if cmd == "toggle-bluetooth" and has_cmd("bluetoothctl"):
         show = run(["bluetoothctl", "show"])
         powered = bool(re.search(r"Powered:\s*yes", show, re.I))
         return 0 if run_ok(["bluetoothctl", "power", "off" if powered else "on"]) else 1
 
-    if cmd == "connect-bluetooth" and len(args) > 1 and which("bluetoothctl"):
+    if cmd == "connect-bluetooth" and len(args) > 1 and has_cmd("bluetoothctl"):
         return 0 if run_ok(["bluetoothctl", "connect", args[1]], timeout=8.0) else 1
 
-    if cmd == "disconnect-bluetooth" and len(args) > 1 and which("bluetoothctl"):
+    if cmd == "disconnect-bluetooth" and len(args) > 1 and has_cmd("bluetoothctl"):
         return 0 if run_ok(["bluetoothctl", "disconnect", args[1]], timeout=5.0) else 1
 
     if cmd == "system-poweroff":
@@ -923,24 +1009,24 @@ def action(args):
         return 0 if run_ok(["systemctl", "reboot"], timeout=1.0) else 1
 
     if cmd == "system-logout":
-        if which("hyprctl"):
+        if has_cmd("hyprctl"):
             return 0 if run_ok(["hyprctl", "dispatch", "exit"], timeout=1.0) else 1
         return 1
 
     if cmd == "notifications-clear":
         ok = False
-        if which("dunstctl"):
+        if has_cmd("dunstctl"):
             ok = run_ok(["dunstctl", "close-all"]) or ok
             ok = run_ok(["dunstctl", "history-clear"]) or ok
-        if which("makoctl"):
+        if has_cmd("makoctl"):
             ok = run_ok(["makoctl", "dismiss", "-a"]) or ok
         return 0 if ok else 1
 
     if cmd == "notifications-toggle-silent":
-        if which("dunstctl"):
+        if has_cmd("dunstctl"):
             paused = run(["dunstctl", "is-paused"]).lower() in ("true", "yes", "1")
             return 0 if run_ok(["dunstctl", "set-paused", "false" if paused else "true"]) else 1
-        if which("makoctl"):
+        if has_cmd("makoctl"):
             return 0 if run_ok(["makoctl", "mode", "-t", "do-not-disturb"]) else 1
         return 1
 
@@ -951,13 +1037,13 @@ def action(args):
         desktop_entry = args[4] if len(args) > 4 else ""
         app_name = args[5] if len(args) > 5 else ""
 
-        if which("dunstctl") and notification_id:
+        if has_cmd("dunstctl") and notification_id:
             action_candidates = [action_id, "default", "open"]
             for action_name in [x for x in action_candidates if x]:
                 if run_ok(["dunstctl", "action", notification_id, action_name], timeout=1.2):
                     return 0
 
-        if url and which("xdg-open") and run_ok(["xdg-open", url], timeout=1.0):
+        if url and has_cmd("xdg-open") and run_ok(["xdg-open", url], timeout=1.0):
             return 0
 
         if focus_existing_window(app_name, desktop_entry):
@@ -974,9 +1060,9 @@ def action(args):
 
         # Best effort for currently visible notifications. History filtering is handled
         # by the QML service because dunst/mako versions differ in single-item history removal.
-        if notification_id and which("dunstctl"):
+        if notification_id and has_cmd("dunstctl"):
             ok = run_ok(["dunstctl", "close", notification_id], timeout=1.0) or ok
-        if notification_id and which("makoctl"):
+        if notification_id and has_cmd("makoctl"):
             ok = run_ok(["makoctl", "dismiss", "-n", notification_id], timeout=1.0) or ok
 
         return 0 if ok else 0
