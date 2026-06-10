@@ -20,6 +20,11 @@ Item {
     property bool batteryRefreshQueued: false
     property bool notificationsRefreshQueued: false
     property bool audioReady: false
+    property double networkLastRefreshAt: 0
+    property double bluetoothLastRefreshAt: 0
+    property double audioLastRefreshAt: 0
+    property double batteryLastRefreshAt: 0
+    property double notificationsLastRefreshAt: 0
 
     property string distroName: "Linux"
     property string distroInitial: "L"
@@ -211,7 +216,6 @@ Item {
             notificationCaptureActive = true;
             notificationCaptureDone = false;
             notificationStringValues = [];
-            scheduleNotificationsRefresh();
             return;
         }
 
@@ -292,23 +296,36 @@ Item {
         notificationsRefreshProc.running = true;
     }
 
+    function cooldownDelay(lastRefreshAt, baseDelay, minGap) {
+        if (lastRefreshAt <= 0)
+            return baseDelay;
+
+        var elapsed = Date.now() - lastRefreshAt;
+        return Math.max(baseDelay, minGap - elapsed);
+    }
+
     function scheduleNetworkRefresh() {
+        networkEventDebounce.interval = cooldownDelay(networkLastRefreshAt, 140, 650);
         networkEventDebounce.restart();
     }
 
     function scheduleBluetoothRefresh() {
+        bluetoothEventDebounce.interval = cooldownDelay(bluetoothLastRefreshAt, 160, 750);
         bluetoothEventDebounce.restart();
     }
 
     function scheduleAudioRefresh() {
+        audioEventDebounce.interval = cooldownDelay(audioLastRefreshAt, 90, 180);
         audioEventDebounce.restart();
     }
 
     function scheduleBatteryRefresh() {
+        batteryEventDebounce.interval = cooldownDelay(batteryLastRefreshAt, 450, 1600);
         batteryEventDebounce.restart();
     }
 
     function scheduleNotificationsRefresh() {
+        notificationsEventDebounce.interval = cooldownDelay(notificationsLastRefreshAt, 300, 2200);
         notificationsEventDebounce.restart();
     }
 
@@ -925,9 +942,10 @@ Item {
 
         onExited: {
             running = false;
+            root.networkLastRefreshAt = Date.now();
             if (root.networkRefreshQueued) {
                 root.networkRefreshQueued = false;
-                root.requestNetworkRefresh();
+                root.scheduleNetworkRefresh();
             }
         }
     }
@@ -942,9 +960,10 @@ Item {
 
         onExited: {
             running = false;
+            root.bluetoothLastRefreshAt = Date.now();
             if (root.bluetoothRefreshQueued) {
                 root.bluetoothRefreshQueued = false;
-                root.requestBluetoothRefresh();
+                root.scheduleBluetoothRefresh();
             }
         }
     }
@@ -959,9 +978,10 @@ Item {
 
         onExited: {
             running = false;
+            root.audioLastRefreshAt = Date.now();
             if (root.audioRefreshQueued) {
                 root.audioRefreshQueued = false;
-                root.requestAudioRefresh();
+                root.scheduleAudioRefresh();
             }
         }
     }
@@ -976,9 +996,10 @@ Item {
 
         onExited: {
             running = false;
+            root.batteryLastRefreshAt = Date.now();
             if (root.batteryRefreshQueued) {
                 root.batteryRefreshQueued = false;
-                root.requestBatteryRefresh();
+                root.scheduleBatteryRefresh();
             }
         }
     }
@@ -993,9 +1014,10 @@ Item {
 
         onExited: {
             running = false;
+            root.notificationsLastRefreshAt = Date.now();
             if (root.notificationsRefreshQueued) {
                 root.notificationsRefreshQueued = false;
-                root.requestNotificationsRefresh();
+                root.scheduleNotificationsRefresh();
             }
         }
     }

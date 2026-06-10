@@ -482,89 +482,120 @@ def extract_desktop_entry(item):
     return ""
 
 
+ICON_EXTENSIONS = (".png", ".webp", ".jpg", ".jpeg", ".svg", ".xpm")
+ICON_SIZE_DIRS = ("256x256", "128x128", "96x96", "64x64", "48x48", "32x32", "scalable", "24x24")
+ICON_THEME_DIRS = ("hicolor", "Papirus", "Papirus-Dark", "Papirus-Light", "Adwaita", "breeze", "breeze-dark")
+ICON_CATEGORIES = ("apps", "devices", "status", "places")
+_icon_cache = {}
+_desktop_icon_cache = {}
+
+
+def read_desktop_icon_name(entry_name):
+    name = str(entry_name or "").strip()
+    if not name:
+        return ""
+
+    name = re.sub(r"\.desktop$", "", name, flags=re.I)
+    if name in _desktop_icon_cache:
+        return _desktop_icon_cache[name]
+
+    desktop_paths = [
+        os.path.join(str(Path.home()), ".local/share/applications", f"{name}.desktop"),
+        os.path.join("/usr/local/share/applications", f"{name}.desktop"),
+        os.path.join("/usr/share/applications", f"{name}.desktop"),
+    ]
+
+    for path in desktop_paths:
+        try:
+            with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                for line in f:
+                    if line.startswith("Icon="):
+                        value = line.split("=", 1)[1].strip()
+                        _desktop_icon_cache[name] = value
+                        return value
+        except Exception:
+            continue
+
+    _desktop_icon_cache[name] = ""
+    return ""
+
+
 def resolve_icon_file(icon_name):
     name = str(icon_name or "").strip()
     if not name:
         return ""
 
+    cached = _icon_cache.get(name)
+    if cached is not None:
+        return cached
+
     if name.startswith("file://"):
-        path = Path(name.replace("file://", "", 1))
-        return str(path) if path.exists() else ""
+        path = name.replace("file://", "", 1)
+        result = path if os.path.isfile(path) else ""
+        _icon_cache[name] = result
+        return result
 
-    path = Path(name)
-    if path.is_absolute():
-        return str(path) if path.exists() else ""
+    if os.path.isabs(name):
+        result = name if os.path.isfile(name) else ""
+        _icon_cache[name] = result
+        return result
 
-    name = re.sub(r"\\.desktop$", "", name, flags=re.I)
-    candidates = []
-    home = Path.home()
+    clean = re.sub(r"\.desktop$", "", name, flags=re.I).strip()
+    lookup_names = []
+    for value in (clean, clean.lower(), read_desktop_icon_name(clean)):
+        value = str(value or "").strip()
+        if value and value not in lookup_names:
+            lookup_names.append(value)
 
-    base_dirs = [
-        home / ".local/share/icons",
-        home / ".icons",
-        Path("/usr/share/icons"),
-        Path("/usr/local/share/icons"),
-        Path("/usr/share/pixmaps"),
+    home = str(Path.home())
+    pixmap_dirs = [
+        os.path.join(home, ".local/share/pixmaps"),
+        "/usr/share/pixmaps",
+        "/usr/local/share/pixmaps",
     ]
 
-    lookup_names = [name]
-    lowered = name.lower()
-    if lowered not in lookup_names:
-        lookup_names.append(lowered)
+    for value in lookup_names:
+        if os.path.isabs(value) and os.path.isfile(value):
+            _icon_cache[name] = value
+            return value
 
-    for base in base_dirs:
-        if not base.exists():
+        for base in pixmap_dirs:
+            for ext in ICON_EXTENSIONS:
+                path = os.path.join(base, f"{value}{ext}")
+                if os.path.isfile(path):
+                    _icon_cache[name] = path
+                    return path
+
+    icon_roots = [
+        os.path.join(home, ".local/share/icons"),
+        os.path.join(home, ".icons"),
+        "/usr/share/icons",
+        "/usr/local/share/icons",
+    ]
+
+    for root in icon_roots:
+        if not os.path.isdir(root):
             continue
+        for theme in ICON_THEME_DIRS:
+            theme_dir = os.path.join(root, theme)
+            if not os.path.isdir(theme_dir):
+                continue
+            for value in lookup_names:
+                for size in ICON_SIZE_DIRS:
+                    for category in ICON_CATEGORIES:
+                        directory = os.path.join(theme_dir, size, category)
+                        if not os.path.isdir(directory):
+                            continue
+                        for ext in ICON_EXTENSIONS:
+                            path = os.path.join(directory, f"{value}{ext}")
+                            if os.path.isfile(path):
+                                if "symbolic" in path.lower():
+                                    continue
+                                _icon_cache[name] = path
+                                return path
 
-        for lookup in lookup_names:
-            for ext in (".png", ".webp", ".jpg", ".jpeg", ".svg", ".xpm"):
-                direct = base / (lookup + ext)
-                if direct.exists() and "symbolic" not in str(direct).lower():
-                    candidates.append(direct)
-
-        try:
-            for child in base.rglob("*"):
-                if not child.is_file():
-                    continue
-
-                lower_path = str(child).lower()
-                if "symbolic" in lower_path:
-                    continue
-
-                stem = child.stem.lower()
-                suffix = child.suffix.lower()
-                if suffix not in (".png", ".webp", ".jpg", ".jpeg", ".svg", ".xpm"):
-                    continue
-
-                if stem in [x.lower() for x in lookup_names]:
-                    candidates.append(child)
-        except Exception:
-            continue
-
-    if not candidates:
-        return ""
-
-    def score(path):
-        lower = str(path).lower()
-        score_value = 0
-
-        if path.suffix.lower() in (".png", ".webp", ".jpg", ".jpeg"):
-            score_value += 80
-        if "/apps/" in lower:
-            score_value += 30
-        if "hicolor" in lower:
-            score_value += 20
-        if "papirus" in lower:
-            score_value += 15
-
-        size_match = re.search(r"/(\\d+)x\\d+/", lower)
-        if size_match:
-            score_value += min(int(size_match.group(1)), 256)
-
-        return score_value
-
-    candidates.sort(key=score, reverse=True)
-    return str(candidates[0])
+    _icon_cache[name] = ""
+    return ""
 
 
 def extract_notification_icon(item, app="", desktop_entry=""):
