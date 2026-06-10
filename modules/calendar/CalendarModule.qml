@@ -14,7 +14,6 @@ Item {
     readonly property real popupTopY: panelHeight
     property date now: new Date()
     property bool popupOpen: false
-    property bool hoverSwitchEnabled: false
     property date visibleMonth: new Date(now.getFullYear(), now.getMonth(), 1)
     property bool pointerReady: false
 
@@ -137,9 +136,6 @@ Item {
             onEntered: {
                 root.pointerReady = false;
                 pointerDelay.restart();
-
-                if (root.hoverSwitchEnabled && !root.popupOpen)
-                    root.openPopup();
             }
 
             onExited: {
@@ -186,9 +182,9 @@ Item {
         Components.AnimatedPopupState {
             id: popupState
             targetVisible: root.popupOpen
-            openDuration: 350
-            closeDuration: 270
-            closeSafetyDelay: 340
+            openDuration: motion.popupOpenDuration
+            closeDuration: motion.popupCloseDuration
+            closeSafetyDelay: motion.popupCloseDuration + 55
         }
 
         Item {

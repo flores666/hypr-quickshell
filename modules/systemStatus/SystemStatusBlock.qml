@@ -12,7 +12,6 @@ Item {
     property real panelHeight: 38
     readonly property real popupTopY: panelHeight
     property bool popupOpen: false
-    property bool hoverSwitchEnabled: false
     property bool pointerReady: false
 
     signal popupOpened()
@@ -158,9 +157,6 @@ Item {
             onEntered: {
                 root.pointerReady = false;
                 pointerDelay.restart();
-
-                if (root.hoverSwitchEnabled && !root.popupOpen)
-                    root.openPopup();
             }
 
             onExited: {

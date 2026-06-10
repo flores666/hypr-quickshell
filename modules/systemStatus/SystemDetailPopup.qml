@@ -86,9 +86,9 @@ PopupWindow {
     Components.AnimatedPopupState {
         id: popupState
         targetVisible: root.targetVisible
-        openDuration: 260
-        closeDuration: 190
-        closeSafetyDelay: 240
+        openDuration: motion.popupOpenDuration
+        closeDuration: motion.popupCloseDuration
+        closeSafetyDelay: motion.popupCloseDuration + 55
     }
 
     Components.AnimationTokens { id: motion }

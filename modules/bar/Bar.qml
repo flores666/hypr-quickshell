@@ -110,7 +110,6 @@ PanelWindow {
             hostWidth: root.width
             panelHeight: root.implicitHeight
             popupBaseX: barContent.x + x
-            hoverSwitchEnabled: root.anyPopupOpen()
             onPopupOpened: {
                 mediaPlayer.closePopup();
                 keyboardLayout.closePopup();
@@ -130,7 +129,6 @@ PanelWindow {
             hostWidth: root.width
             panelHeight: root.implicitHeight
             popupBaseX: barContent.x + x
-            hoverSwitchEnabled: root.anyPopupOpen()
             onPopupOpened: {
                 calendar.closePopup();
                 keyboardLayout.closePopup();
@@ -150,7 +148,6 @@ PanelWindow {
             hostWidth: root.width
             panelHeight: root.implicitHeight
             popupBaseX: barContent.x + x
-            hoverSwitchEnabled: root.anyPopupOpen()
             onPopupOpened: {
                 calendar.closePopup();
                 mediaPlayer.closePopup();
@@ -169,7 +166,6 @@ PanelWindow {
             hostWidth: root.width
             panelHeight: root.implicitHeight
             popupBaseX: barContent.x + x
-            hoverSwitchEnabled: root.anyPopupOpen()
             onPopupOpened: {
                 calendar.closePopup();
                 mediaPlayer.closePopup();

@@ -11,7 +11,6 @@ Item {
     readonly property real popupTopY: panelHeight
 
     property bool popupOpen: false
-    property bool hoverSwitchEnabled: false
     property var activePlayer: null
     property string lastActivePlayerKey: ""
     property bool isDragging: false
@@ -462,9 +461,7 @@ Item {
         durationValue: root.hasDuration() ? root.currentLength : 0
         accentStrongColor: root.accentStrongColor
         mutedTextColor: root.mutedTextColor
-        hoverSwitchEnabled: root.hoverSwitchEnabled
         onClicked: root.togglePopup()
-        onHoveredForPopup: root.openPopup()
     }
 
     MediaOutsideClickLayer {

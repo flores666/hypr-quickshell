@@ -15,10 +15,8 @@ Rectangle {
     property color accentStrongColor: "#e8eef6"
     property color mutedTextColor: "#bcc5d0"
     property bool pointerReady: false
-    property bool hoverSwitchEnabled: false
 
     signal clicked()
-    signal hoveredForPopup()
 
     implicitWidth: playerActive ? 270 : 0
     implicitHeight: 24
@@ -101,9 +99,6 @@ Rectangle {
         onEntered: {
             root.pointerReady = false;
             pointerDelay.restart();
-
-            if (root.hoverSwitchEnabled && root.playerActive && !root.popupOpen)
-                root.hoveredForPopup();
         }
 
         onExited: {
