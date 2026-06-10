@@ -19,6 +19,22 @@ PopupWindow {
     readonly property real popupBottomMargin: 2
     readonly property real maxPopupHeight: Math.max(180, Screen.height - popupY - popupBottomMargin)
     readonly property real contentPopupHeight: contentColumn.implicitHeight + 32
+    readonly property real targetPopupHeight: Math.min(maxPopupHeight, Math.max(260, contentPopupHeight))
+    readonly property real audioDeviceRowHeight: 28
+    readonly property real audioDeviceRowSpacing: 5
+    readonly property real audioDevicePeekRatio: 0.5
+    property real animatedPopupHeight: targetPopupHeight
+
+    function audioDevicesViewportHeight() {
+        var count = Services.SystemStatus.audioDevices.length;
+        if (count <= 0)
+            return 0;
+        if (count === 1)
+            return audioDeviceRowHeight;
+        if (count === 2)
+            return audioDeviceRowHeight * 2 + audioDeviceRowSpacing;
+        return audioDeviceRowHeight * 2 + audioDeviceRowSpacing * 2 + audioDeviceRowHeight * audioDevicePeekRatio;
+    }
 
     function clamp01(value) {
         return Math.max(0, Math.min(1, value));
@@ -112,10 +128,21 @@ PopupWindow {
     anchor.rect.x: popupX
     anchor.rect.y: popupY
     implicitWidth: 398
-    implicitHeight: Math.min(maxPopupHeight, Math.max(260, contentPopupHeight))
+    implicitHeight: animatedPopupHeight
     visible: popupState.renderVisible
     color: "transparent"
     surfaceFormat.opaque: false
+
+    onTargetPopupHeightChanged: {
+        animatedPopupHeight = targetPopupHeight;
+    }
+
+    Behavior on animatedPopupHeight {
+        NumberAnimation {
+            duration: 260
+            easing.type: Easing.OutCubic
+        }
+    }
 
     Shortcut {
         sequence: "Esc"
@@ -142,7 +169,9 @@ PopupWindow {
         closeSafetyDelay: 340
     }
 
-    Components.AnimationTokens { id: motion }
+    Components.AnimationTokens {
+        id: motion
+    }
 
     Item {
         id: popupMotionLayer
@@ -172,7 +201,10 @@ PopupWindow {
             antialiasing: true
 
             Behavior on color {
-                ColorAnimation { duration: popupMouse.pressed ? motion.pressDuration : motion.releaseDuration; easing.type: Easing.OutCubic }
+                ColorAnimation {
+                    duration: popupMouse.pressed ? motion.pressDuration : motion.releaseDuration
+                    easing.type: Easing.OutCubic
+                }
             }
         }
 
@@ -182,7 +214,9 @@ PopupWindow {
             acceptedButtons: Qt.LeftButton
             hoverEnabled: true
             cursorShape: Qt.ArrowCursor
-            onClicked: function(mouse) { mouse.accepted = true; }
+            onClicked: function (mouse) {
+                mouse.accepted = true;
+            }
         }
 
         Flickable {
@@ -208,9 +242,21 @@ PopupWindow {
 
                     Repeater {
                         model: [
-                            { action: "poweroff", icon: "power", label: "Выключение" },
-                            { action: "reboot", icon: "reboot", label: "Перезагрузка" },
-                            { action: "logout", icon: "logout", label: "Выход" }
+                            {
+                                action: "poweroff",
+                                icon: "power",
+                                label: "Выключение"
+                            },
+                            {
+                                action: "reboot",
+                                icon: "reboot",
+                                label: "Перезагрузка"
+                            },
+                            {
+                                action: "logout",
+                                icon: "logout",
+                                label: "Выход"
+                            }
                         ]
 
                         delegate: Rectangle {
@@ -223,7 +269,12 @@ PopupWindow {
                             border.width: 0
                             antialiasing: true
 
-                            Behavior on color { ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic } }
+                            Behavior on color {
+                                ColorAnimation {
+                                    duration: motion.hoverDuration
+                                    easing.type: Easing.OutCubic
+                                }
+                            }
 
                             SystemIcon {
                                 anchors.centerIn: parent
@@ -247,6 +298,13 @@ PopupWindow {
                     height: wirelessColumn.implicitHeight + 22
                     radius: 16
                     color: "#1019232f"
+
+                    Behavior on height {
+                        NumberAnimation {
+                            duration: 240
+                            easing.type: Easing.OutCubic
+                        }
+                    }
                     border.width: 0
                     antialiasing: true
 
@@ -271,14 +329,27 @@ PopupWindow {
                                 border.width: 0
                                 antialiasing: true
 
-                                Behavior on color { ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic } }
-                                Behavior on opacity { NumberAnimation { duration: 170; easing.type: Easing.OutCubic } }
+                                Behavior on color {
+                                    ColorAnimation {
+                                        duration: motion.hoverDuration
+                                        easing.type: Easing.OutCubic
+                                    }
+                                }
+                                Behavior on opacity {
+                                    NumberAnimation {
+                                        duration: 170
+                                        easing.type: Easing.OutCubic
+                                    }
+                                }
 
                                 RowLayout {
                                     anchors.centerIn: parent
                                     spacing: 7
 
-                                    SystemIcon { source: root.wifiIcon(); iconOpacity: 0.95 }
+                                    SystemIcon {
+                                        source: root.wifiIcon()
+                                        iconOpacity: 0.95
+                                    }
 
                                     Components.StyledText {
                                         text: "Wi-Fi"
@@ -294,7 +365,7 @@ PopupWindow {
                                     hoverEnabled: true
                                     acceptedButtons: Qt.LeftButton | Qt.RightButton
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: function(mouse) {
+                                    onClicked: function (mouse) {
                                         if (mouse.button === Qt.RightButton) {
                                             root.detailMode = root.detailMode === "wifi" ? "" : "wifi";
                                             if (root.detailMode === "wifi")
@@ -318,14 +389,27 @@ PopupWindow {
                                 border.width: 0
                                 antialiasing: true
 
-                                Behavior on color { ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic } }
-                                Behavior on opacity { NumberAnimation { duration: 170; easing.type: Easing.OutCubic } }
+                                Behavior on color {
+                                    ColorAnimation {
+                                        duration: motion.hoverDuration
+                                        easing.type: Easing.OutCubic
+                                    }
+                                }
+                                Behavior on opacity {
+                                    NumberAnimation {
+                                        duration: 170
+                                        easing.type: Easing.OutCubic
+                                    }
+                                }
 
                                 RowLayout {
                                     anchors.centerIn: parent
                                     spacing: 7
 
-                                    SystemIcon { source: root.rowIcon("ethernet"); iconOpacity: 0.95 }
+                                    SystemIcon {
+                                        source: root.rowIcon("ethernet")
+                                        iconOpacity: 0.95
+                                    }
 
                                     Components.StyledText {
                                         text: "Ethernet"
@@ -358,14 +442,27 @@ PopupWindow {
                                 border.width: 0
                                 antialiasing: true
 
-                                Behavior on color { ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic } }
-                                Behavior on opacity { NumberAnimation { duration: 170; easing.type: Easing.OutCubic } }
+                                Behavior on color {
+                                    ColorAnimation {
+                                        duration: motion.hoverDuration
+                                        easing.type: Easing.OutCubic
+                                    }
+                                }
+                                Behavior on opacity {
+                                    NumberAnimation {
+                                        duration: 170
+                                        easing.type: Easing.OutCubic
+                                    }
+                                }
 
                                 RowLayout {
                                     anchors.centerIn: parent
                                     spacing: 7
 
-                                    SystemIcon { source: root.rowIcon("bluetooth"); iconOpacity: 0.95 }
+                                    SystemIcon {
+                                        source: root.rowIcon("bluetooth")
+                                        iconOpacity: 0.95
+                                    }
 
                                     Components.StyledText {
                                         text: "Bluetooth"
@@ -381,7 +478,7 @@ PopupWindow {
                                     hoverEnabled: true
                                     acceptedButtons: Qt.LeftButton | Qt.RightButton
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: function(mouse) {
+                                    onClicked: function (mouse) {
                                         if (mouse.button === Qt.RightButton) {
                                             root.detailMode = root.detailMode === "bluetooth" ? "" : "bluetooth";
                                             if (root.detailMode === "bluetooth")
@@ -395,7 +492,6 @@ PopupWindow {
                                 }
                             }
                         }
-
                     }
                 }
 
@@ -404,6 +500,13 @@ PopupWindow {
                     height: audioContentColumn.implicitHeight + 24
                     radius: 16
                     color: "#1019232f"
+
+                    Behavior on height {
+                        NumberAnimation {
+                            duration: 260
+                            easing.type: Easing.OutCubic
+                        }
+                    }
                     border.width: 0
                     antialiasing: true
                     clip: true
@@ -419,7 +522,10 @@ PopupWindow {
                             height: 26
                             spacing: 10
 
-                            SystemIcon { source: root.volumeIcon(); iconOpacity: 0.95 }
+                            SystemIcon {
+                                source: root.volumeIcon()
+                                iconOpacity: 0.95
+                            }
 
                             Components.StyledText {
                                 Layout.fillWidth: true
@@ -446,8 +552,18 @@ PopupWindow {
                                 antialiasing: true
                                 opacity: Services.SystemStatus.hasAudio ? 1.0 : 0.45
 
-                                Behavior on color { ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic } }
-                                Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+                                Behavior on color {
+                                    ColorAnimation {
+                                        duration: motion.hoverDuration
+                                        easing.type: Easing.OutCubic
+                                    }
+                                }
+                                Behavior on opacity {
+                                    NumberAnimation {
+                                        duration: 160
+                                        easing.type: Easing.OutCubic
+                                    }
+                                }
 
                                 Components.StyledText {
                                     anchors.centerIn: parent
@@ -474,16 +590,24 @@ PopupWindow {
                             minValue: 0
                             maxValue: 100
                             opacity: Services.SystemStatus.hasAudio ? 1.0 : 0.38
-                            onValueCommitted: function(value) {
+                            onValueCommitted: function (value) {
                                 if (Services.SystemStatus.hasAudio)
                                     Services.SystemStatus.setVolume(value);
                             }
                         }
 
                         Flickable {
+                            id: appVolumeFlick
                             width: parent.width
                             height: Services.SystemStatus.sinkInputs.length === 0 ? 24 : Math.min(76, Services.SystemStatus.sinkInputs.length * 36)
                             clip: true
+
+                            Behavior on height {
+                                NumberAnimation {
+                                    duration: 220
+                                    easing.type: Easing.OutCubic
+                                }
+                            }
                             contentWidth: width
                             contentHeight: appVolumeColumn.implicitHeight
                             boundsBehavior: Flickable.StopAtBounds
@@ -543,7 +667,7 @@ PopupWindow {
                                             value: modelData.volume || 0
                                             minValue: 0
                                             maxValue: 100
-                                            onValueCommitted: function(value) {
+                                            onValueCommitted: function (value) {
                                                 Services.SystemStatus.setAppVolume(modelData.index, value);
                                             }
                                         }
@@ -553,10 +677,18 @@ PopupWindow {
                         }
 
                         Flickable {
+                            id: outputDevicesFlick
                             width: parent.width
-                            height: Services.SystemStatus.audioDevices.length === 0 ? 0 : Math.min(66, Math.max(28, Services.SystemStatus.audioDevices.length * 33))
-                            visible: Services.SystemStatus.audioDevices.length > 0
+                            height: root.audioDevicesViewportHeight()
+                            visible: Services.SystemStatus.audioDevices.length > 0 || height > 1
                             clip: true
+
+                            Behavior on height {
+                                NumberAnimation {
+                                    duration: 240
+                                    easing.type: Easing.OutCubic
+                                }
+                            }
                             contentWidth: width
                             contentHeight: outputColumn.implicitHeight
                             boundsBehavior: Flickable.StopAtBounds
@@ -565,7 +697,7 @@ PopupWindow {
                             Column {
                                 id: outputColumn
                                 width: parent.width
-                                spacing: 5
+                                spacing: root.audioDeviceRowSpacing
 
                                 Repeater {
                                     model: Services.SystemStatus.audioDevices
@@ -573,13 +705,18 @@ PopupWindow {
                                         required property var modelData
 
                                         width: parent.width
-                                        height: 28
+                                        height: root.audioDeviceRowHeight
                                         radius: 12
                                         color: deviceMouse.pressed ? "#22ffffff" : (deviceMouse.containsMouse ? "#14ffffff" : (modelData.active ? "#1cffffff" : "transparent"))
                                         border.width: 0
                                         antialiasing: true
 
-                                        Behavior on color { ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic } }
+                                        Behavior on color {
+                                            ColorAnimation {
+                                                duration: motion.hoverDuration
+                                                easing.type: Easing.OutCubic
+                                            }
+                                        }
 
                                         RowLayout {
                                             anchors.fill: parent
@@ -638,7 +775,10 @@ PopupWindow {
                             height: 24
                             spacing: 8
 
-                            SystemIcon { source: root.rowIcon("bell"); iconOpacity: 0.88 }
+                            SystemIcon {
+                                source: root.rowIcon("bell")
+                                iconOpacity: 0.88
+                            }
 
                             Components.StyledText {
                                 Layout.fillWidth: true
@@ -692,7 +832,12 @@ PopupWindow {
                                         border.width: 0
                                         antialiasing: true
 
-                                        Behavior on color { ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic } }
+                                        Behavior on color {
+                                            ColorAnimation {
+                                                duration: motion.hoverDuration
+                                                easing.type: Easing.OutCubic
+                                            }
+                                        }
 
                                         Item {
                                             z: 1
@@ -812,9 +957,18 @@ PopupWindow {
                                                 border.width: 0
                                                 antialiasing: true
 
-                                                Behavior on color { ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic } }
+                                                Behavior on color {
+                                                    ColorAnimation {
+                                                        duration: motion.hoverDuration
+                                                        easing.type: Easing.OutCubic
+                                                    }
+                                                }
 
-                                                SystemIcon { anchors.centerIn: parent; source: root.rowIcon("x"); iconOpacity: 0.78 }
+                                                SystemIcon {
+                                                    anchors.centerIn: parent
+                                                    source: root.rowIcon("x")
+                                                    iconOpacity: 0.78
+                                                }
 
                                                 MouseArea {
                                                     id: closeNotificationMouse
@@ -866,7 +1020,12 @@ PopupWindow {
                                 border.width: 0
                                 antialiasing: true
 
-                                Behavior on color { ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic } }
+                                Behavior on color {
+                                    ColorAnimation {
+                                        duration: motion.hoverDuration
+                                        easing.type: Easing.OutCubic
+                                    }
+                                }
 
                                 Components.StyledText {
                                     anchors.centerIn: parent
@@ -893,7 +1052,12 @@ PopupWindow {
                                 border.width: 0
                                 antialiasing: true
 
-                                Behavior on color { ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic } }
+                                Behavior on color {
+                                    ColorAnimation {
+                                        duration: motion.hoverDuration
+                                        easing.type: Easing.OutCubic
+                                    }
+                                }
 
                                 Components.StyledText {
                                     anchors.centerIn: parent
@@ -925,8 +1089,18 @@ PopupWindow {
                     antialiasing: true
                     opacity: Services.SystemStatus.hasBattery ? 1.0 : 0.0
 
-                    Behavior on opacity { NumberAnimation { duration: 190; easing.type: Easing.OutCubic } }
-                    Behavior on height { NumberAnimation { duration: 190; easing.type: Easing.OutCubic } }
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: 190
+                            easing.type: Easing.OutCubic
+                        }
+                    }
+                    Behavior on height {
+                        NumberAnimation {
+                            duration: 190
+                            easing.type: Easing.OutCubic
+                        }
+                    }
 
                     RowLayout {
                         anchors.fill: parent
@@ -966,8 +1140,18 @@ PopupWindow {
                                 border.width: 0
                                 antialiasing: true
 
-                                Behavior on width { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
-                                Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                                Behavior on width {
+                                    NumberAnimation {
+                                        duration: 260
+                                        easing.type: Easing.OutCubic
+                                    }
+                                }
+                                Behavior on opacity {
+                                    NumberAnimation {
+                                        duration: 180
+                                        easing.type: Easing.OutCubic
+                                    }
+                                }
                             }
                         }
                     }
@@ -983,6 +1167,4 @@ PopupWindow {
         popupX: Math.max(6, root.popupX - implicitWidth - 8)
         popupY: root.popupY + 64
     }
-
-
 }
