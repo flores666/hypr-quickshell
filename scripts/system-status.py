@@ -800,6 +800,10 @@ def action(args):
         return 0
     cmd = args[0]
 
+    if cmd == "status-audio":
+        print(json.dumps(audio_status(), ensure_ascii=False, separators=(",", ":")))
+        return 0
+
     if cmd == "resolve-icon":
         icon_name = args[1] if len(args) > 1 else ""
         app_name = args[2] if len(args) > 2 else ""

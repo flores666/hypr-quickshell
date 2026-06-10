@@ -12,6 +12,9 @@ Item {
     property bool refreshQueued: false
     property bool actionRunning: false
     property var pendingActionArgs: []
+    property var runningActionArgs: []
+    property bool audioRefreshQueued: false
+    property bool audioReady: false
 
     property string distroName: "Linux"
     property string distroInitial: "L"
@@ -234,6 +237,47 @@ Item {
         refreshProc.running = true;
     }
 
+    function requestAudioRefresh() {
+        if (audioRefreshProc.running) {
+            audioRefreshQueued = true;
+            return;
+        }
+
+        audioRefreshProc.running = true;
+    }
+
+    function scheduleAudioRefresh() {
+        audioEventDebounce.restart();
+    }
+
+    function isAudioEventLine(line) {
+        var text = String(line || "").toLowerCase();
+        if (text.indexOf("event") === -1)
+            return false;
+
+        return text.indexOf("sink-input") !== -1
+            || text.indexOf("sink #") !== -1
+            || text.indexOf("sink ") !== -1
+            || text.indexOf("server") !== -1
+            || text.indexOf("card") !== -1;
+    }
+
+    function handleAudioWatchLine(line) {
+        if (isAudioEventLine(line))
+            scheduleAudioRefresh();
+    }
+
+    function isAudioAction(args) {
+        if (!args || args.length === 0)
+            return false;
+
+        var cmd = String(args[0] || "");
+        return cmd === "set-volume"
+            || cmd === "toggle-mute"
+            || cmd === "set-app-volume"
+            || cmd === "set-sink";
+    }
+
     function sinkLabelByName(name, devices) {
         var list = devices || audioDevices || [];
         var target = String(name || "");
@@ -279,35 +323,9 @@ Item {
             audioDevice = targetLabel;
     }
 
-    function applyStatus(data) {
-        var distro = data.distro || {};
-        distroName = distro.name || "Linux";
-        distroInitial = String(distro.initial || "L").substring(0, 1).toUpperCase();
-
-        var n = data.network || {};
-        networkAvailable = !!n.available;
-        hasWifi = !!n.hasWifi;
-        wifiEnabled = !!n.wifiEnabled;
-        hasEthernet = !!n.hasEthernet;
-        ethernetActive = !!n.ethernetActive;
-        ethernetAvailable = !!n.ethernetAvailable;
-        ethernetConnection = n.ethernetConnection || "";
-        ethernetDevice = n.ethernetDevice || "";
-        ethernetIp = n.ethernetIp || "";
-        networkType = n.type || "none";
-        networkState = n.state || "offline";
-        networkConnection = n.connection || "";
-        networkDevice = n.device || "";
-        wifiSsid = n.ssid || "";
-        wifiSignal = Number(n.signal || 0);
-        wifiNetworks = n.networks || [];
-
-        var bt = data.bluetooth || {};
-        hasBluetooth = !!bt.hasBluetooth;
-        bluetoothEnabled = !!bt.enabled;
-        bluetoothDevices = bt.devices || [];
-
-        var a = data.audio || {};
+    function applyAudioStatus(a) {
+        a = a || {};
+        audioReady = true;
         hasAudio = !!a.hasAudio;
         volume = Number(a.volume || 0);
         muted = !!a.muted;
@@ -337,6 +355,38 @@ Item {
         }
 
         sinkInputs = a.sinkInputs || [];
+    }
+
+    function applyStatus(data) {
+        var distro = data.distro || {};
+        distroName = distro.name || "Linux";
+        distroInitial = String(distro.initial || "L").substring(0, 1).toUpperCase();
+
+        var n = data.network || {};
+        networkAvailable = !!n.available;
+        hasWifi = !!n.hasWifi;
+        wifiEnabled = !!n.wifiEnabled;
+        hasEthernet = !!n.hasEthernet;
+        ethernetActive = !!n.ethernetActive;
+        ethernetAvailable = !!n.ethernetAvailable;
+        ethernetConnection = n.ethernetConnection || "";
+        ethernetDevice = n.ethernetDevice || "";
+        ethernetIp = n.ethernetIp || "";
+        networkType = n.type || "none";
+        networkState = n.state || "offline";
+        networkConnection = n.connection || "";
+        networkDevice = n.device || "";
+        wifiSsid = n.ssid || "";
+        wifiSignal = Number(n.signal || 0);
+        wifiNetworks = n.networks || [];
+
+        var bt = data.bluetooth || {};
+        hasBluetooth = !!bt.hasBluetooth;
+        bluetoothEnabled = !!bt.enabled;
+        bluetoothDevices = bt.devices || [];
+
+        if (!audioReady || !audioWatchProcess.running)
+            applyAudioStatus(data.audio || {});
 
         var b = data.battery || {};
         hasBattery = !!b.hasBattery;
@@ -363,14 +413,24 @@ Item {
         }
     }
 
+    function updateAudioFromJson(text) {
+        try {
+            var data = JSON.parse(text || "{}");
+            applyAudioStatus(data.audio || data || {});
+        } catch (e) {
+            console.log("audio status parse error", e, text);
+        }
+    }
+
     function runAction(args) {
         if (actionProc.running) {
             pendingActionArgs = args || [];
             return;
         }
         pendingActionArgs = [];
+        runningActionArgs = args || [];
         actionRunning = true;
-        actionProc.command = ["python3", scriptPath].concat(args || []);
+        actionProc.command = ["python3", scriptPath].concat(runningActionArgs);
         actionProc.running = true;
     }
 
@@ -488,13 +548,40 @@ Item {
         onTriggered: {
             pendingSinkName = "";
             pendingSinkLabel = "";
-            requestRefresh();
+            scheduleAudioRefresh();
         }
     }
 
     Component.onCompleted: {
         requestRefresh();
+        audioWatchProcess.running = true;
+        requestAudioRefresh();
         notificationWatchProcess.running = true;
+    }
+
+    Timer {
+        id: audioEventDebounce
+        interval: 80
+        repeat: false
+        onTriggered: root.requestAudioRefresh()
+    }
+
+    Process {
+        id: audioWatchProcess
+        running: false
+        command: [
+            "sh",
+            "-c",
+            "command -v pactl >/dev/null 2>&1 && exec pactl subscribe"
+        ]
+
+        stdout: SplitParser {
+            onRead: function(line) {
+                root.handleAudioWatchLine(line);
+            }
+        }
+
+        onExited: running = false
     }
 
     Process {
@@ -563,6 +650,23 @@ Item {
     }
 
     Process {
+        id: audioRefreshProc
+        command: ["python3", root.scriptPath, "status-audio"]
+
+        stdout: StdioCollector {
+            onStreamFinished: root.updateAudioFromJson(this.text)
+        }
+
+        onExited: {
+            running = false;
+            if (root.audioRefreshQueued) {
+                root.audioRefreshQueued = false;
+                root.requestAudioRefresh();
+            }
+        }
+    }
+
+    Process {
         id: actionProc
 
         onExited: {
@@ -573,8 +677,15 @@ Item {
                 root.runAction(nextArgs);
                 return;
             }
+
+            var wasAudioAction = root.isAudioAction(root.runningActionArgs);
+            root.runningActionArgs = [];
             root.actionRunning = false;
-            root.requestRefresh();
+
+            if (wasAudioAction)
+                root.scheduleAudioRefresh();
+            else
+                root.requestRefresh();
         }
     }
 }
