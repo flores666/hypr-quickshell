@@ -295,9 +295,11 @@ PopupWindow {
                                     acceptedButtons: Qt.LeftButton | Qt.RightButton
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: function(mouse) {
-                                        if (mouse.button === Qt.RightButton)
+                                        if (mouse.button === Qt.RightButton) {
                                             root.detailMode = root.detailMode === "wifi" ? "" : "wifi";
-                                        else {
+                                            if (root.detailMode === "wifi")
+                                                Services.SystemStatus.requestNetworkRefresh();
+                                        } else {
                                             root.detailMode = "";
                                             Services.SystemStatus.toggleWifi();
                                         }
@@ -338,7 +340,11 @@ PopupWindow {
                                     anchors.fill: parent
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: root.detailMode = root.detailMode === "ethernet" ? "" : "ethernet"
+                                    onClicked: {
+                                        root.detailMode = root.detailMode === "ethernet" ? "" : "ethernet";
+                                        if (root.detailMode === "ethernet")
+                                            Services.SystemStatus.requestNetworkRefresh();
+                                    }
                                 }
                             }
 
@@ -376,9 +382,11 @@ PopupWindow {
                                     acceptedButtons: Qt.LeftButton | Qt.RightButton
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: function(mouse) {
-                                        if (mouse.button === Qt.RightButton)
+                                        if (mouse.button === Qt.RightButton) {
                                             root.detailMode = root.detailMode === "bluetooth" ? "" : "bluetooth";
-                                        else {
+                                            if (root.detailMode === "bluetooth")
+                                                Services.SystemStatus.requestBluetoothRefresh();
+                                        } else {
                                             root.detailMode = "";
                                             Services.SystemStatus.toggleBluetooth();
                                         }

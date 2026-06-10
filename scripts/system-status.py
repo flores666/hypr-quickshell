@@ -800,8 +800,28 @@ def action(args):
         return 0
     cmd = args[0]
 
+    if cmd == "status-distro":
+        print(json.dumps(distro_status(), ensure_ascii=False, separators=(",", ":")))
+        return 0
+
+    if cmd == "status-network":
+        print(json.dumps(network_status(), ensure_ascii=False, separators=(",", ":")))
+        return 0
+
     if cmd == "status-audio":
         print(json.dumps(audio_status(), ensure_ascii=False, separators=(",", ":")))
+        return 0
+
+    if cmd == "status-battery":
+        print(json.dumps(battery_status(), ensure_ascii=False, separators=(",", ":")))
+        return 0
+
+    if cmd == "status-bluetooth":
+        print(json.dumps(bluetooth_status(), ensure_ascii=False, separators=(",", ":")))
+        return 0
+
+    if cmd == "status-notifications":
+        print(json.dumps(notifications_status(), ensure_ascii=False, separators=(",", ":")))
         return 0
 
     if cmd == "resolve-icon":

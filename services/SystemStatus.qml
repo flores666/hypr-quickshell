@@ -13,7 +13,12 @@ Item {
     property bool actionRunning: false
     property var pendingActionArgs: []
     property var runningActionArgs: []
+    property bool distroRefreshQueued: false
+    property bool networkRefreshQueued: false
+    property bool bluetoothRefreshQueued: false
     property bool audioRefreshQueued: false
+    property bool batteryRefreshQueued: false
+    property bool notificationsRefreshQueued: false
     property bool audioReady: false
 
     property string distroName: "Linux"
@@ -206,6 +211,7 @@ Item {
             notificationCaptureActive = true;
             notificationCaptureDone = false;
             notificationStringValues = [];
+            scheduleNotificationsRefresh();
             return;
         }
 
@@ -230,11 +236,36 @@ Item {
     }
 
     function requestRefresh() {
-        if (refreshProc.running) {
-            refreshQueued = true;
+        requestDistroRefresh();
+        requestNetworkRefresh();
+        requestAudioRefresh();
+        requestBatteryRefresh();
+        requestBluetoothRefresh();
+        requestNotificationsRefresh();
+    }
+
+    function requestDistroRefresh() {
+        if (distroRefreshProc.running) {
+            distroRefreshQueued = true;
             return;
         }
-        refreshProc.running = true;
+        distroRefreshProc.running = true;
+    }
+
+    function requestNetworkRefresh() {
+        if (networkRefreshProc.running) {
+            networkRefreshQueued = true;
+            return;
+        }
+        networkRefreshProc.running = true;
+    }
+
+    function requestBluetoothRefresh() {
+        if (bluetoothRefreshProc.running) {
+            bluetoothRefreshQueued = true;
+            return;
+        }
+        bluetoothRefreshProc.running = true;
     }
 
     function requestAudioRefresh() {
@@ -242,12 +273,43 @@ Item {
             audioRefreshQueued = true;
             return;
         }
-
         audioRefreshProc.running = true;
+    }
+
+    function requestBatteryRefresh() {
+        if (batteryRefreshProc.running) {
+            batteryRefreshQueued = true;
+            return;
+        }
+        batteryRefreshProc.running = true;
+    }
+
+    function requestNotificationsRefresh() {
+        if (notificationsRefreshProc.running) {
+            notificationsRefreshQueued = true;
+            return;
+        }
+        notificationsRefreshProc.running = true;
+    }
+
+    function scheduleNetworkRefresh() {
+        networkEventDebounce.restart();
+    }
+
+    function scheduleBluetoothRefresh() {
+        bluetoothEventDebounce.restart();
     }
 
     function scheduleAudioRefresh() {
         audioEventDebounce.restart();
+    }
+
+    function scheduleBatteryRefresh() {
+        batteryEventDebounce.restart();
+    }
+
+    function scheduleNotificationsRefresh() {
+        notificationsEventDebounce.restart();
     }
 
     function isAudioEventLine(line) {
@@ -267,6 +329,22 @@ Item {
             scheduleAudioRefresh();
     }
 
+    function handleNetworkWatchLine(line) {
+        if (String(line || "").trim().length > 0)
+            scheduleNetworkRefresh();
+    }
+
+    function handleBluetoothWatchLine(line) {
+        if (String(line || "").trim().length > 0)
+            scheduleBluetoothRefresh();
+    }
+
+    function handleBatteryWatchLine(line) {
+        var text = String(line || "").toLowerCase();
+        if (text.indexOf("power_supply") !== -1 || text.indexOf("battery") !== -1 || text.indexOf("mains") !== -1)
+            scheduleBatteryRefresh();
+    }
+
     function isAudioAction(args) {
         if (!args || args.length === 0)
             return false;
@@ -276,6 +354,36 @@ Item {
             || cmd === "toggle-mute"
             || cmd === "set-app-volume"
             || cmd === "set-sink";
+    }
+
+    function isNetworkAction(args) {
+        if (!args || args.length === 0)
+            return false;
+
+        var cmd = String(args[0] || "");
+        return cmd === "toggle-wifi"
+            || cmd === "connect-wifi";
+    }
+
+    function isBluetoothAction(args) {
+        if (!args || args.length === 0)
+            return false;
+
+        var cmd = String(args[0] || "");
+        return cmd === "toggle-bluetooth"
+            || cmd === "connect-bluetooth"
+            || cmd === "disconnect-bluetooth";
+    }
+
+    function isNotificationsAction(args) {
+        if (!args || args.length === 0)
+            return false;
+
+        var cmd = String(args[0] || "");
+        return cmd === "notifications-clear"
+            || cmd === "notifications-toggle-silent"
+            || cmd === "notification-close"
+            || cmd === "notification-open";
     }
 
     function sinkLabelByName(name, devices) {
@@ -323,6 +431,62 @@ Item {
             audioDevice = targetLabel;
     }
 
+    function applyDistroStatus(distro) {
+        distro = distro || {};
+        distroName = distro.name || "Linux";
+        distroInitial = String(distro.initial || "L").substring(0, 1).toUpperCase();
+        ready = true;
+    }
+
+    function applyNetworkStatus(n) {
+        n = n || {};
+        networkAvailable = !!n.available;
+        hasWifi = !!n.hasWifi;
+        wifiEnabled = !!n.wifiEnabled;
+        hasEthernet = !!n.hasEthernet;
+        ethernetActive = !!n.ethernetActive;
+        ethernetAvailable = !!n.ethernetAvailable;
+        ethernetConnection = n.ethernetConnection || "";
+        ethernetDevice = n.ethernetDevice || "";
+        ethernetIp = n.ethernetIp || "";
+        networkType = n.type || "none";
+        networkState = n.state || "offline";
+        networkConnection = n.connection || "";
+        networkDevice = n.device || "";
+        wifiSsid = n.ssid || "";
+        wifiSignal = Number(n.signal || 0);
+        wifiNetworks = n.networks || [];
+        ready = true;
+    }
+
+    function applyBluetoothStatus(bt) {
+        bt = bt || {};
+        hasBluetooth = !!bt.hasBluetooth;
+        bluetoothEnabled = !!bt.enabled;
+        bluetoothDevices = bt.devices || [];
+        ready = true;
+    }
+
+    function applyBatteryStatus(b) {
+        b = b || {};
+        hasBattery = !!b.hasBattery;
+        batteryPercent = Number(b.percent || 0);
+        batteryStatus = b.status || "absent";
+        batteryCharging = !!b.charging;
+        acOnline = !!b.acOnline;
+        batteryTime = b.time || "";
+        ready = true;
+    }
+
+    function applyNotificationsStatus(notificationsData) {
+        notificationsData = notificationsData || {};
+        notificationsAvailable = !!notificationsData.available;
+        notificationsSilent = !!notificationsData.silent;
+        historyNotifications = notificationsData.items || [];
+        mergeNotifications(Number(notificationsData.count || 0));
+        ready = true;
+    }
+
     function applyAudioStatus(a) {
         a = a || {};
         audioReady = true;
@@ -355,53 +519,17 @@ Item {
         }
 
         sinkInputs = a.sinkInputs || [];
+        ready = true;
     }
 
     function applyStatus(data) {
-        var distro = data.distro || {};
-        distroName = distro.name || "Linux";
-        distroInitial = String(distro.initial || "L").substring(0, 1).toUpperCase();
-
-        var n = data.network || {};
-        networkAvailable = !!n.available;
-        hasWifi = !!n.hasWifi;
-        wifiEnabled = !!n.wifiEnabled;
-        hasEthernet = !!n.hasEthernet;
-        ethernetActive = !!n.ethernetActive;
-        ethernetAvailable = !!n.ethernetAvailable;
-        ethernetConnection = n.ethernetConnection || "";
-        ethernetDevice = n.ethernetDevice || "";
-        ethernetIp = n.ethernetIp || "";
-        networkType = n.type || "none";
-        networkState = n.state || "offline";
-        networkConnection = n.connection || "";
-        networkDevice = n.device || "";
-        wifiSsid = n.ssid || "";
-        wifiSignal = Number(n.signal || 0);
-        wifiNetworks = n.networks || [];
-
-        var bt = data.bluetooth || {};
-        hasBluetooth = !!bt.hasBluetooth;
-        bluetoothEnabled = !!bt.enabled;
-        bluetoothDevices = bt.devices || [];
-
-        if (!audioReady || !audioWatchProcess.running)
-            applyAudioStatus(data.audio || {});
-
-        var b = data.battery || {};
-        hasBattery = !!b.hasBattery;
-        batteryPercent = Number(b.percent || 0);
-        batteryStatus = b.status || "absent";
-        batteryCharging = !!b.charging;
-        acOnline = !!b.acOnline;
-        batteryTime = b.time || "";
-
-        var notificationsData = data.notifications || {};
-        notificationsAvailable = !!notificationsData.available;
-        notificationsSilent = !!notificationsData.silent;
-        historyNotifications = notificationsData.items || [];
-        mergeNotifications(Number(notificationsData.count || 0));
-
+        data = data || {};
+        applyDistroStatus(data.distro || {});
+        applyNetworkStatus(data.network || {});
+        applyBluetoothStatus(data.bluetooth || {});
+        applyAudioStatus(data.audio || {});
+        applyBatteryStatus(data.battery || {});
+        applyNotificationsStatus(data.notifications || {});
         ready = true;
     }
 
@@ -413,12 +541,57 @@ Item {
         }
     }
 
+    function updateDistroFromJson(text) {
+        try {
+            var data = JSON.parse(text || "{}");
+            applyDistroStatus(data.distro || data || {});
+        } catch (e) {
+            console.log("distro status parse error", e, text);
+        }
+    }
+
+    function updateNetworkFromJson(text) {
+        try {
+            var data = JSON.parse(text || "{}");
+            applyNetworkStatus(data.network || data || {});
+        } catch (e) {
+            console.log("network status parse error", e, text);
+        }
+    }
+
+    function updateBluetoothFromJson(text) {
+        try {
+            var data = JSON.parse(text || "{}");
+            applyBluetoothStatus(data.bluetooth || data || {});
+        } catch (e) {
+            console.log("bluetooth status parse error", e, text);
+        }
+    }
+
     function updateAudioFromJson(text) {
         try {
             var data = JSON.parse(text || "{}");
             applyAudioStatus(data.audio || data || {});
         } catch (e) {
             console.log("audio status parse error", e, text);
+        }
+    }
+
+    function updateBatteryFromJson(text) {
+        try {
+            var data = JSON.parse(text || "{}");
+            applyBatteryStatus(data.battery || data || {});
+        } catch (e) {
+            console.log("battery status parse error", e, text);
+        }
+    }
+
+    function updateNotificationsFromJson(text) {
+        try {
+            var data = JSON.parse(text || "{}");
+            applyNotificationsStatus(data.notifications || data || {});
+        } catch (e) {
+            console.log("notifications status parse error", e, text);
         }
     }
 
@@ -554,9 +727,26 @@ Item {
 
     Component.onCompleted: {
         requestRefresh();
+        networkWatchProcess.running = true;
+        bluetoothWatchProcess.running = true;
         audioWatchProcess.running = true;
-        requestAudioRefresh();
+        batteryWatchProcess.running = true;
         notificationWatchProcess.running = true;
+        batterySlowRefresh.start();
+    }
+
+    Timer {
+        id: networkEventDebounce
+        interval: 140
+        repeat: false
+        onTriggered: root.requestNetworkRefresh()
+    }
+
+    Timer {
+        id: bluetoothEventDebounce
+        interval: 160
+        repeat: false
+        onTriggered: root.requestBluetoothRefresh()
     }
 
     Timer {
@@ -564,6 +754,64 @@ Item {
         interval: 80
         repeat: false
         onTriggered: root.requestAudioRefresh()
+    }
+
+    Timer {
+        id: batteryEventDebounce
+        interval: 450
+        repeat: false
+        onTriggered: root.requestBatteryRefresh()
+    }
+
+    Timer {
+        id: notificationsEventDebounce
+        interval: 160
+        repeat: false
+        onTriggered: root.requestNotificationsRefresh()
+    }
+
+    Timer {
+        id: batterySlowRefresh
+        interval: 60000
+        repeat: true
+        running: false
+        onTriggered: root.requestBatteryRefresh()
+    }
+
+    Process {
+        id: networkWatchProcess
+        running: false
+        command: [
+            "sh",
+            "-c",
+            "command -v nmcli >/dev/null 2>&1 && exec nmcli monitor"
+        ]
+
+        stdout: SplitParser {
+            onRead: function(line) {
+                root.handleNetworkWatchLine(line);
+            }
+        }
+
+        onExited: running = false
+    }
+
+    Process {
+        id: bluetoothWatchProcess
+        running: false
+        command: [
+            "sh",
+            "-c",
+            "command -v bluetoothctl >/dev/null 2>&1 && exec bluetoothctl monitor"
+        ]
+
+        stdout: SplitParser {
+            onRead: function(line) {
+                root.handleBluetoothWatchLine(line);
+            }
+        }
+
+        onExited: running = false
     }
 
     Process {
@@ -578,6 +826,24 @@ Item {
         stdout: SplitParser {
             onRead: function(line) {
                 root.handleAudioWatchLine(line);
+            }
+        }
+
+        onExited: running = false
+    }
+
+    Process {
+        id: batteryWatchProcess
+        running: false
+        command: [
+            "sh",
+            "-c",
+            "command -v udevadm >/dev/null 2>&1 && exec udevadm monitor --udev --subsystem-match=power_supply"
+        ]
+
+        stdout: SplitParser {
+            onRead: function(line) {
+                root.handleBatteryWatchLine(line);
             }
         }
 
@@ -633,18 +899,52 @@ Item {
     }
 
     Process {
-        id: refreshProc
-        command: ["python3", root.scriptPath]
+        id: distroRefreshProc
+        command: ["python3", root.scriptPath, "status-distro"]
 
         stdout: StdioCollector {
-            onStreamFinished: root.updateFromJson(this.text)
+            onStreamFinished: root.updateDistroFromJson(this.text)
         }
 
         onExited: {
             running = false;
-            if (root.refreshQueued) {
-                root.refreshQueued = false;
-                root.requestRefresh();
+            if (root.distroRefreshQueued) {
+                root.distroRefreshQueued = false;
+                root.requestDistroRefresh();
+            }
+        }
+    }
+
+    Process {
+        id: networkRefreshProc
+        command: ["python3", root.scriptPath, "status-network"]
+
+        stdout: StdioCollector {
+            onStreamFinished: root.updateNetworkFromJson(this.text)
+        }
+
+        onExited: {
+            running = false;
+            if (root.networkRefreshQueued) {
+                root.networkRefreshQueued = false;
+                root.requestNetworkRefresh();
+            }
+        }
+    }
+
+    Process {
+        id: bluetoothRefreshProc
+        command: ["python3", root.scriptPath, "status-bluetooth"]
+
+        stdout: StdioCollector {
+            onStreamFinished: root.updateBluetoothFromJson(this.text)
+        }
+
+        onExited: {
+            running = false;
+            if (root.bluetoothRefreshQueued) {
+                root.bluetoothRefreshQueued = false;
+                root.requestBluetoothRefresh();
             }
         }
     }
@@ -667,6 +967,40 @@ Item {
     }
 
     Process {
+        id: batteryRefreshProc
+        command: ["python3", root.scriptPath, "status-battery"]
+
+        stdout: StdioCollector {
+            onStreamFinished: root.updateBatteryFromJson(this.text)
+        }
+
+        onExited: {
+            running = false;
+            if (root.batteryRefreshQueued) {
+                root.batteryRefreshQueued = false;
+                root.requestBatteryRefresh();
+            }
+        }
+    }
+
+    Process {
+        id: notificationsRefreshProc
+        command: ["python3", root.scriptPath, "status-notifications"]
+
+        stdout: StdioCollector {
+            onStreamFinished: root.updateNotificationsFromJson(this.text)
+        }
+
+        onExited: {
+            running = false;
+            if (root.notificationsRefreshQueued) {
+                root.notificationsRefreshQueued = false;
+                root.requestNotificationsRefresh();
+            }
+        }
+    }
+
+    Process {
         id: actionProc
 
         onExited: {
@@ -678,14 +1012,23 @@ Item {
                 return;
             }
 
-            var wasAudioAction = root.isAudioAction(root.runningActionArgs);
+            var finishedArgs = root.runningActionArgs;
+            var wasAudioAction = root.isAudioAction(finishedArgs);
+            var wasNetworkAction = root.isNetworkAction(finishedArgs);
+            var wasBluetoothAction = root.isBluetoothAction(finishedArgs);
+            var wasNotificationsAction = root.isNotificationsAction(finishedArgs);
             root.runningActionArgs = [];
             root.actionRunning = false;
 
             if (wasAudioAction)
                 root.scheduleAudioRefresh();
-            else
-                root.requestRefresh();
+            else if (wasNetworkAction)
+                root.scheduleNetworkRefresh();
+            else if (wasBluetoothAction)
+                root.scheduleBluetoothRefresh();
+            else if (wasNotificationsAction)
+                root.scheduleNotificationsRefresh();
         }
     }
+
 }
