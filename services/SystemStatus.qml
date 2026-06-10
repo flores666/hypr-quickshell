@@ -250,7 +250,7 @@ Item {
     function enqueueLiveNotification(app, title, body, icon) {
         var item = {
             app: String(app || "Notification"),
-            title: String(title || "Уведомление"),
+            title: String(title || "Notification"),
             body: String(body || ""),
             icon: String(icon || "")
         };
@@ -301,7 +301,7 @@ Item {
 
     function addLiveNotification(app, title, body, icon) {
         var cleanApp = stripNotificationMarkup(app || "Notification");
-        var cleanTitle = stripNotificationMarkup(title || "Уведомление");
+        var cleanTitle = stripNotificationMarkup(title || "Notification");
         var cleanBody = stripNotificationMarkup(body || "");
 
         if (cleanApp.length === 0 && cleanTitle.length === 0 && cleanBody.length === 0)
@@ -310,7 +310,7 @@ Item {
         var item = {
             id: "live-" + Date.now() + "-" + liveNotificationSerial,
             app: cleanApp.length > 0 ? cleanApp : "Notification",
-            title: cleanTitle.length > 0 ? cleanTitle : "Уведомление",
+            title: cleanTitle.length > 0 ? cleanTitle : "Notification",
             body: cleanBody,
             time: Qt.formatDateTime(new Date(), "hh:mm"),
             actions: [],

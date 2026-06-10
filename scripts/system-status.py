@@ -153,6 +153,30 @@ def parse_pactl_sink_blocks():
             })
     return sinks
 
+def resolve_audio_app_icon(props, app):
+    candidates = [
+        props.get("application.icon_name"),
+        props.get("application.desktop"),
+        props.get("application.process.binary"),
+        props.get("application.name"),
+        app,
+    ]
+
+    seen = set()
+    for candidate in candidates:
+        value = str(candidate or "").strip()
+        if not value:
+            continue
+        key = value.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        resolved = resolve_icon_file(value)
+        if resolved:
+            return resolved
+    return ""
+
+
 def parse_sink_inputs():
     text = run(["pactl", "list", "sink-inputs"], timeout=1.8)
     inputs = []
@@ -169,7 +193,7 @@ def parse_sink_inputs():
         for key, value in re.findall(r'\s*([A-Za-z0-9_.-]+)\s*=\s*"?([^"\n]+)"?', block):
             props[key] = value.strip()
         app = props.get("application.name") or props.get("media.name") or f"App {idx}"
-        icon = props.get("application.icon_name") or ""
+        icon = resolve_audio_app_icon(props, app)
         vol_match = re.search(r"Volume:.*?(\d+)%", block)
         mute_match = re.search(r"Mute:\s*(yes|no)", block, re.I)
         inputs.append({
@@ -221,6 +245,7 @@ def audio_status():
             mute_text = run(["pactl", "get-sink-mute", "@DEFAULT_SINK@"], timeout=1.0).lower()
             result["muted"] = "yes" in mute_text or "да" in mute_text
 
+        sinks.sort(key=lambda sink: ((sink.get("label") or sink.get("name") or "").casefold(), sink.get("name") or ""))
         result["devices"] = sinks
         result["sinkInputs"] = parse_sink_inputs()
         if default_sink or sinks:
@@ -445,7 +470,7 @@ def battery_time_text(status, energy_now, energy_full, power_now):
     if hours <= 0 or hours > 48:
         return ""
     minutes = int(round(hours * 60))
-    return f"{minutes // 60} ч {minutes % 60:02d} мин"
+    return f"{minutes // 60} h {minutes % 60:02d} min"
 
 
 def read_file(path):
@@ -779,7 +804,7 @@ def notifications_status():
                         raw_items.append(group)
             for i, item in enumerate(raw_items[:12]):
                 app = extract_dunst_value(item.get("appname") or item.get("app_name")) or "Notification"
-                summary = extract_dunst_value(item.get("summary")) or "Уведомление"
+                summary = extract_dunst_value(item.get("summary")) or "Notification"
                 body = extract_dunst_value(item.get("body")) or ""
                 ts = extract_dunst_value(item.get("timestamp")) or ""
                 nid = extract_dunst_value(item.get("id")) or str(i)

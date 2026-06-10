@@ -118,7 +118,7 @@ PopupWindow {
                     width: parent.width
                     visible: Services.KeyboardLayoutService.layouts.length === 0
                     height: visible ? root.rowHeight : 0
-                    text: "Раскладки не найдены"
+                    text: "No layouts found"
                     color: "#aeb8c6"
                     font.pixelSize: 11
                     font.weight: Font.Medium
@@ -168,7 +168,7 @@ PopupWindow {
                             }
 
                             Components.StyledText {
-                                text: activeLayout ? "активно" : ""
+                                text: activeLayout ? "active" : ""
                                 color: "#8f9aa8"
                                 font.pixelSize: 10
                                 font.weight: Font.Medium

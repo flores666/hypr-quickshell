@@ -34,7 +34,7 @@ PanelWindow {
         spacing: 10
 
         Components.StyledText {
-            text: "Свернутые окна"
+            text: "Hidden windows"
             color: "#f4f7fb"
             font.pixelSize: 14
             font.weight: Font.DemiBold

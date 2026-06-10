@@ -106,7 +106,7 @@ Item {
 
     Timer {
         id: deferredOpenRefresh
-        interval: 130
+        interval: motion.popupOpenDuration + 150
         repeat: false
         onTriggered: {
             if (root.popupOpen)
