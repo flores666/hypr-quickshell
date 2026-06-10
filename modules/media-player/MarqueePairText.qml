@@ -115,7 +115,7 @@ Item {
         property double lastTick: Date.now()
         interval: 16
         repeat: true
-        running: root.shouldScroll && !scrollDelay.running
+        running: root.visible && root.shouldScroll && !scrollDelay.running
 
         onRunningChanged: lastTick = Date.now()
 

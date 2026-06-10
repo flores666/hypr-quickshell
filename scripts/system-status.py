@@ -839,7 +839,7 @@ def distro_status():
         name = ""
 
     if not name:
-        name = run(["sh", "-c", "uname -s"], timeout=0.5) or "Linux"
+        name = run(["uname", "-s"], timeout=0.5) or "Linux"
 
     first = ""
     for ch in name.strip():

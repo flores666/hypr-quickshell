@@ -125,15 +125,26 @@ Rectangle {
 
     Timer {
         id: shownReadyTimer
-        interval: 16
+        property int attempts: 0
+        interval: 80
         repeat: true
+        onRunningChanged: {
+            if (running)
+                attempts = 0;
+        }
         onTriggered: {
+            attempts++;
             if (!root.waitingForShownReady) {
                 stop();
                 return;
             }
 
-            if (shown.status === Image.Ready && String(shown.source) === root.displayedSource)
+            if (shown.status === Image.Ready && String(shown.source) === root.displayedSource) {
+                root.finishIncomingCover();
+                return;
+            }
+
+            if (shown.status === Image.Error || attempts >= 20)
                 root.finishIncomingCover();
         }
     }

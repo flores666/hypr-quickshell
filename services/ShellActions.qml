@@ -15,10 +15,7 @@ QtObject {
 
         Services.ShellState.setFocused(window.address)
 
-        // Для реального окна нужно использовать его address.
-        // Пример:
-        // Hyprland.dispatch("focuswindow address:" + window.address)
-        console.log("focusWindow", window.address)
+        Hyprland.dispatch("focuswindow address:" + window.address)
     }
 
     function minimizeToTray(window) {
@@ -27,9 +24,7 @@ QtObject {
 
         Services.ShellState.setTrayed(window, true)
 
-        // Реальный вариант для Hyprland:
-        // Hyprland.dispatch("movetoworkspacesilent " + minimizedWorkspace + ",address:" + window.address)
-        console.log("minimizeToTray", window.address)
+        Hyprland.dispatch("movetoworkspacesilent " + minimizedWorkspace + ",address:" + window.address)
     }
 
     function restoreFromTray(window) {
@@ -39,10 +34,8 @@ QtObject {
         Services.ShellState.setTrayed(window, false)
         Services.ShellState.setFocused(window.address)
 
-        // Реальный вариант:
-        // Hyprland.dispatch("movetoworkspace current,address:" + window.address)
-        // Hyprland.dispatch("focuswindow address:" + window.address)
-        console.log("restoreFromTray", window.address)
+        Hyprland.dispatch("movetoworkspace current,address:" + window.address)
+        Hyprland.dispatch("focuswindow address:" + window.address)
     }
 
     function toggleTray(window) {

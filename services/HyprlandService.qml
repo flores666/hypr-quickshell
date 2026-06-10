@@ -10,6 +10,7 @@ Item {
     height: 0
 
     property bool refreshQueued: false
+    property bool refreshPendingAfterRun: false
 
     function currentWorkspaceId() {
         if (Hyprland.focusedWorkspace && Hyprland.focusedWorkspace.id)
@@ -18,6 +19,11 @@ Item {
     }
 
     function queueRefreshClients() {
+        if (clientsProc.running) {
+            refreshPendingAfterRun = true;
+            return;
+        }
+
         if (refreshQueued)
             return;
 
@@ -27,8 +33,33 @@ Item {
 
     function refreshClientsNow() {
         refreshQueued = false;
-        if (!clientsProc.running)
-            clientsProc.running = true;
+        if (clientsProc.running) {
+            refreshPendingAfterRun = true;
+            return;
+        }
+
+        clientsProc.running = true;
+    }
+
+    function hyprEventNeedsClientRefresh(eventName) {
+        switch (eventName) {
+        case "openwindow":
+        case "closewindow":
+        case "movewindow":
+        case "movewindowv2":
+        case "workspace":
+        case "focusedmon":
+        case "activewindow":
+        case "activewindowv2":
+        case "windowtitle":
+        case "windowtitlev2":
+        case "fullscreen":
+        case "changefloatingmode":
+        case "renameworkspace":
+            return true;
+        default:
+            return false;
+        }
     }
 
     function extractWorkspaceId(client) {
@@ -83,7 +114,6 @@ Item {
         }
 
         var nextWindows = [];
-        var occupied = [];
         var focusedAddress = "";
 
         for (var i = 0; i < clients.length; i++) {
@@ -98,9 +128,6 @@ Item {
             if (focused)
                 focusedAddress = address;
 
-            if (!Services.ShellState.hasNumber(occupied, workspaceId))
-                occupied.push(workspaceId);
-
             nextWindows.push({
                 "address": address,
                 "title": client.title || client.class || "Window",
@@ -114,7 +141,6 @@ Item {
         }
 
         Services.ShellState.setWindows(nextWindows);
-        Services.ShellState.setOccupiedWorkspaces(occupied);
         if (focusedAddress !== "")
             Services.ShellState.focusedAddress = focusedAddress;
     }
@@ -134,7 +160,7 @@ Item {
     // Небольшой fallback, чтобы состояние не застревало после редких событий,
     // которые не обновляют модель workspaces/clients сразу.
     Timer {
-        interval: 1800
+        interval: 12000
         repeat: true
         running: true
         onTriggered: service.queueRefreshClients()
@@ -148,17 +174,22 @@ Item {
             onStreamFinished: service.updateClients(this.text)
         }
 
-        onExited: running = false
+        onExited: {
+            running = false;
+            if (service.refreshPendingAfterRun) {
+                service.refreshPendingAfterRun = false;
+                service.queueRefreshClients();
+            }
+        }
     }
 
     Connections {
         target: Hyprland
 
         function onRawEvent(event) {
-            if (!event)
+            if (!event || !service.hyprEventNeedsClientRefresh(event.name))
                 return;
 
-            // openwindow/closewindow/movewindow/windowtitle/workspace/activewindow обновляют занятые workspace.
             service.queueRefreshClients();
         }
 

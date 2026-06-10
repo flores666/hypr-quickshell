@@ -370,7 +370,7 @@ Item {
 
     Timer {
         id: playerRefreshTimer
-        interval: 1000
+        interval: root.activePlayer ? 1800 : 900
         repeat: true
         running: true
         onTriggered: {
@@ -397,7 +397,7 @@ Item {
 
     Timer {
         id: metadataPollTimer
-        interval: 1600
+        interval: 3200
         repeat: true
         running: root.activePlayer !== null
         onTriggered: root.syncMetadataFromPlayer(false)

@@ -43,6 +43,43 @@ QtObject {
         return false;
     }
 
+    function numberListsEqual(a, b) {
+        if (!a || !b || a.length !== b.length)
+            return false;
+
+        for (var i = 0; i < a.length; i++) {
+            if (normalizeWorkspaceId(a[i]) !== normalizeWorkspaceId(b[i]))
+                return false;
+        }
+
+        return true;
+    }
+
+    function windowKey(w) {
+        return [
+            w.address || "",
+            w.title || "",
+            w.appId || "",
+            w.icon || "",
+            normalizeWorkspaceId(w.workspace),
+            w.focused ? "1" : "0",
+            w.hiddenByShell ? "1" : "0",
+            w.hiddenReason || ""
+        ].join("|");
+    }
+
+    function windowsEqual(a, b) {
+        if (!a || !b || a.length !== b.length)
+            return false;
+
+        for (var i = 0; i < a.length; i++) {
+            if (windowKey(a[i]) !== windowKey(b[i]))
+                return false;
+        }
+
+        return true;
+    }
+
     function setOccupiedWorkspaces(nextOccupied) {
         var result = [];
         for (var i = 0; i < (nextOccupied || []).length; i++) {
@@ -52,7 +89,8 @@ QtObject {
         }
 
         result.sort(function(a, b) { return a - b; });
-        occupiedWorkspaces = result;
+        if (!numberListsEqual(occupiedWorkspaces, result))
+            occupiedWorkspaces = result;
     }
 
     function rebuildOccupiedWorkspaces() {
@@ -72,7 +110,10 @@ QtObject {
     }
 
     function setWindows(nextWindows) {
-        windows = nextWindows || [];
+        var normalized = nextWindows || [];
+        if (!windowsEqual(windows, normalized))
+            windows = normalized;
+
         rebuildOccupiedWorkspaces();
     }
 

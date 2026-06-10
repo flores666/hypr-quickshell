@@ -104,10 +104,6 @@ Item {
         function onOccupiedWorkspacesChanged() {
             repaintWorkspaces();
         }
-
-        function onWindowsChanged() {
-            repaintWorkspaces();
-        }
     }
 
     NumberAnimation {
