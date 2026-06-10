@@ -27,13 +27,10 @@ PanelWindow {
     WlrLayershell.namespace: "quickshell:taskbar"
     WlrLayershell.layer: WlrLayer.Top
 
-    exclusiveZone: 38
+    exclusiveZone: 37
 
     function anyPopupOpen() {
-        return calendar.popupOpen
-            || mediaPlayer.popupOpen
-            || keyboardLayout.popupOpen
-            || systemStatus.popupOpen;
+        return calendar.popupOpen || mediaPlayer.popupOpen || keyboardLayout.popupOpen || systemStatus.popupOpen;
     }
 
     function closePopups() {

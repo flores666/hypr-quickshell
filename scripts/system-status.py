@@ -969,8 +969,17 @@ def action(args):
         return 0
 
     if cmd == "notification-close" and len(args) > 1:
-        # dunstctl does not reliably close arbitrary history items by id across versions.
-        return 0
+        notification_id = str(args[1] or "").strip()
+        ok = False
+
+        # Best effort for currently visible notifications. History filtering is handled
+        # by the QML service because dunst/mako versions differ in single-item history removal.
+        if notification_id and which("dunstctl"):
+            ok = run_ok(["dunstctl", "close", notification_id], timeout=1.0) or ok
+        if notification_id and which("makoctl"):
+            ok = run_ok(["makoctl", "dismiss", "-n", notification_id], timeout=1.0) or ok
+
+        return 0 if ok else 0
 
     return 1
 

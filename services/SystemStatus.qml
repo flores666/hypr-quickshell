@@ -72,6 +72,9 @@ Item {
     property var notifications: []
     property var historyNotifications: []
     property var liveNotifications: []
+    property var dismissedNotificationIds: ({})
+    property var dismissedNotificationKeys: ({})
+    readonly property int dismissedNotificationTtlMs: 900000
 
     property bool notificationCaptureActive: false
     property bool notificationCaptureDone: false
@@ -100,6 +103,90 @@ Item {
         ].join("|").toLowerCase();
     }
 
+    function pruneDismissedNotifications() {
+        var now = Date.now();
+        var nextIds = {};
+        var nextKeys = {};
+
+        for (var id in dismissedNotificationIds) {
+            if (Number(dismissedNotificationIds[id] || 0) > now)
+                nextIds[id] = dismissedNotificationIds[id];
+        }
+
+        for (var key in dismissedNotificationKeys) {
+            if (Number(dismissedNotificationKeys[key] || 0) > now)
+                nextKeys[key] = dismissedNotificationKeys[key];
+        }
+
+        dismissedNotificationIds = nextIds;
+        dismissedNotificationKeys = nextKeys;
+    }
+
+    function rememberDismissedNotification(notification, fallbackId) {
+        var expiresAt = Date.now() + dismissedNotificationTtlMs;
+        var nextIds = {};
+        var nextKeys = {};
+
+        for (var oldId in (dismissedNotificationIds || {}))
+            nextIds[oldId] = dismissedNotificationIds[oldId];
+
+        for (var oldKey in (dismissedNotificationKeys || {}))
+            nextKeys[oldKey] = dismissedNotificationKeys[oldKey];
+        var id = String(fallbackId || (notification ? notification.id : "") || "");
+        var key = notificationKey(notification);
+
+        if (id.length > 0)
+            nextIds[id] = expiresAt;
+
+        if (key.length > 0)
+            nextKeys[key] = expiresAt;
+
+        dismissedNotificationIds = nextIds;
+        dismissedNotificationKeys = nextKeys;
+    }
+
+    function isNotificationDismissed(notification) {
+        if (!notification)
+            return false;
+
+        var now = Date.now();
+        var id = String(notification.id || "");
+        var key = notificationKey(notification);
+
+        if (id.length > 0 && Number((dismissedNotificationIds || {})[id] || 0) > now)
+            return true;
+
+        return key.length > 0 && Number((dismissedNotificationKeys || {})[key] || 0) > now;
+    }
+
+    function filterDismissedNotifications(list) {
+        pruneDismissedNotifications();
+
+        var source = list || [];
+        var result = [];
+        for (var i = 0; i < source.length; i++) {
+            if (!isNotificationDismissed(source[i]))
+                result.push(source[i]);
+        }
+
+        return result;
+    }
+
+    function findNotificationById(notificationId) {
+        var id = String(notificationId || "");
+        var lists = [notifications || [], liveNotifications || [], historyNotifications || []];
+
+        for (var l = 0; l < lists.length; l++) {
+            var list = lists[l];
+            for (var i = 0; i < list.length; i++) {
+                if (String((list[i] || {}).id || "") === id)
+                    return list[i];
+            }
+        }
+
+        return null;
+    }
+
     function mergeNotifications(preferredCount) {
         var merged = [];
         var seen = {};
@@ -108,7 +195,7 @@ Item {
             for (var i = 0; i < list.length; i++) {
                 var item = list[i];
                 var key = notificationKey(item);
-                if (key.length === 0 || seen[key])
+                if (key.length === 0 || seen[key] || isNotificationDismissed(item))
                     continue;
 
                 seen[key] = true;
@@ -181,6 +268,9 @@ Item {
             desktopEntry: "",
             icon: String(icon || "")
         };
+
+        if (isNotificationDismissed(item))
+            return;
 
         liveNotificationSerial += 1;
 
@@ -499,8 +589,8 @@ Item {
         notificationsData = notificationsData || {};
         notificationsAvailable = !!notificationsData.available;
         notificationsSilent = !!notificationsData.silent;
-        historyNotifications = notificationsData.items || [];
-        mergeNotifications(Number(notificationsData.count || 0));
+        historyNotifications = filterDismissedNotifications(notificationsData.items || []);
+        mergeNotifications(historyNotifications.length);
         ready = true;
     }
 
@@ -688,6 +778,8 @@ Item {
         historyNotifications = [];
         notifications = [];
         notificationsCount = 0;
+        dismissedNotificationIds = {};
+        dismissedNotificationKeys = {};
         runAction(["notifications-clear"]);
     }
 
@@ -697,23 +789,17 @@ Item {
     }
 
     function closeNotification(notificationId) {
-        var id = String(notificationId);
-        var nextLive = [];
-        var nextHistory = [];
+        var id = String(notificationId || "");
+        var target = findNotificationById(id);
 
-        for (var i = 0; i < liveNotifications.length; i++) {
-            if (String(liveNotifications[i].id) !== id)
-                nextLive.push(liveNotifications[i]);
-        }
+        rememberDismissedNotification(target, id);
 
-        for (var j = 0; j < historyNotifications.length; j++) {
-            if (String(historyNotifications[j].id) !== id)
-                nextHistory.push(historyNotifications[j]);
-        }
+        liveNotifications = filterDismissedNotifications(liveNotifications);
+        historyNotifications = filterDismissedNotifications(historyNotifications);
+        notifications = filterDismissedNotifications(notifications);
+        notificationsCount = Math.max(0, notificationsCount - 1);
+        mergeNotifications(notificationsCount);
 
-        liveNotifications = nextLive;
-        historyNotifications = nextHistory;
-        mergeNotifications(Math.max(0, notificationsCount - 1));
         runAction(["notification-close", id]);
     }
 
