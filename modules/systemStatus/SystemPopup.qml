@@ -22,13 +22,10 @@ PopupWindow {
 
     readonly property real popupBottomMargin: 2
     readonly property real maxPopupHeight: Math.max(180, Screen.height - popupY - popupBottomMargin)
-    readonly property real contentPopupHeight: contentColumn.implicitHeight + 32
-    readonly property real targetPopupHeight: Math.min(maxPopupHeight, Math.max(260, contentPopupHeight))
+    readonly property real fixedPopupHeight: Math.min(maxPopupHeight, 760)
     readonly property real audioDeviceRowHeight: 28
     readonly property real audioDeviceRowSpacing: 5
     readonly property real audioDevicePeekRatio: 0.5
-    property real animatedPopupHeight: targetPopupHeight
-    property bool popupHeightAnimationSuppressed: true
 
     function audioDevicesViewportHeight() {
         var count = Services.SystemStatus.audioDevices.length;
@@ -197,33 +194,16 @@ PopupWindow {
     anchor.rect.x: popupX
     anchor.rect.y: popupY
     implicitWidth: 398
-    implicitHeight: animatedPopupHeight
+    implicitHeight: fixedPopupHeight
     visible: popupState.renderVisible
     color: "transparent"
     surfaceFormat.opaque: false
 
-    onTargetPopupHeightChanged: {
-        animatedPopupHeight = targetPopupHeight;
-    }
-
     onTargetVisibleChanged: {
-        if (targetVisible) {
-            popupHeightAnimationSuppressed = true;
-            animatedPopupHeight = targetPopupHeight;
-            popupHeightSettleTimer.restart();
+        if (targetVisible)
             nestedPopupCleanupTimer.stop();
-        } else {
-            popupHeightAnimationSuppressed = true;
+        else
             nestedPopupCleanupTimer.restart();
-        }
-    }
-
-    Behavior on animatedPopupHeight {
-        enabled: root.targetVisible && !root.popupHeightAnimationSuppressed
-        NumberAnimation {
-            duration: 220
-            easing.type: Easing.OutCubic
-        }
     }
 
     Shortcut {
@@ -258,13 +238,6 @@ PopupWindow {
         interval: motion.popupCloseDuration + 70
         repeat: false
         onTriggered: root.clearNestedPopups()
-    }
-
-    Timer {
-        id: popupHeightSettleTimer
-        interval: motion.popupOpenDuration + 85
-        repeat: false
-        onTriggered: root.popupHeightAnimationSuppressed = false
     }
 
     Item {
