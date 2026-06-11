@@ -22,13 +22,41 @@ PopupWindow {
 
     readonly property real popupBottomMargin: 2
     readonly property real maxPopupHeight: Math.max(180, Screen.height - popupY - popupBottomMargin)
-    readonly property real fixedPopupHeight: Math.min(maxPopupHeight, 760)
+    readonly property real fixedPopupWidth: 398
+    readonly property real fixedPopupHeight: Math.max(180, Math.min(maxPopupHeight, 760))
+    readonly property real contentMargin: 16
+    readonly property real contentSpacing: 12
+    readonly property real topActionsHeight: 44
+    readonly property real wirelessCardHeight: 64
+    readonly property real batteryCardHeight: Services.SystemStatus.hasBattery ? 54 : 0
+    readonly property real contentAvailableHeight: fixedPopupHeight - contentMargin * 2
+
+    readonly property int audioDevicesCount: Services.SystemStatus.audioDevices ? Services.SystemStatus.audioDevices.length : 0
     readonly property real audioDeviceRowHeight: 28
     readonly property real audioDeviceRowSpacing: 5
     readonly property real audioDevicePeekRatio: 0.5
+    readonly property int audioAppsCount: Services.SystemStatus.sinkInputs ? Services.SystemStatus.sinkInputs.length : 0
+    readonly property real audioAppRowHeight: 31
+    readonly property real audioAppRowSpacing: 5
+    readonly property real emptyAudioAppsHeight: 24
+    readonly property real audioCardFixedHeight: 24 + 26 + 24 + audioAppsViewportHeight() + audioDevicesViewportHeight() + 24
+
+    readonly property real notificationsCardFixedHeight: Math.max(190, contentAvailableHeight - topActionsHeight - wirelessCardHeight - audioCardFixedHeight - batteryCardHeight - contentSpacing * (Services.SystemStatus.hasBattery ? 4 : 3))
+    readonly property real notificationsListHeight: Math.max(72, notificationsCardFixedHeight - 92)
+
+    function audioAppsViewportHeight() {
+        var count = root.audioAppsCount;
+        if (count <= 0)
+            return emptyAudioAppsHeight;
+        if (count === 1)
+            return audioAppRowHeight;
+        if (count === 2)
+            return audioAppRowHeight * 2 + audioAppRowSpacing;
+        return audioAppRowHeight * 2 + audioAppRowSpacing * 2 + audioAppRowHeight * 0.5;
+    }
 
     function audioDevicesViewportHeight() {
-        var count = Services.SystemStatus.audioDevices.length;
+        var count = root.audioDevicesCount;
         if (count <= 0)
             return 0;
         if (count === 1)
@@ -193,8 +221,10 @@ PopupWindow {
     anchor.window: hostWindow
     anchor.rect.x: popupX
     anchor.rect.y: popupY
-    implicitWidth: 398
+    implicitWidth: fixedPopupWidth
     implicitHeight: fixedPopupHeight
+    width: fixedPopupWidth
+    height: fixedPopupHeight
     visible: popupState.renderVisible
     color: "transparent"
     surfaceFormat.opaque: false
@@ -286,21 +316,17 @@ PopupWindow {
             }
         }
 
-        Flickable {
-            id: contentFlick
+        Item {
+            id: contentArea
             anchors.fill: parent
-            anchors.margins: 16
+            anchors.margins: root.contentMargin
             clip: true
-            contentWidth: width
-            contentHeight: contentColumn.implicitHeight
-            boundsBehavior: Flickable.StopAtBounds
-            interactive: contentHeight > height
             opacity: root.clamp01((root.reveal - 0.10) / 0.90)
 
             Column {
                 id: contentColumn
-                width: contentFlick.width
-                spacing: 12
+                width: contentArea.width
+                spacing: root.contentSpacing
 
                 RowLayout {
                     width: parent.width
@@ -365,7 +391,7 @@ PopupWindow {
 
                 Rectangle {
                     width: parent.width
-                    height: wirelessColumn.implicitHeight + 22
+                    height: root.wirelessCardHeight
                     radius: 16
                     color: "#1019232f"
 
@@ -577,16 +603,9 @@ PopupWindow {
 
                 Rectangle {
                     width: parent.width
-                    height: audioContentColumn.implicitHeight + 24
+                    height: root.audioCardFixedHeight
                     radius: 16
                     color: "#1019232f"
-
-                    Behavior on height {
-                        NumberAnimation {
-                            duration: 260
-                            easing.type: Easing.OutCubic
-                        }
-                    }
                     border.width: 0
                     antialiasing: true
                     clip: true
@@ -679,15 +698,8 @@ PopupWindow {
                         Flickable {
                             id: appVolumeFlick
                             width: parent.width
-                            height: Services.SystemStatus.sinkInputs.length === 0 ? 24 : Math.min(76, Services.SystemStatus.sinkInputs.length * 36)
+                            height: root.audioAppsViewportHeight()
                             clip: true
-
-                            Behavior on height {
-                                NumberAnimation {
-                                    duration: 220
-                                    easing.type: Easing.OutCubic
-                                }
-                            }
                             contentWidth: width
                             contentHeight: appVolumeColumn.implicitHeight
                             boundsBehavior: Flickable.StopAtBounds
@@ -700,7 +712,7 @@ PopupWindow {
 
                                 Components.StyledText {
                                     width: parent.width
-                                    height: Services.SystemStatus.sinkInputs.length === 0 ? 24 : 0
+                                    height: Services.SystemStatus.sinkInputs.length === 0 ? root.emptyAudioAppsHeight : 0
                                     visible: Services.SystemStatus.sinkInputs.length === 0
                                     text: "No active audio apps"
                                     color: "#8f9aa8"
@@ -779,15 +791,8 @@ PopupWindow {
                             id: outputDevicesFlick
                             width: parent.width
                             height: root.audioDevicesViewportHeight()
-                            visible: Services.SystemStatus.audioDevices.length > 0 || height > 1
+                            visible: true
                             clip: true
-
-                            Behavior on height {
-                                NumberAnimation {
-                                    duration: 240
-                                    easing.type: Easing.OutCubic
-                                }
-                            }
                             contentWidth: width
                             contentHeight: outputColumn.implicitHeight
                             boundsBehavior: Flickable.StopAtBounds
@@ -857,7 +862,7 @@ PopupWindow {
 
                 Rectangle {
                     width: parent.width
-                    height: 374
+                    height: root.notificationsCardFixedHeight
                     radius: 16
                     color: "#1019232f"
                     border.width: 0
@@ -896,7 +901,7 @@ PopupWindow {
 
                         Flickable {
                             width: parent.width
-                            height: 292
+                            height: root.notificationsListHeight
                             clip: true
                             contentWidth: width
                             contentHeight: notificationColumn.implicitHeight

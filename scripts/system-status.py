@@ -123,6 +123,22 @@ def human_audio_label(name, props=None):
     return text or "Audio device"
 
 
+def human_sink_input_label(app, props=None):
+    props = props or {}
+    text = (
+        props.get("application.name")
+        or props.get("application.process.binary")
+        or props.get("application.desktop")
+        or app
+        or props.get("media.name")
+        or "Audio app"
+    )
+    text = str(text).replace(".desktop", "")
+    text = text.replace("_", " ").replace(".", " ")
+    text = re.sub(r"\s+", " ", text).strip()
+    return text or "Audio app"
+
+
 def parse_pactl_sink_blocks():
     text = run(["pactl", "list", "sinks"], timeout=1.8)
     blocks = re.split(r"\nSink #", "\n" + text)
@@ -177,6 +193,63 @@ def resolve_audio_app_icon(props, app):
     return ""
 
 
+def is_real_sink_input(block, props):
+    corked_match = re.search(r"\n\s*Corked:\s*(yes|no)", "\n" + block, re.I)
+    if corked_match and corked_match.group(1).lower() == "yes":
+        return False
+
+    state_match = re.search(r"\n\s*State:\s*([A-Za-z_-]+)", "\n" + block, re.I)
+    if state_match and state_match.group(1).lower() in {"idle", "corked", "suspended"}:
+        return False
+
+    app_name = (props.get("application.name") or "").strip()
+    media_name = (props.get("media.name") or "").strip()
+    binary = (props.get("application.process.binary") or "").strip()
+    desktop = (props.get("application.desktop") or "").strip()
+
+    app_key = app_name.casefold()
+    media_key = media_name.casefold()
+    binary_key = binary.casefold()
+
+    service_apps = {
+        "pipewire",
+        "wireplumber",
+        "pulseaudio",
+        "pulse audio",
+        "pavucontrol",
+        "pulseaudio volume control",
+        "speech dispatcher",
+        "speech-dispatcher",
+        "speech_dispatcher",
+        "speechd",
+        "spd",
+        "sd_generic",
+        "sd espeak ng",
+        "sd_espeak-ng",
+        "sd_dummy",
+    }
+    service_markers = (
+        "speech dispatcher",
+        "speech-dispatcher",
+        "speech_dispatcher",
+        "org.freedesktop.speech",
+    )
+    combined_identity = " ".join([app_key, media_key, binary_key, desktop.casefold()])
+    if app_key in service_apps or binary_key in service_apps:
+        return False
+    if any(marker in combined_identity for marker in service_markers):
+        return False
+
+    generic_media_names = {"playback", "audio playback", "output"}
+    if media_key in generic_media_names and not (app_name or binary or desktop):
+        return False
+
+    if app_key in generic_media_names and not (binary or desktop or props.get("application.icon_name")):
+        return False
+
+    return True
+
+
 def parse_sink_inputs():
     text = run(["pactl", "list", "sink-inputs"], timeout=1.8)
     inputs = []
@@ -192,17 +265,22 @@ def parse_sink_inputs():
         props = {}
         for key, value in re.findall(r'\s*([A-Za-z0-9_.-]+)\s*=\s*"?([^"\n]+)"?', block):
             props[key] = value.strip()
-        app = props.get("application.name") or props.get("media.name") or f"App {idx}"
+
+        if not is_real_sink_input(block, props):
+            continue
+
+        app = props.get("application.name") or props.get("application.process.binary") or props.get("media.name") or f"App {idx}"
         icon = resolve_audio_app_icon(props, app)
         vol_match = re.search(r"Volume:.*?(\d+)%", block)
         mute_match = re.search(r"Mute:\s*(yes|no)", block, re.I)
         inputs.append({
             "index": idx,
-            "name": human_audio_label(app, props),
+            "name": human_sink_input_label(app, props),
             "icon": icon,
             "volume": clamp_int(vol_match.group(1) if vol_match else 100, 0, 150, 100),
             "muted": bool(mute_match and mute_match.group(1).lower() == "yes"),
         })
+    inputs.sort(key=lambda item: ((item.get("name") or "").casefold(), item.get("index") or ""))
     return inputs
 
 
