@@ -621,13 +621,14 @@ PopupWindow {
                             height: 26
                             spacing: 10
 
-                            Components.StyledText {
+                            SmoothText {
                                 Layout.fillWidth: true
-                                text: root.audioTitle()
-                                color: "#eef3f8"
-                                font.pixelSize: 12
-                                font.weight: Font.DemiBold
-                                elide: Text.ElideRight
+                                Layout.preferredHeight: 18
+                                value: root.audioTitle()
+                                textColor: "#eef3f8"
+                                pixelSize: 12
+                                weight: Font.DemiBold
+                                elideMode: Text.ElideRight
                             }
 
                             Components.StyledText {
@@ -847,20 +848,25 @@ PopupWindow {
                             height: 24
                             spacing: 8
 
-                            Components.StyledText {
+                            SmoothText {
                                 Layout.fillWidth: true
-                                text: "Notifications"
-                                color: "#eef3f8"
-                                font.pixelSize: 12
-                                font.weight: Font.DemiBold
+                                Layout.preferredHeight: 18
+                                value: Services.SystemStatus.notificationsSilent ? "Do not disturb" : "Notifications"
+                                textColor: "#eef3f8"
+                                pixelSize: 12
+                                weight: Font.DemiBold
+                                elideMode: Text.ElideRight
                             }
 
-                            Components.StyledText {
-                                text: Services.SystemStatus.notificationsCount + " notifications"
-                                color: "#aeb8c6"
-                                font.pixelSize: 11
-                                font.weight: Font.Medium
-                                verticalAlignment: Text.AlignVCenter
+                            SmoothText {
+                                Layout.preferredWidth: 34
+                                Layout.preferredHeight: 18
+                                value: String(Services.SystemStatus.notificationsCount)
+                                textColor: "#aeb8c6"
+                                pixelSize: 11
+                                weight: Font.Medium
+                                horizontalAlignment: Text.AlignRight
+                                elideMode: Text.ElideRight
                             }
 
                             StatePill {
