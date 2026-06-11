@@ -163,7 +163,10 @@ PopupWindow {
         closingNotificationIds = next;
 
         var entries = (closingNotificationEntries || []).slice();
-        entries.push({ id: id, startedAt: Date.now() });
+        entries.push({
+            id: id,
+            startedAt: Date.now()
+        });
         closingNotificationEntries = entries;
         notificationCloseCommitSweep.restart();
     }
@@ -1062,11 +1065,17 @@ PopupWindow {
                                         clip: true
 
                                         Behavior on x {
-                                            NumberAnimation { duration: notificationColumn.closeDuration; easing.type: Easing.InCubic }
+                                            NumberAnimation {
+                                                duration: notificationColumn.closeDuration
+                                                easing.type: Easing.InCubic
+                                            }
                                         }
 
                                         Behavior on opacity {
-                                            NumberAnimation { duration: notificationColumn.closeDuration; easing.type: Easing.OutCubic }
+                                            NumberAnimation {
+                                                duration: notificationColumn.closeDuration
+                                                easing.type: Easing.OutCubic
+                                            }
                                         }
 
                                         Behavior on color {
@@ -1250,9 +1259,9 @@ PopupWindow {
                             }
 
                             StatePill {
-                                Layout.preferredWidth: 78
+                                Layout.preferredWidth: 88
                                 Layout.preferredHeight: 24
-                                preferredWidth: 78
+                                preferredWidth: 88
                                 preferredHeight: 24
                                 iconOnly: false
                                 enabledState: Services.SystemStatus.notificationsCount > 0
