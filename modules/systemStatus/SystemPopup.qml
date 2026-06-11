@@ -223,8 +223,6 @@ PopupWindow {
     anchor.rect.y: popupY
     implicitWidth: fixedPopupWidth
     implicitHeight: fixedPopupHeight
-    width: fixedPopupWidth
-    height: fixedPopupHeight
     visible: popupState.renderVisible
     color: "transparent"
     surfaceFormat.opaque: false
@@ -395,6 +393,12 @@ PopupWindow {
                     radius: 16
                     color: "#1019232f"
 
+                    Behavior on height {
+                        NumberAnimation {
+                            duration: 240
+                            easing.type: Easing.OutCubic
+                        }
+                    }
                     border.width: 0
                     antialiasing: true
 
@@ -752,7 +756,7 @@ PopupWindow {
                                             Components.StyledText {
                                                 anchors.centerIn: parent
                                                 visible: appIconImage.status !== Image.Ready
-                                                text: root.firstLetter(modelData.name, "A")
+                                                text: root.firstLetter(modelData.name, modelData.app || "A")
                                                 color: "#eef3f8"
                                                 font.pixelSize: 10
                                                 font.weight: Font.DemiBold
@@ -761,7 +765,7 @@ PopupWindow {
 
                                         Components.StyledText {
                                             Layout.preferredWidth: 92
-                                            text: modelData.name || "App"
+                                            text: modelData.name || modelData.app || "App"
                                             color: "#c4ceda"
                                             font.pixelSize: 10
                                             elide: Text.ElideRight

@@ -10,33 +10,6 @@ from pathlib import Path
 from shutil import which
 
 
-
-SERVICE_AUDIO_APPS = {
-    "pipewire",
-    "wireplumber",
-    "pulseaudio",
-    "pulse audio",
-    "pavucontrol",
-    "pulseaudio volume control",
-    "speech dispatcher",
-    "speech-dispatcher",
-    "speech_dispatcher",
-    "speechd",
-    "spd",
-    "sd_generic",
-    "sd espeak ng",
-    "sd_espeak-ng",
-    "sd_dummy",
-}
-SERVICE_AUDIO_MARKERS = (
-    "speech dispatcher",
-    "speech-dispatcher",
-    "speech_dispatcher",
-    "org.freedesktop.speech",
-)
-GENERIC_AUDIO_MEDIA_NAMES = {"playback", "audio playback", "output"}
-JSON_DUMP_OPTIONS = {"ensure_ascii": False, "separators": (",", ":")}
-
 @lru_cache(maxsize=None)
 def has_cmd(name):
     return which(name) is not None
@@ -150,20 +123,126 @@ def human_audio_label(name, props=None):
     return text or "Audio device"
 
 
-def human_sink_input_label(app, props=None):
+GENERIC_AUDIO_TITLES = {
+    "",
+    "playback",
+    "audio playback",
+    "output",
+    "audio stream",
+    "audiostream",
+    "audio stream playback",
+    "playback stream",
+    "cubebstream",
+    "audioipc server",
+}
+
+
+def clean_display_text(value, fallback=""):
+    text = str(value or fallback or "").strip()
+    text = re.sub(r"\.desktop$", "", text, flags=re.I)
+    text = text.replace("_", " ").replace(".", " ")
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def is_generic_audio_title(value):
+    text = clean_display_text(value).casefold()
+    return text in GENERIC_AUDIO_TITLES
+
+
+def strip_browser_suffix(title, app_name=""):
+    text = str(title or "").strip()
+    if not text:
+        return ""
+
+    suffixes = [
+        " - Mozilla Firefox",
+        " — Mozilla Firefox",
+        " - Firefox",
+        " — Firefox",
+        " - Google Chrome",
+        " — Google Chrome",
+        " - Chromium",
+        " — Chromium",
+        " - Brave",
+        " — Brave",
+    ]
+    for suffix in suffixes:
+        if text.endswith(suffix):
+            text = text[:-len(suffix)].strip()
+            break
+
+    app = clean_display_text(app_name).casefold()
+    if app and text.casefold() == app:
+        return ""
+    return text
+
+
+_hypr_clients_cache = None
+
+def hypr_client_title_for_pid(pid, app_name=""):
+    global _hypr_clients_cache
+    pid_text = str(pid or "").strip()
+    if not pid_text or not has_cmd("hyprctl"):
+        return ""
+
+    if _hypr_clients_cache is None:
+        raw = run(["hyprctl", "clients", "-j"], timeout=0.75)
+        try:
+            data = json.loads(raw) if raw else []
+        except Exception:
+            data = []
+        _hypr_clients_cache = data if isinstance(data, list) else []
+
+    try:
+        pid_value = int(pid_text)
+    except Exception:
+        return ""
+
+    for client in _hypr_clients_cache:
+        if not isinstance(client, dict):
+            continue
+        try:
+            client_pid = int(client.get("pid") or -1)
+        except Exception:
+            continue
+        if client_pid != pid_value:
+            continue
+        title = strip_browser_suffix(client.get("title") or client.get("initialTitle") or "", app_name)
+        if title and not is_generic_audio_title(title):
+            return title
+    return ""
+
+
+def sink_input_app_name(props=None, app=""):
     props = props or {}
-    text = (
+    return clean_display_text(
         props.get("application.name")
         or props.get("application.process.binary")
         or props.get("application.desktop")
         or app
-        or props.get("media.name")
         or "Audio app"
-    )
-    text = str(text).replace(".desktop", "")
-    text = text.replace("_", " ").replace(".", " ")
-    text = re.sub(r"\s+", " ", text).strip()
-    return text or "Audio app"
+    ) or "Audio app"
+
+
+def sink_input_title(app, props=None):
+    props = props or {}
+    app_name = sink_input_app_name(props, app)
+
+    media_title = clean_display_text(props.get("media.name"))
+    if media_title and not is_generic_audio_title(media_title):
+        return media_title
+
+    for key in ("window.title", "application.window.title", "node.description"):
+        title = strip_browser_suffix(props.get(key), app_name)
+        if title and not is_generic_audio_title(title):
+            return title
+
+    hypr_title = hypr_client_title_for_pid(props.get("application.process.id"), app_name)
+    if hypr_title:
+        return hypr_title
+
+    return app_name
 
 
 def parse_pactl_sink_blocks():
@@ -198,6 +277,12 @@ def parse_pactl_sink_blocks():
 
 def resolve_audio_app_icon(props, app):
     candidates = [
+        props.get("media.icon_name"),
+        props.get("media.icon"),
+        props.get("window.icon_name"),
+        props.get("window.icon"),
+        props.get("node.icon_name"),
+        props.get("node.icon"),
         props.get("application.icon_name"),
         props.get("application.desktop"),
         props.get("application.process.binary"),
@@ -238,16 +323,40 @@ def is_real_sink_input(block, props):
     media_key = media_name.casefold()
     binary_key = binary.casefold()
 
+    service_apps = {
+        "pipewire",
+        "wireplumber",
+        "pulseaudio",
+        "pulse audio",
+        "pavucontrol",
+        "pulseaudio volume control",
+        "speech dispatcher",
+        "speech-dispatcher",
+        "speech_dispatcher",
+        "speechd",
+        "spd",
+        "sd_generic",
+        "sd espeak ng",
+        "sd_espeak-ng",
+        "sd_dummy",
+    }
+    service_markers = (
+        "speech dispatcher",
+        "speech-dispatcher",
+        "speech_dispatcher",
+        "org.freedesktop.speech",
+    )
     combined_identity = " ".join([app_key, media_key, binary_key, desktop.casefold()])
-    if app_key in SERVICE_AUDIO_APPS or binary_key in SERVICE_AUDIO_APPS:
+    if app_key in service_apps or binary_key in service_apps:
         return False
-    if any(marker in combined_identity for marker in SERVICE_AUDIO_MARKERS):
-        return False
-
-    if media_key in GENERIC_AUDIO_MEDIA_NAMES and not (app_name or binary or desktop):
+    if any(marker in combined_identity for marker in service_markers):
         return False
 
-    if app_key in GENERIC_AUDIO_MEDIA_NAMES and not (binary or desktop or props.get("application.icon_name")):
+    generic_media_names = {"playback", "audio playback", "output"}
+    if media_key in generic_media_names and not (app_name or binary or desktop):
+        return False
+
+    if app_key in generic_media_names and not (binary or desktop or props.get("application.icon_name")):
         return False
 
     return True
@@ -273,12 +382,15 @@ def parse_sink_inputs():
             continue
 
         app = props.get("application.name") or props.get("application.process.binary") or props.get("media.name") or f"App {idx}"
+        app_name = sink_input_app_name(props, app)
+        title = sink_input_title(app, props)
         icon = resolve_audio_app_icon(props, app)
         vol_match = re.search(r"Volume:.*?(\d+)%", block)
         mute_match = re.search(r"Mute:\s*(yes|no)", block, re.I)
         inputs.append({
             "index": idx,
-            "name": human_sink_input_label(app, props),
+            "name": title,
+            "app": app_name,
             "icon": icon,
             "volume": clamp_int(vol_match.group(1) if vol_match else 100, 0, 150, 100),
             "muted": bool(mute_match and mute_match.group(1).lower() == "yes"),
@@ -1018,37 +1130,33 @@ def launch_desktop_entry(desktop_entry):
     return False
 
 
-def json_out(payload):
-    print(json.dumps(payload, **JSON_DUMP_OPTIONS))
-
-
 def action(args):
     if not args:
         return 0
     cmd = args[0]
 
     if cmd == "status-distro":
-        json_out(distro_status())
+        print(json.dumps(distro_status(), ensure_ascii=False, separators=(",", ":")))
         return 0
 
     if cmd == "status-network":
-        json_out(network_status())
+        print(json.dumps(network_status(), ensure_ascii=False, separators=(",", ":")))
         return 0
 
     if cmd == "status-audio":
-        json_out(audio_status())
+        print(json.dumps(audio_status(), ensure_ascii=False, separators=(",", ":")))
         return 0
 
     if cmd == "status-battery":
-        json_out(battery_status())
+        print(json.dumps(battery_status(), ensure_ascii=False, separators=(",", ":")))
         return 0
 
     if cmd == "status-bluetooth":
-        json_out(bluetooth_status())
+        print(json.dumps(bluetooth_status(), ensure_ascii=False, separators=(",", ":")))
         return 0
 
     if cmd == "status-notifications":
-        json_out(notifications_status())
+        print(json.dumps(notifications_status(), ensure_ascii=False, separators=(",", ":")))
         return 0
 
     if cmd == "resolve-icon":
@@ -1183,4 +1291,4 @@ def action(args):
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         sys.exit(action(sys.argv[1:]))
-    json_out(status())
+    print(json.dumps(status(), ensure_ascii=False, separators=(",", ":")))
