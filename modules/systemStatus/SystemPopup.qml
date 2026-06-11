@@ -1288,12 +1288,32 @@ PopupWindow {
 
             MouseArea {
                 anchors.fill: parent
-                acceptedButtons: Qt.LeftButton
-                onClicked: {
-                    if (root.confirmActionName.length > 0)
-                        root.cancelSystemActionConfirm();
-                    else
-                        root.closeDetailPopup();
+                acceptedButtons: Qt.AllButtons
+                hoverEnabled: true
+                preventStealing: true
+                propagateComposedEvents: false
+                cursorShape: Qt.ArrowCursor
+
+                onPressed: function(mouse) {
+                    mouse.accepted = true;
+                }
+
+                onReleased: function(mouse) {
+                    mouse.accepted = true;
+                }
+
+                onWheel: function(wheel) {
+                    wheel.accepted = true;
+                }
+
+                onClicked: function(mouse) {
+                    if (mouse.button === Qt.LeftButton) {
+                        if (root.confirmActionName.length > 0)
+                            root.cancelSystemActionConfirm();
+                        else
+                            root.closeDetailPopup();
+                    }
+                    mouse.accepted = true;
                 }
             }
 
@@ -1324,8 +1344,25 @@ PopupWindow {
                 }
                 MouseArea {
                     anchors.fill: parent
-                    acceptedButtons: Qt.LeftButton
-                    onClicked: function (mouse) {
+                    acceptedButtons: Qt.AllButtons
+                    hoverEnabled: true
+                    preventStealing: true
+                    propagateComposedEvents: false
+                    cursorShape: Qt.ArrowCursor
+
+                    onPressed: function(mouse) {
+                        mouse.accepted = true;
+                    }
+
+                    onReleased: function(mouse) {
+                        mouse.accepted = true;
+                    }
+
+                    onWheel: function(wheel) {
+                        wheel.accepted = true;
+                    }
+
+                    onClicked: function(mouse) {
                         mouse.accepted = true;
                     }
                 }

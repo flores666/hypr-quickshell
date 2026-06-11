@@ -31,6 +31,125 @@ def run_ok(cmd, timeout=1.4):
         return False
 
 
+def process_running(name):
+    target = str(name or "").strip()
+    if not target:
+        return False
+
+    proc_root = Path("/proc")
+    try:
+        for proc in proc_root.iterdir():
+            if not proc.name.isdigit():
+                continue
+            try:
+                if (proc / "comm").read_text(encoding="utf-8", errors="ignore").strip() == target:
+                    return True
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+    return False
+
+
+def dunst_active():
+    if not has_cmd("dunstctl"):
+        return False
+    if process_running("dunst"):
+        return True
+    return run(["dunstctl", "is-paused"], timeout=0.6) != ""
+
+
+def mako_active():
+    if not has_cmd("makoctl"):
+        return False
+    if process_running("mako"):
+        return True
+    # makoctl mode returns active modes when a mako instance is reachable.
+    return run_ok(["makoctl", "mode"], timeout=0.6)
+
+
+def notification_backend_order():
+    order = []
+
+    if dunst_active():
+        order.append("dunst")
+    if mako_active():
+        order.append("mako")
+
+    # Fallback for systems where the daemon process name is wrapped or hidden.
+    if not order:
+        if has_cmd("dunstctl"):
+            order.append("dunst")
+        if has_cmd("makoctl"):
+            order.append("mako")
+
+    return order
+
+
+def dunst_is_silent():
+    return run(["dunstctl", "is-paused"], timeout=0.8).lower() in ("true", "yes", "1")
+
+
+def mako_modes():
+    return run(["makoctl", "mode"], timeout=0.8).lower()
+
+
+def mako_is_silent():
+    return "do-not-disturb" in mako_modes()
+
+
+def set_dunst_silent(enabled):
+    ok = run_ok(["dunstctl", "set-paused", "true" if enabled else "false"], timeout=1.0)
+    if enabled:
+        # Hide already visible system notifications immediately. They stay in history.
+        ok = run_ok(["dunstctl", "close-all"], timeout=0.8) or ok
+    return ok
+
+
+def set_mako_silent(enabled):
+    current = mako_is_silent()
+    if enabled == current:
+        ok = True
+    elif enabled:
+        ok = run_ok(["makoctl", "mode", "-a", "do-not-disturb"], timeout=1.0)
+        if not ok and not current:
+            ok = run_ok(["makoctl", "mode", "-t", "do-not-disturb"], timeout=1.0)
+    else:
+        ok = run_ok(["makoctl", "mode", "-r", "do-not-disturb"], timeout=1.0)
+        if not ok and current:
+            ok = run_ok(["makoctl", "mode", "-t", "do-not-disturb"], timeout=1.0)
+
+    if enabled:
+        # Hide already visible notifications. New ones are hidden by the DND mode
+        # configured in install-notification-style.sh.
+        ok = run_ok(["makoctl", "dismiss", "-a"], timeout=0.8) or ok
+    return ok
+
+
+def notifications_silent_state():
+    states = []
+    for backend in notification_backend_order():
+        if backend == "dunst" and has_cmd("dunstctl"):
+            states.append(dunst_is_silent())
+        elif backend == "mako" and has_cmd("makoctl"):
+            states.append(mako_is_silent())
+    return any(states)
+
+
+def toggle_notifications_silent():
+    target = not notifications_silent_state()
+    ok = False
+
+    for backend in notification_backend_order():
+        if backend == "dunst" and has_cmd("dunstctl"):
+            ok = set_dunst_silent(target) or ok
+        elif backend == "mako" and has_cmd("makoctl"):
+            ok = set_mako_silent(target) or ok
+
+    return ok
+
+
 def clamp_int(value, low, high, default=0):
     try:
         n = int(round(float(value)))
@@ -977,71 +1096,72 @@ def notifications_status():
     result = {
         "available": False,
         "count": 0,
-        "silent": False,
+        "silent": notifications_silent_state(),
         "items": [],
     }
 
-    if has_cmd("dunstctl"):
-        result["available"] = True
-        paused = run(["dunstctl", "is-paused"]).lower()
-        result["silent"] = paused in ("true", "yes", "1")
-        raw = run(["dunstctl", "history"], timeout=1.6)
-        try:
-            data = json.loads(raw) if raw else {}
-            raw_items = []
-            if isinstance(data, dict):
-                for group in data.get("data", []):
-                    if isinstance(group, list):
-                        raw_items.extend(group)
-                    elif isinstance(group, dict):
-                        raw_items.append(group)
-            for i, item in enumerate(raw_items[:12]):
-                app = extract_dunst_value(item.get("appname") or item.get("app_name")) or "Notification"
-                summary = extract_dunst_value(item.get("summary")) or "Notification"
-                body = extract_dunst_value(item.get("body")) or ""
-                ts = extract_dunst_value(item.get("timestamp")) or ""
-                nid = extract_dunst_value(item.get("id")) or str(i)
-                actions = extract_actions(item.get("actions") or item.get("action"))
-                url = extract_first_url(item.get("urls"), body, summary)
-                desktop_entry = extract_desktop_entry(item)
-                icon = extract_notification_icon(item, app, desktop_entry)
-                result["items"].append({
-                    "id": str(nid),
-                    "app": clean_notification_text(app),
-                    "title": clean_notification_text(summary),
-                    "body": clean_notification_text(body),
-                    "time": str(ts)[-5:] if str(ts) else "",
-                    "actions": actions,
-                    "action": default_action_id(actions),
-                    "url": url,
-                    "desktopEntry": desktop_entry,
-                    "icon": icon,
-                })
-        except Exception:
-            result["items"] = []
-        result["count"] = len(result["items"])
-        return result
+    for backend in notification_backend_order():
+        if backend == "dunst" and has_cmd("dunstctl"):
+            result["available"] = True
+            result["silent"] = dunst_is_silent()
+            raw = run(["dunstctl", "history"], timeout=1.6)
+            try:
+                data = json.loads(raw) if raw else {}
+                raw_items = []
+                if isinstance(data, dict):
+                    for group in data.get("data", []):
+                        if isinstance(group, list):
+                            raw_items.extend(group)
+                        elif isinstance(group, dict):
+                            raw_items.append(group)
+                for i, item in enumerate(raw_items[:12]):
+                    app = extract_dunst_value(item.get("appname") or item.get("app_name")) or "Notification"
+                    summary = extract_dunst_value(item.get("summary")) or "Notification"
+                    body = extract_dunst_value(item.get("body")) or ""
+                    ts = extract_dunst_value(item.get("timestamp")) or ""
+                    nid = extract_dunst_value(item.get("id")) or str(i)
+                    actions = extract_actions(item.get("actions") or item.get("action"))
+                    url = extract_first_url(item.get("urls"), body, summary)
+                    desktop_entry = extract_desktop_entry(item)
+                    icon = extract_notification_icon(item, app, desktop_entry)
+                    result["items"].append({
+                        "id": str(nid),
+                        "app": clean_notification_text(app),
+                        "title": clean_notification_text(summary),
+                        "body": clean_notification_text(body),
+                        "time": str(ts)[-5:] if str(ts) else "",
+                        "actions": actions,
+                        "action": default_action_id(actions),
+                        "url": url,
+                        "desktopEntry": desktop_entry,
+                        "icon": icon,
+                    })
+            except Exception:
+                result["items"] = []
+            result["count"] = len(result["items"])
+            return result
 
-    if has_cmd("makoctl"):
-        result["available"] = True
-        raw = run(["makoctl", "list"], timeout=1.4)
-        # makoctl output format differs between versions. Keep a safe readable fallback.
-        lines = [x.strip() for x in raw.splitlines() if x.strip()]
-        if lines:
-            result["items"] = [{
-                "id": str(i),
-                "app": "Mako",
-                "title": clean_notification_text(line[:80]),
-                "body": "",
-                "time": "",
-                "actions": [],
-                "action": "",
-                "url": extract_first_url(line),
-                "desktopEntry": "",
-                "icon": "",
-            } for i, line in enumerate(lines[:8])]
-        result["count"] = len(result["items"])
-        return result
+        if backend == "mako" and has_cmd("makoctl"):
+            result["available"] = True
+            result["silent"] = mako_is_silent()
+            raw = run(["makoctl", "list"], timeout=1.4)
+            # makoctl output format differs between versions. Keep a safe readable fallback.
+            lines = [x.strip() for x in raw.splitlines() if x.strip()]
+            if lines:
+                result["items"] = [{
+                    "id": str(i),
+                    "app": "Mako",
+                    "title": clean_notification_text(line[:80]),
+                    "body": "",
+                    "time": "",
+                    "actions": [],
+                    "action": "",
+                    "url": extract_first_url(line),
+                    "desktopEntry": "",
+                    "icon": "",
+                } for i, line in enumerate(lines[:8])]
+            result["count"] = len(result["items"])
+            return result
 
     return result
 
@@ -1241,12 +1361,7 @@ def action(args):
         return 0 if ok else 1
 
     if cmd == "notifications-toggle-silent":
-        if has_cmd("dunstctl"):
-            paused = run(["dunstctl", "is-paused"]).lower() in ("true", "yes", "1")
-            return 0 if run_ok(["dunstctl", "set-paused", "false" if paused else "true"]) else 1
-        if has_cmd("makoctl"):
-            return 0 if run_ok(["makoctl", "mode", "-t", "do-not-disturb"]) else 1
-        return 1
+        return 0 if toggle_notifications_silent() else 1
 
     if cmd == "notification-open" and len(args) > 1:
         notification_id = args[1] if len(args) > 1 else ""

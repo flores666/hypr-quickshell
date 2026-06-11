@@ -66,6 +66,9 @@ background-color=#171820b3
 text-color=#f4f7fb
 border-color=#4a2f3599
 default-timeout=9000
+
+[mode=do-not-disturb]
+invisible=1
 EOF
 }
 
