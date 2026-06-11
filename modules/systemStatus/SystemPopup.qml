@@ -306,6 +306,7 @@ PopupWindow {
         MouseArea {
             id: popupMouse
             anchors.fill: parent
+            enabled: !root.nestedOverlayVisible
             acceptedButtons: Qt.LeftButton
             hoverEnabled: true
             cursorShape: Qt.ArrowCursor
@@ -318,6 +319,7 @@ PopupWindow {
             id: contentArea
             anchors.fill: parent
             anchors.margins: root.contentMargin
+            enabled: !root.nestedOverlayVisible
             clip: true
             opacity: root.clamp01((root.reveal - 0.10) / 0.90)
 
@@ -1209,9 +1211,30 @@ PopupWindow {
             }
 
             MouseArea {
+                id: nestedOverlayMouseBlocker
                 anchors.fill: parent
-                acceptedButtons: Qt.LeftButton
-                onClicked: {
+                hoverEnabled: true
+                acceptedButtons: Qt.AllButtons
+                preventStealing: true
+                cursorShape: Qt.ArrowCursor
+
+                onPressed: function (mouse) {
+                    mouse.accepted = true;
+                }
+
+                onReleased: function (mouse) {
+                    mouse.accepted = true;
+                }
+
+                onWheel: function (wheel) {
+                    wheel.accepted = true;
+                }
+
+                onClicked: function (mouse) {
+                    mouse.accepted = true;
+                    if (mouse.button !== Qt.LeftButton)
+                        return;
+
                     if (root.confirmActionName.length > 0)
                         root.cancelSystemActionConfirm();
                     else
@@ -1246,7 +1269,23 @@ PopupWindow {
                 }
                 MouseArea {
                     anchors.fill: parent
-                    acceptedButtons: Qt.LeftButton
+                    hoverEnabled: true
+                    acceptedButtons: Qt.AllButtons
+                    preventStealing: true
+                    cursorShape: Qt.ArrowCursor
+
+                    onPressed: function (mouse) {
+                        mouse.accepted = true;
+                    }
+
+                    onReleased: function (mouse) {
+                        mouse.accepted = true;
+                    }
+
+                    onWheel: function (wheel) {
+                        wheel.accepted = true;
+                    }
+
                     onClicked: function (mouse) {
                         mouse.accepted = true;
                     }
