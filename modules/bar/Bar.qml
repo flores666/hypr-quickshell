@@ -100,12 +100,23 @@ PanelWindow {
             onClicked: root.closePopups()
         }
 
+        Workspaces.SpecialWorkspaceButton {
+            id: specialWorkspaceButton
+            z: 1
+            width: implicitWidth
+            height: implicitHeight
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            onToggled: suppressPopupCloseAfterWorkspaceScroll.restart()
+        }
+
         Workspaces.WorkspaceStrip {
             id: workspaces
             z: 1
             width: implicitWidth
             height: implicitHeight
-            anchors.left: parent.left
+            anchors.left: specialWorkspaceButton.right
+            anchors.leftMargin: 2
             anchors.verticalCenter: parent.verticalCenter
             onWorkspaceScrolled: suppressPopupCloseAfterWorkspaceScroll.restart()
         }

@@ -15,19 +15,22 @@ Rectangle {
     property color accentStrongColor: "#e8eef6"
     property color mutedTextColor: "#bcc5d0"
     property bool pointerReady: false
+    property real reveal: playerActive ? 1.0 : 0.0
+    readonly property bool renderVisible: playerActive || reveal > 0.001
 
     signal clicked()
 
-    implicitWidth: playerActive ? 270 : 0
+    implicitWidth: Math.round(270 * reveal)
     implicitHeight: 24
-    visible: playerActive
+    visible: renderVisible
     radius: 12
     color: popupOpen
         ? "#22ffffff"
         : (buttonMouse.pressed ? "#1cffffff" : (buttonMouse.containsMouse ? "#14ffffff" : "transparent"))
     border.width: 0
     clip: true
-    scale: 1.0
+    opacity: reveal
+    scale: 0.965 + reveal * 0.035
     transformOrigin: Item.Center
 
     Components.AnimationTokens { id: motion }
@@ -36,8 +39,20 @@ Rectangle {
         ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic }
     }
 
-    Behavior on width {
-        NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+    Behavior on reveal {
+        NumberAnimation { duration: 165; easing.type: Easing.OutCubic }
+    }
+
+    Behavior on implicitWidth {
+        NumberAnimation { duration: 165; easing.type: Easing.OutCubic }
+    }
+
+    Behavior on opacity {
+        NumberAnimation { duration: 130; easing.type: Easing.OutCubic }
+    }
+
+    Behavior on scale {
+        NumberAnimation { duration: 165; easing.type: Easing.OutCubic }
     }
 
     Timer {
@@ -53,10 +68,10 @@ Rectangle {
         anchors.leftMargin: 7
         anchors.rightMargin: 6
         spacing: 5
-        opacity: root.playerActive ? 1.0 : 0.0
+        opacity: root.reveal
 
         Behavior on opacity {
-            NumberAnimation { duration: 130; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: 125; easing.type: Easing.OutCubic }
         }
 
         MarqueePairText {
@@ -76,7 +91,7 @@ Rectangle {
         }
 
         MediaProgressBar {
-            Layout.preferredWidth: root.playerActive ? 74 : 0
+            Layout.preferredWidth: Math.round(74 * root.reveal)
             Layout.preferredHeight: 12
             Layout.alignment: Qt.AlignVCenter
             value: root.position
@@ -91,7 +106,8 @@ Rectangle {
     MouseArea {
         id: buttonMouse
         anchors.fill: parent
-        hoverEnabled: true
+        hoverEnabled: root.renderVisible
+        enabled: root.renderVisible && root.reveal > 0.72
         acceptedButtons: Qt.LeftButton
         cursorShape: root.pointerReady ? Qt.PointingHandCursor : Qt.ArrowCursor
         z: 2

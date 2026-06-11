@@ -7,7 +7,7 @@ import "." as Services
 QtObject {
     id: actions
 
-    property string minimizedWorkspace: "special:minimized"
+    property string minimizedWorkspace: "special:magic"
 
     function focusWindow(window) {
         if (!window)
@@ -54,6 +54,18 @@ QtObject {
 
         Services.ShellState.activeWorkspace = workspaceId
         Hyprland.dispatch("workspace " + workspaceId)
+    }
+
+    function specialWorkspaceDispatchName() {
+        var name = String(minimizedWorkspace || "").trim()
+        if (name.indexOf("special:") === 0)
+            name = name.substring(8)
+        return name
+    }
+
+    function toggleSpecialWorkspace() {
+        var name = specialWorkspaceDispatchName()
+        Hyprland.dispatch(name.length > 0 ? "togglespecialworkspace " + name : "togglespecialworkspace")
     }
 
     function launchApp(app) {

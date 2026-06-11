@@ -40,7 +40,7 @@ Item {
 
     implicitWidth: mediaButton.implicitWidth
     implicitHeight: mediaButton.implicitHeight
-    visible: activePlayer !== null
+    visible: activePlayer !== null || mediaButton.renderVisible
 
     onActivePlayerChanged: {
         if (activePlayer)

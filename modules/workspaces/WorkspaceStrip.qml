@@ -35,6 +35,7 @@ Item {
     property bool ready: false
     property int animationDuration: 280
     property real lastWheelSwitchAt: 0
+    property real wheelRemainder: 0
 
     signal workspaceScrolled()
 
@@ -68,7 +69,7 @@ Item {
         lastAnimatedWorkspace = activeWorkspace;
 
         var distance = Math.abs(activeWorkspace - previousWorkspace);
-        animationDuration = Math.max(210, Math.min(390, 210 + distance * 22));
+        animationDuration = Math.max(150, Math.min(245, 150 + distance * 14));
 
         commitActiveTimer.stop();
 
@@ -124,7 +125,7 @@ Item {
         property: "activeDotOpacity"
         from: 0.92
         to: 1.0
-        duration: 160
+        duration: 115
         easing.type: Easing.OutCubic
         alwaysRunToEnd: false
     }
@@ -152,7 +153,7 @@ Item {
             return;
 
         var now = Date.now();
-        if (now - lastWheelSwitchAt < 90)
+        if (now - lastWheelSwitchAt < 42)
             return;
 
         lastWheelSwitchAt = now;

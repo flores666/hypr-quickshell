@@ -19,6 +19,11 @@ PopupWindow {
     property string confirmActionLabel: ""
 
     readonly property bool nestedOverlayVisible: confirmActionName.length > 0 || detailMode.length > 0
+    readonly property int notificationCloseDuration: 205
+    property var closingNotificationIds: []
+    property var closingNotificationEntries: []
+    property var clearNotificationQueue: []
+    property bool clearNotificationsInProgress: false
 
     readonly property real popupBottomMargin: 2
     readonly property real maxPopupHeight: Math.max(180, Screen.height - popupY - popupBottomMargin)
@@ -117,6 +122,104 @@ PopupWindow {
     function cancelSystemActionConfirm() {
         confirmActionName = "";
         confirmActionLabel = "";
+    }
+
+    function isNotificationClosing(notificationId) {
+        var id = String(notificationId || "");
+        var list = closingNotificationIds || [];
+        for (var i = 0; i < list.length; i++) {
+            if (String(list[i]) === id)
+                return true;
+        }
+        return false;
+    }
+
+    function removeClosingNotification(notificationId) {
+        var id = String(notificationId || "");
+        var source = closingNotificationIds || [];
+        var next = [];
+        for (var i = 0; i < source.length; i++) {
+            if (String(source[i]) !== id)
+                next.push(source[i]);
+        }
+        closingNotificationIds = next;
+
+        var entries = closingNotificationEntries || [];
+        var nextEntries = [];
+        for (var j = 0; j < entries.length; j++) {
+            if (String(entries[j].id || "") !== id)
+                nextEntries.push(entries[j]);
+        }
+        closingNotificationEntries = nextEntries;
+    }
+
+    function closeNotificationAnimated(notificationId) {
+        var id = String(notificationId || "");
+        if (id.length === 0 || isNotificationClosing(id))
+            return;
+
+        var next = (closingNotificationIds || []).slice();
+        next.push(id);
+        closingNotificationIds = next;
+
+        var entries = (closingNotificationEntries || []).slice();
+        entries.push({ id: id, startedAt: Date.now() });
+        closingNotificationEntries = entries;
+        notificationCloseCommitSweep.restart();
+    }
+
+    function commitDueNotificationCloses() {
+        var now = Date.now();
+        var entries = closingNotificationEntries || [];
+        var remaining = [];
+
+        for (var i = 0; i < entries.length; i++) {
+            var item = entries[i] || {};
+            var id = String(item.id || "");
+            var startedAt = Number(item.startedAt || 0);
+            if (id.length === 0)
+                continue;
+
+            if (now - startedAt >= notificationCloseDuration + 35) {
+                Services.SystemStatus.closeNotification(id);
+                removeClosingNotification(id);
+            } else {
+                remaining.push(item);
+            }
+        }
+
+        closingNotificationEntries = remaining;
+        if (remaining.length > 0)
+            notificationCloseCommitSweep.restart();
+    }
+
+    function closeNextNotificationFromQueue() {
+        var queue = clearNotificationQueue || [];
+        if (queue.length === 0) {
+            clearNotificationsInProgress = false;
+            clearNotificationsFinalizer.restart();
+            return;
+        }
+
+        var id = String(queue.shift() || "");
+        clearNotificationQueue = queue;
+        if (id.length > 0)
+            closeNotificationAnimated(id);
+        clearNotificationsSequence.restart();
+    }
+
+    function clearNotificationsAnimated() {
+        var list = Services.SystemStatus.notifications || [];
+        if (list.length === 0 || clearNotificationsInProgress)
+            return;
+
+        var queue = [];
+        for (var i = 0; i < list.length; i++)
+            queue.push(String((list[i] || {}).id || ""));
+
+        clearNotificationsInProgress = true;
+        clearNotificationQueue = queue;
+        closeNextNotificationFromQueue();
     }
 
     function closeDetailPopup() {
@@ -246,6 +349,33 @@ PopupWindow {
             } else if (root.controller) {
                 root.controller.closePopup();
             }
+        }
+    }
+
+    Timer {
+        id: clearNotificationsSequence
+        interval: 58
+        repeat: false
+        onTriggered: root.closeNextNotificationFromQueue()
+    }
+
+    Timer {
+        id: notificationCloseCommitSweep
+        interval: 45
+        repeat: false
+        onTriggered: root.commitDueNotificationCloses()
+    }
+
+    Timer {
+        id: clearNotificationsFinalizer
+        interval: root.notificationCloseDuration + 90
+        repeat: false
+        onTriggered: {
+            root.closingNotificationIds = [];
+            root.closingNotificationEntries = [];
+            root.clearNotificationQueue = [];
+            root.clearNotificationsInProgress = false;
+            Services.SystemStatus.clearNotifications();
         }
     }
 
@@ -896,6 +1026,9 @@ PopupWindow {
                                 width: parent.width
                                 spacing: 7
 
+                                readonly property var popupRoot: root
+                                readonly property int closeDuration: root.notificationCloseDuration
+
                                 Components.StyledText {
                                     width: parent.width
                                     height: Services.SystemStatus.notifications.length === 0 ? 50 : 0
@@ -910,14 +1043,31 @@ PopupWindow {
                                 Repeater {
                                     model: Services.SystemStatus.notifications
                                     delegate: Rectangle {
+                                        id: notificationCard
                                         required property var modelData
 
+                                        readonly property bool closing: notificationColumn.popupRoot.isNotificationClosing(modelData.id)
+                                        readonly property real normalHeight: Math.max(58, notificationTextColumn.implicitHeight + 18)
+
                                         width: parent.width
-                                        height: Math.max(58, notificationTextColumn.implicitHeight + 18)
+                                        height: normalHeight
+                                        x: closing ? width + 32 : 0
+                                        opacity: closing ? 0.0 : 1.0
+                                        visible: true
+                                        enabled: !closing
                                         radius: 15
                                         color: notificationMouse.pressed ? "#28000000" : (notificationMouse.containsMouse ? "#22000000" : "#16000000")
                                         border.width: 0
                                         antialiasing: true
+                                        clip: true
+
+                                        Behavior on x {
+                                            NumberAnimation { duration: notificationColumn.closeDuration; easing.type: Easing.InCubic }
+                                        }
+
+                                        Behavior on opacity {
+                                            NumberAnimation { duration: notificationColumn.closeDuration; easing.type: Easing.OutCubic }
+                                        }
 
                                         Behavior on color {
                                             ColorAnimation {
@@ -947,7 +1097,7 @@ PopupWindow {
                                                 antialiasing: true
                                                 clip: true
 
-                                                readonly property string iconSource: root.notificationIconSource(modelData)
+                                                readonly property string iconSource: notificationColumn.popupRoot.notificationIconSource(modelData)
 
                                                 Image {
                                                     id: notificationImage
@@ -976,7 +1126,7 @@ PopupWindow {
                                                 Components.StyledText {
                                                     anchors.centerIn: parent
                                                     visible: notificationImage.status !== Image.Ready
-                                                    text: root.firstLetter(modelData.app || modelData.title, "N")
+                                                    text: notificationColumn.popupRoot.firstLetter(modelData.app || modelData.title, "N")
                                                     color: "#f4f7fb"
                                                     font.pixelSize: 13
                                                     font.weight: Font.DemiBold
@@ -1065,7 +1215,7 @@ PopupWindow {
                                                     acceptedButtons: Qt.LeftButton
                                                     onClicked: function (mouse) {
                                                         mouse.accepted = true;
-                                                        Services.SystemStatus.closeNotification(modelData.id);
+                                                        root.closeNotificationAnimated(modelData.id);
                                                     }
                                                 }
                                             }
@@ -1111,7 +1261,7 @@ PopupWindow {
                                 activeIcon: root.rowIcon("trash")
                                 inactiveText: "Empty"
                                 activeText: "Clear"
-                                onClicked: Services.SystemStatus.clearNotifications()
+                                onClicked: root.clearNotificationsAnimated()
                             }
                         }
                     }
