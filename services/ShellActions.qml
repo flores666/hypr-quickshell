@@ -53,8 +53,6 @@ QtObject {
             return
 
         Services.ShellState.activeWorkspace = workspaceId
-
-        // Реальный вариант для Hyprland:
         Hyprland.dispatch("workspace " + workspaceId)
     }
 

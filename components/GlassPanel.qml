@@ -10,6 +10,6 @@ Rectangle {
     color: glassColor
     border.width: 0
 
-    // Настоящий blur делает Hyprland через layerrule.
-    // Здесь только прозрачный glass-слой, чтобы blur было видно.
+    // Hyprland applies real blur through layerrule. This item only provides
+    // the transparent glass layer that makes compositor blur visible.
 }

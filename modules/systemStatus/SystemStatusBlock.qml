@@ -182,7 +182,7 @@ Item {
         }
     }
 
-    SystemOutsideClickLayer {
+    Components.OutsideClickLayer {
         controller: root
         hostWindow: root.hostWindow
         hostWidth: root.hostWidth

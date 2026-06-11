@@ -395,12 +395,6 @@ PopupWindow {
                     radius: 16
                     color: "#1019232f"
 
-                    Behavior on height {
-                        NumberAnimation {
-                            duration: 240
-                            easing.type: Easing.OutCubic
-                        }
-                    }
                     border.width: 0
                     antialiasing: true
 

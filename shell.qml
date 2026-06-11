@@ -9,7 +9,7 @@ import "./modules/roundedCorners" as RoundedCorners
 Scope {
     id: root
 
-    // Сервисы держим рядом с корнем, чтобы они жили весь срок shell.
+    // Keep services near the root so they live for the whole shell session.
     Services.HyprlandService {}
     Services.TrayBridge {}
 
@@ -17,7 +17,7 @@ Scope {
 
     RoundedCorners.ScreenCorners {}
 
-    // Пока скрытые панели. Их потом можно открывать через hotkeys или IPC.
+    // Hidden utility panels. They can be opened later through hotkeys or IPC.
     Tray.TrayPanel {
         id: trayPanel
         visible: false

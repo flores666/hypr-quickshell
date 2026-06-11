@@ -150,7 +150,7 @@ Item {
         }
     }
 
-    CalendarOutsideClickLayer {
+    Components.OutsideClickLayer {
         controller: root
         hostWindow: root.hostWindow
         hostWidth: root.hostWidth

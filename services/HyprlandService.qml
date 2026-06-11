@@ -81,7 +81,7 @@ Item {
         if (workspaceId <= 0)
             return false;
 
-        // Hyprland иногда возвращает hidden/mapped. Оставляем только нормальные окна.
+        // Hyprland can report hidden or unmapped clients. Keep only visible windows.
         if (client.mapped === false)
             return false;
         if (client.hidden === true)
@@ -157,8 +157,7 @@ Item {
         onTriggered: service.refreshClientsNow()
     }
 
-    // Небольшой fallback, чтобы состояние не застревало после редких событий,
-    // которые не обновляют модель workspaces/clients сразу.
+    // Rare events can miss a client refresh, so keep a lightweight fallback.
     Timer {
         interval: 12000
         repeat: true

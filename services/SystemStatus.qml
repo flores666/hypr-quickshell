@@ -161,6 +161,15 @@ Item {
         return key.length > 0 && Number((dismissedNotificationKeys || {})[key] || 0) > now;
     }
 
+
+    function sameList(left, right) {
+        try {
+            return JSON.stringify(left || []) === JSON.stringify(right || []);
+        } catch (e) {
+            return false;
+        }
+    }
+
     function filterDismissedNotifications(list) {
         pruneDismissedNotifications();
 
@@ -655,7 +664,9 @@ Item {
         networkDevice = n.device || "";
         wifiSsid = n.ssid || "";
         wifiSignal = Number(n.signal || 0);
-        wifiNetworks = n.networks || [];
+        var nextWifiNetworks = n.networks || [];
+        if (!sameList(wifiNetworks, nextWifiNetworks))
+            wifiNetworks = nextWifiNetworks;
         ready = true;
     }
 
@@ -663,7 +674,9 @@ Item {
         bt = bt || {};
         hasBluetooth = !!bt.hasBluetooth;
         bluetoothEnabled = !!bt.enabled;
-        bluetoothDevices = bt.devices || [];
+        var nextBluetoothDevices = bt.devices || [];
+        if (!sameList(bluetoothDevices, nextBluetoothDevices))
+            bluetoothDevices = nextBluetoothDevices;
         ready = true;
     }
 
@@ -682,7 +695,9 @@ Item {
         notificationsData = notificationsData || {};
         notificationsAvailable = !!notificationsData.available;
         notificationsSilent = !!notificationsData.silent;
-        historyNotifications = filterDismissedNotifications(notificationsData.items || []);
+        var nextHistoryNotifications = filterDismissedNotifications(notificationsData.items || []);
+        if (!sameList(historyNotifications, nextHistoryNotifications))
+            historyNotifications = nextHistoryNotifications;
         mergeNotifications(historyNotifications.length);
         ready = true;
     }
@@ -711,69 +726,54 @@ Item {
         }
 
         if (pendingSinkName !== "") {
-            audioDevices = devicesWithActiveSink(nextAudioDevices, pendingSinkName);
+            var pendingDevices = devicesWithActiveSink(nextAudioDevices, pendingSinkName);
+            if (!sameList(audioDevices, pendingDevices))
+                audioDevices = pendingDevices;
             audioDevice = pendingSinkLabel !== "" ? pendingSinkLabel : (sinkLabelByName(pendingSinkName, nextAudioDevices) || a.device || "");
         } else {
             audioDevice = a.device || "";
-            audioDevices = nextAudioDevices;
+            if (!sameList(audioDevices, nextAudioDevices))
+                audioDevices = nextAudioDevices;
         }
 
-        sinkInputs = a.sinkInputs || [];
+        var nextSinkInputs = a.sinkInputs || [];
+        if (!sameList(sinkInputs, nextSinkInputs))
+            sinkInputs = nextSinkInputs;
         ready = true;
     }
 
-    function updateDistroFromJson(text) {
+    function parsedStatusPayload(text, key, label) {
         try {
             var data = JSON.parse(text || "{}");
-            applyDistroStatus(data.distro || data || {});
+            return data[key] || data || {};
         } catch (e) {
-            console.log("distro status parse error", e, text);
+            console.log(label + " status parse error", e, text);
+            return {};
         }
+    }
+
+    function updateDistroFromJson(text) {
+        applyDistroStatus(parsedStatusPayload(text, "distro", "distro"));
     }
 
     function updateNetworkFromJson(text) {
-        try {
-            var data = JSON.parse(text || "{}");
-            applyNetworkStatus(data.network || data || {});
-        } catch (e) {
-            console.log("network status parse error", e, text);
-        }
+        applyNetworkStatus(parsedStatusPayload(text, "network", "network"));
     }
 
     function updateBluetoothFromJson(text) {
-        try {
-            var data = JSON.parse(text || "{}");
-            applyBluetoothStatus(data.bluetooth || data || {});
-        } catch (e) {
-            console.log("bluetooth status parse error", e, text);
-        }
+        applyBluetoothStatus(parsedStatusPayload(text, "bluetooth", "bluetooth"));
     }
 
     function updateAudioFromJson(text) {
-        try {
-            var data = JSON.parse(text || "{}");
-            applyAudioStatus(data.audio || data || {});
-        } catch (e) {
-            console.log("audio status parse error", e, text);
-        }
+        applyAudioStatus(parsedStatusPayload(text, "audio", "audio"));
     }
 
     function updateBatteryFromJson(text) {
-        try {
-            var data = JSON.parse(text || "{}");
-            applyBatteryStatus(data.battery || data || {});
-        } catch (e) {
-            console.log("battery status parse error", e, text);
-        }
+        applyBatteryStatus(parsedStatusPayload(text, "battery", "battery"));
     }
 
     function updateNotificationsFromJson(text) {
-        try {
-            var data = JSON.parse(text || "{}");
-            applyNotificationsStatus(data.notifications || data || {});
-        } catch (e) {
-            console.log("notifications status parse error", e, text);
-        }
+        applyNotificationsStatus(parsedStatusPayload(text, "notifications", "notifications"));
     }
 
     function runAction(args) {

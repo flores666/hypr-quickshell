@@ -10,6 +10,33 @@ from pathlib import Path
 from shutil import which
 
 
+
+SERVICE_AUDIO_APPS = {
+    "pipewire",
+    "wireplumber",
+    "pulseaudio",
+    "pulse audio",
+    "pavucontrol",
+    "pulseaudio volume control",
+    "speech dispatcher",
+    "speech-dispatcher",
+    "speech_dispatcher",
+    "speechd",
+    "spd",
+    "sd_generic",
+    "sd espeak ng",
+    "sd_espeak-ng",
+    "sd_dummy",
+}
+SERVICE_AUDIO_MARKERS = (
+    "speech dispatcher",
+    "speech-dispatcher",
+    "speech_dispatcher",
+    "org.freedesktop.speech",
+)
+GENERIC_AUDIO_MEDIA_NAMES = {"playback", "audio playback", "output"}
+JSON_DUMP_OPTIONS = {"ensure_ascii": False, "separators": (",", ":")}
+
 @lru_cache(maxsize=None)
 def has_cmd(name):
     return which(name) is not None
@@ -211,40 +238,16 @@ def is_real_sink_input(block, props):
     media_key = media_name.casefold()
     binary_key = binary.casefold()
 
-    service_apps = {
-        "pipewire",
-        "wireplumber",
-        "pulseaudio",
-        "pulse audio",
-        "pavucontrol",
-        "pulseaudio volume control",
-        "speech dispatcher",
-        "speech-dispatcher",
-        "speech_dispatcher",
-        "speechd",
-        "spd",
-        "sd_generic",
-        "sd espeak ng",
-        "sd_espeak-ng",
-        "sd_dummy",
-    }
-    service_markers = (
-        "speech dispatcher",
-        "speech-dispatcher",
-        "speech_dispatcher",
-        "org.freedesktop.speech",
-    )
     combined_identity = " ".join([app_key, media_key, binary_key, desktop.casefold()])
-    if app_key in service_apps or binary_key in service_apps:
+    if app_key in SERVICE_AUDIO_APPS or binary_key in SERVICE_AUDIO_APPS:
         return False
-    if any(marker in combined_identity for marker in service_markers):
-        return False
-
-    generic_media_names = {"playback", "audio playback", "output"}
-    if media_key in generic_media_names and not (app_name or binary or desktop):
+    if any(marker in combined_identity for marker in SERVICE_AUDIO_MARKERS):
         return False
 
-    if app_key in generic_media_names and not (binary or desktop or props.get("application.icon_name")):
+    if media_key in GENERIC_AUDIO_MEDIA_NAMES and not (app_name or binary or desktop):
+        return False
+
+    if app_key in GENERIC_AUDIO_MEDIA_NAMES and not (binary or desktop or props.get("application.icon_name")):
         return False
 
     return True
@@ -1015,33 +1018,37 @@ def launch_desktop_entry(desktop_entry):
     return False
 
 
+def json_out(payload):
+    print(json.dumps(payload, **JSON_DUMP_OPTIONS))
+
+
 def action(args):
     if not args:
         return 0
     cmd = args[0]
 
     if cmd == "status-distro":
-        print(json.dumps(distro_status(), ensure_ascii=False, separators=(",", ":")))
+        json_out(distro_status())
         return 0
 
     if cmd == "status-network":
-        print(json.dumps(network_status(), ensure_ascii=False, separators=(",", ":")))
+        json_out(network_status())
         return 0
 
     if cmd == "status-audio":
-        print(json.dumps(audio_status(), ensure_ascii=False, separators=(",", ":")))
+        json_out(audio_status())
         return 0
 
     if cmd == "status-battery":
-        print(json.dumps(battery_status(), ensure_ascii=False, separators=(",", ":")))
+        json_out(battery_status())
         return 0
 
     if cmd == "status-bluetooth":
-        print(json.dumps(bluetooth_status(), ensure_ascii=False, separators=(",", ":")))
+        json_out(bluetooth_status())
         return 0
 
     if cmd == "status-notifications":
-        print(json.dumps(notifications_status(), ensure_ascii=False, separators=(",", ":")))
+        json_out(notifications_status())
         return 0
 
     if cmd == "resolve-icon":
@@ -1176,4 +1183,4 @@ def action(args):
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         sys.exit(action(sys.argv[1:]))
-    print(json.dumps(status(), ensure_ascii=False, separators=(",", ":")))
+    json_out(status())

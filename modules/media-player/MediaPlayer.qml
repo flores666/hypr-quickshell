@@ -1,5 +1,6 @@
 import Quickshell.Services.Mpris
 import QtQuick
+import "../../components" as Components
 
 Item {
     id: root
@@ -464,7 +465,7 @@ Item {
         onClicked: root.togglePopup()
     }
 
-    MediaOutsideClickLayer {
+    Components.OutsideClickLayer {
         controller: root
         hostWindow: root.hostWindow
         hostWidth: root.hostWidth
