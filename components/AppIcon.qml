@@ -15,7 +15,7 @@ Rectangle {
     implicitWidth: 38
     implicitHeight: 34
     radius: 11
-    color: active ? "#55ffffff" : "#221b2330"
+    color: active ? "#55ffffff" : "#22000000"
 
     ColumnLayout {
         anchors.centerIn: parent

@@ -283,7 +283,7 @@ PopupWindow {
             id: panel
             anchors.fill: parent
             radiusSize: 18
-            glassColor: "#b010131a"
+            glassColor: "#b006080c"
             clip: true
             antialiasing: true
         }
@@ -291,7 +291,7 @@ PopupWindow {
         Rectangle {
             anchors.fill: parent
             radius: 18
-            color: popupMouse.pressed ? "#08ffffff" : "transparent"
+            color: popupMouse.pressed ? "#12000000" : "transparent"
             border.width: 0
             antialiasing: true
 
@@ -359,7 +359,7 @@ PopupWindow {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 44
                             radius: 15
-                            color: actionMouse.pressed ? "#28ffffff" : (actionMouse.containsMouse ? "#18ffffff" : "#1019232f")
+                            color: actionMouse.pressed ? "#34000000" : (actionMouse.containsMouse ? "#26000000" : "#30000000")
                             border.width: 0
                             antialiasing: true
 
@@ -391,7 +391,7 @@ PopupWindow {
                     width: parent.width
                     height: root.wirelessCardHeight
                     radius: 16
-                    color: "#1019232f"
+                    color: "#30000000"
 
                     Behavior on height {
                         NumberAnimation {
@@ -418,7 +418,7 @@ PopupWindow {
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: 42
                                 radius: 14
-                                color: wifiMouse.pressed && root.wifiAvailable() ? "#28ffffff" : (wifiMouse.containsMouse && root.wifiAvailable() || root.detailMode === "wifi" ? "#18ffffff" : (Services.SystemStatus.wifiEnabled ? "#16ffffff" : "#0dffffff"))
+                                color: wifiMouse.pressed && root.wifiAvailable() ? "#34000000" : (wifiMouse.containsMouse && root.wifiAvailable() || root.detailMode === "wifi" ? "#26000000" : (Services.SystemStatus.wifiEnabled ? "#22000000" : "#16000000"))
                                 opacity: root.wifiAvailable() ? (Services.SystemStatus.wifiEnabled ? 1.0 : 0.58) : 0.32
                                 border.width: 0
                                 antialiasing: true
@@ -483,7 +483,7 @@ PopupWindow {
                                 Layout.fillWidth: visible
                                 Layout.preferredHeight: 42
                                 radius: 14
-                                color: ethernetMouse.pressed ? "#28ffffff" : (ethernetMouse.containsMouse || root.detailMode === "ethernet" ? "#18ffffff" : (Services.SystemStatus.ethernetActive ? "#16ffffff" : "#0dffffff"))
+                                color: ethernetMouse.pressed ? "#34000000" : (ethernetMouse.containsMouse || root.detailMode === "ethernet" ? "#26000000" : (Services.SystemStatus.ethernetActive ? "#22000000" : "#16000000"))
                                 opacity: Services.SystemStatus.ethernetActive ? 1.0 : 0.55
                                 border.width: 0
                                 antialiasing: true
@@ -536,7 +536,7 @@ PopupWindow {
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: 42
                                 radius: 14
-                                color: bluetoothMouse.pressed && root.bluetoothAvailable() ? "#28ffffff" : (bluetoothMouse.containsMouse && root.bluetoothAvailable() || root.detailMode === "bluetooth" ? "#18ffffff" : (Services.SystemStatus.bluetoothEnabled ? "#16ffffff" : "#0dffffff"))
+                                color: bluetoothMouse.pressed && root.bluetoothAvailable() ? "#34000000" : (bluetoothMouse.containsMouse && root.bluetoothAvailable() || root.detailMode === "bluetooth" ? "#26000000" : (Services.SystemStatus.bluetoothEnabled ? "#22000000" : "#16000000"))
                                 opacity: root.bluetoothAvailable() ? (Services.SystemStatus.bluetoothEnabled ? 1.0 : 0.58) : 0.32
                                 border.width: 0
                                 antialiasing: true
@@ -603,7 +603,7 @@ PopupWindow {
                     width: parent.width
                     height: root.audioCardFixedHeight
                     radius: 16
-                    color: "#1019232f"
+                    color: "#30000000"
                     border.width: 0
                     antialiasing: true
                     clip: true
@@ -618,11 +618,6 @@ PopupWindow {
                             width: parent.width
                             height: 26
                             spacing: 10
-
-                            SystemIcon {
-                                source: root.volumeIcon()
-                                iconOpacity: 0.95
-                            }
 
                             Components.StyledText {
                                 Layout.fillWidth: true
@@ -640,44 +635,17 @@ PopupWindow {
                                 font.weight: Font.Medium
                             }
 
-                            Rectangle {
-                                width: 54
-                                height: 24
-                                radius: 12
-                                color: muteMouse.pressed ? "#26ffffff" : (muteMouse.containsMouse ? "#18ffffff" : "#12ffffff")
-                                border.width: 0
-                                antialiasing: true
-                                opacity: Services.SystemStatus.hasAudio ? 1.0 : 0.45
-
-                                Behavior on color {
-                                    ColorAnimation {
-                                        duration: motion.hoverDuration
-                                        easing.type: Easing.OutCubic
-                                    }
-                                }
-                                Behavior on opacity {
-                                    NumberAnimation {
-                                        duration: 160
-                                        easing.type: Easing.OutCubic
-                                    }
-                                }
-
-                                Components.StyledText {
-                                    anchors.centerIn: parent
-                                    text: Services.SystemStatus.muted ? "unmute" : "mute"
-                                    color: "#eef3f8"
-                                    font.pixelSize: 10
-                                    font.weight: Font.DemiBold
-                                }
-
-                                MouseArea {
-                                    id: muteMouse
-                                    anchors.fill: parent
-                                    enabled: Services.SystemStatus.hasAudio
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: Services.SystemStatus.toggleMute()
-                                }
+                            StatePill {
+                                Layout.preferredWidth: 32
+                                Layout.preferredHeight: 24
+                                preferredWidth: 32
+                                preferredHeight: 24
+                                iconOnly: true
+                                enabledState: Services.SystemStatus.hasAudio
+                                active: Services.SystemStatus.muted
+                                inactiveIcon: root.rowIcon("volume-high")
+                                activeIcon: root.rowIcon("volume-muted")
+                                onClicked: Services.SystemStatus.toggleMute()
                             }
                         }
 
@@ -732,9 +700,9 @@ PopupWindow {
                                             width: 22
                                             height: 22
                                             radius: 11
-                                            color: appIconImage.status === Image.Ready ? "#12ffffff" : "#18ffffff"
+                                            color: appIconImage.status === Image.Ready ? "#1b000000" : "#26000000"
                                             border.width: appIconImage.status === Image.Ready ? 0 : 1
-                                            border.color: "#20ffffff"
+                                            border.color: "#28000000"
                                             antialiasing: true
                                             clip: true
 
@@ -809,7 +777,7 @@ PopupWindow {
                                         width: parent.width
                                         height: root.audioDeviceRowHeight
                                         radius: 12
-                                        color: deviceMouse.pressed ? "#22ffffff" : (deviceMouse.containsMouse ? "#14ffffff" : (modelData.active ? "#1cffffff" : "transparent"))
+                                        color: deviceMouse.pressed ? "#2a000000" : (deviceMouse.containsMouse ? "#20000000" : (modelData.active ? "#1cffffff" : "transparent"))
                                         border.width: 0
                                         antialiasing: true
 
@@ -862,7 +830,7 @@ PopupWindow {
                     width: parent.width
                     height: root.notificationsCardFixedHeight
                     radius: 16
-                    color: "#1019232f"
+                    color: "#30000000"
                     border.width: 0
                     antialiasing: true
                     clip: true
@@ -877,11 +845,6 @@ PopupWindow {
                             height: 24
                             spacing: 8
 
-                            SystemIcon {
-                                source: root.rowIcon("bell")
-                                iconOpacity: 0.88
-                            }
-
                             Components.StyledText {
                                 Layout.fillWidth: true
                                 text: "Notifications"
@@ -891,9 +854,23 @@ PopupWindow {
                             }
 
                             Components.StyledText {
-                                text: Services.SystemStatus.notificationsCount + ""
+                                text: Services.SystemStatus.notificationsCount + " notifications"
                                 color: "#aeb8c6"
                                 font.pixelSize: 11
+                                font.weight: Font.Medium
+                                verticalAlignment: Text.AlignVCenter
+                            }
+
+                            StatePill {
+                                Layout.preferredWidth: 32
+                                Layout.preferredHeight: 24
+                                preferredWidth: 32
+                                preferredHeight: 24
+                                iconOnly: true
+                                active: Services.SystemStatus.notificationsSilent
+                                inactiveIcon: root.rowIcon("bell")
+                                activeIcon: root.rowIcon("bell-off")
+                                onClicked: Services.SystemStatus.toggleNotificationsSilent()
                             }
                         }
 
@@ -930,7 +907,7 @@ PopupWindow {
                                         width: parent.width
                                         height: Math.max(58, notificationTextColumn.implicitHeight + 18)
                                         radius: 15
-                                        color: notificationMouse.pressed ? "#20ffffff" : (notificationMouse.containsMouse ? "#16ffffff" : "#0dffffff")
+                                        color: notificationMouse.pressed ? "#28000000" : (notificationMouse.containsMouse ? "#22000000" : "#16000000")
                                         border.width: 0
                                         antialiasing: true
 
@@ -956,9 +933,9 @@ PopupWindow {
                                                 width: 34
                                                 height: 34
                                                 radius: 17
-                                                color: notificationImage.status === Image.Ready ? "#18ffffff" : "#22ffffff"
+                                                color: notificationImage.status === Image.Ready ? "#26000000" : "#2a000000"
                                                 border.width: notificationImage.status === Image.Ready ? 0 : 1
-                                                border.color: "#20ffffff"
+                                                border.color: "#28000000"
                                                 antialiasing: true
                                                 clip: true
 
@@ -983,7 +960,7 @@ PopupWindow {
                                                     height: 20
                                                     radius: 10
                                                     visible: notificationImage.status !== Image.Ready
-                                                    color: "#18ffffff"
+                                                    color: "#26000000"
                                                     border.width: 0
                                                     antialiasing: true
                                                 }
@@ -1055,7 +1032,7 @@ PopupWindow {
                                                 width: 22
                                                 height: 22
                                                 radius: 11
-                                                color: closeNotificationMouse.pressed ? "#24ffffff" : (closeNotificationMouse.containsMouse ? "#18ffffff" : "transparent")
+                                                color: closeNotificationMouse.pressed ? "#2c000000" : (closeNotificationMouse.containsMouse ? "#26000000" : "transparent")
                                                 border.width: 0
                                                 antialiasing: true
 
@@ -1110,78 +1087,23 @@ PopupWindow {
                             height: 26
                             spacing: 8
 
-                            Components.StyledText {
+                            Item {
                                 Layout.fillWidth: true
-                                text: Services.SystemStatus.notificationsCount + " notifications"
-                                color: "#8f9aa8"
-                                font.pixelSize: 10
-                                verticalAlignment: Text.AlignVCenter
                             }
 
-                            Rectangle {
-                                Layout.preferredWidth: 58
+                            StatePill {
+                                Layout.preferredWidth: 78
                                 Layout.preferredHeight: 24
-                                Layout.alignment: Qt.AlignVCenter
-                                radius: 12
-                                color: silentMouse.pressed ? "#24ffffff" : (silentMouse.containsMouse || Services.SystemStatus.notificationsSilent ? "#18ffffff" : "#12ffffff")
-                                border.width: 0
-                                antialiasing: true
-
-                                Behavior on color {
-                                    ColorAnimation {
-                                        duration: motion.hoverDuration
-                                        easing.type: Easing.OutCubic
-                                    }
-                                }
-
-                                Components.StyledText {
-                                    anchors.centerIn: parent
-                                    text: "Silent"
-                                    color: "#eef3f8"
-                                    font.pixelSize: 10
-                                    font.weight: Font.DemiBold
-                                }
-
-                                MouseArea {
-                                    id: silentMouse
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: Services.SystemStatus.toggleNotificationsSilent()
-                                }
-                            }
-
-                            Rectangle {
-                                Layout.preferredWidth: 58
-                                Layout.preferredHeight: 24
-                                Layout.alignment: Qt.AlignVCenter
-                                radius: 12
-                                color: clearMouse.pressed ? "#24ffffff" : (clearMouse.containsMouse ? "#18ffffff" : "#12ffffff")
-                                border.width: 0
-                                antialiasing: true
-
-                                Behavior on color {
-                                    ColorAnimation {
-                                        duration: motion.hoverDuration
-                                        easing.type: Easing.OutCubic
-                                    }
-                                }
-
-                                Components.StyledText {
-                                    anchors.centerIn: parent
-                                    text: "Clear"
-                                    color: "#eef3f8"
-                                    font.pixelSize: 10
-                                    font.weight: Font.DemiBold
-                                }
-
-                                MouseArea {
-                                    id: clearMouse
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: Services.SystemStatus.clearNotifications()
-                                }
+                                preferredWidth: 78
+                                preferredHeight: 24
+                                iconOnly: false
+                                enabledState: Services.SystemStatus.notificationsCount > 0
+                                active: Services.SystemStatus.notificationsCount > 0
+                                inactiveIcon: root.rowIcon("trash")
+                                activeIcon: root.rowIcon("trash")
+                                inactiveText: "Empty"
+                                activeText: "Clear"
+                                onClicked: Services.SystemStatus.clearNotifications()
                             }
                         }
                     }
@@ -1192,7 +1114,7 @@ PopupWindow {
                     height: Services.SystemStatus.hasBattery ? 54 : 0
                     visible: Services.SystemStatus.hasBattery
                     radius: 16
-                    color: "#1019232f"
+                    color: "#30000000"
                     border.width: 0
                     antialiasing: true
                     opacity: Services.SystemStatus.hasBattery ? 1.0 : 0.0
@@ -1288,32 +1210,12 @@ PopupWindow {
 
             MouseArea {
                 anchors.fill: parent
-                acceptedButtons: Qt.AllButtons
-                hoverEnabled: true
-                preventStealing: true
-                propagateComposedEvents: false
-                cursorShape: Qt.ArrowCursor
-
-                onPressed: function(mouse) {
-                    mouse.accepted = true;
-                }
-
-                onReleased: function(mouse) {
-                    mouse.accepted = true;
-                }
-
-                onWheel: function(wheel) {
-                    wheel.accepted = true;
-                }
-
-                onClicked: function(mouse) {
-                    if (mouse.button === Qt.LeftButton) {
-                        if (root.confirmActionName.length > 0)
-                            root.cancelSystemActionConfirm();
-                        else
-                            root.closeDetailPopup();
-                    }
-                    mouse.accepted = true;
+                acceptedButtons: Qt.LeftButton
+                onClicked: {
+                    if (root.confirmActionName.length > 0)
+                        root.cancelSystemActionConfirm();
+                    else
+                        root.closeDetailPopup();
                 }
             }
 
@@ -1323,9 +1225,9 @@ PopupWindow {
                 height: root.confirmActionName.length > 0 ? confirmColumn.implicitHeight + 28 : detailColumn.implicitHeight + 28
                 anchors.centerIn: parent
                 radius: 18
-                color: "#f0141821"
+                color: "#f00a0a0d"
                 border.width: 1
-                border.color: "#22ffffff"
+                border.color: "#2a000000"
                 antialiasing: true
                 clip: true
                 scale: root.nestedOverlayVisible ? 1.0 : 0.96
@@ -1344,25 +1246,8 @@ PopupWindow {
                 }
                 MouseArea {
                     anchors.fill: parent
-                    acceptedButtons: Qt.AllButtons
-                    hoverEnabled: true
-                    preventStealing: true
-                    propagateComposedEvents: false
-                    cursorShape: Qt.ArrowCursor
-
-                    onPressed: function(mouse) {
-                        mouse.accepted = true;
-                    }
-
-                    onReleased: function(mouse) {
-                        mouse.accepted = true;
-                    }
-
-                    onWheel: function(wheel) {
-                        wheel.accepted = true;
-                    }
-
-                    onClicked: function(mouse) {
+                    acceptedButtons: Qt.LeftButton
+                    onClicked: function (mouse) {
                         mouse.accepted = true;
                     }
                 }
@@ -1397,7 +1282,7 @@ PopupWindow {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 30
                             radius: 13
-                            color: acceptConfirmMouse.pressed ? "#34ffffff" : (acceptConfirmMouse.containsMouse ? "#26ffffff" : "#1affffff")
+                            color: acceptConfirmMouse.pressed ? "#34ffffff" : (acceptConfirmMouse.containsMouse ? "#30000000" : "#1affffff")
                             border.width: 0
                             antialiasing: true
 
@@ -1429,7 +1314,7 @@ PopupWindow {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 30
                             radius: 13
-                            color: cancelConfirmMouse.pressed ? "#24ffffff" : (cancelConfirmMouse.containsMouse ? "#18ffffff" : "#12ffffff")
+                            color: cancelConfirmMouse.pressed ? "#2c000000" : (cancelConfirmMouse.containsMouse ? "#26000000" : "#1b000000")
                             border.width: 0
                             antialiasing: true
 
@@ -1492,7 +1377,7 @@ PopupWindow {
                             Layout.preferredWidth: 24
                             Layout.preferredHeight: 24
                             radius: 12
-                            color: closeDetailMouse.pressed ? "#24ffffff" : (closeDetailMouse.containsMouse ? "#18ffffff" : "transparent")
+                            color: closeDetailMouse.pressed ? "#2c000000" : (closeDetailMouse.containsMouse ? "#26000000" : "transparent")
                             border.width: 0
                             antialiasing: true
 
@@ -1577,7 +1462,7 @@ PopupWindow {
                                     width: parent.width
                                     height: 30
                                     radius: 12
-                                    color: wifiDetailMouse.pressed ? "#22ffffff" : (wifiDetailMouse.containsMouse ? "#14ffffff" : (modelData.active ? "#1cffffff" : "transparent"))
+                                    color: wifiDetailMouse.pressed ? "#2a000000" : (wifiDetailMouse.containsMouse ? "#20000000" : (modelData.active ? "#1cffffff" : "transparent"))
                                     border.width: 0
                                     antialiasing: true
 
@@ -1666,7 +1551,7 @@ PopupWindow {
                                     width: parent.width
                                     height: 30
                                     radius: 12
-                                    color: bluetoothDetailMouse.pressed ? "#22ffffff" : (bluetoothDetailMouse.containsMouse ? "#14ffffff" : (modelData.connected ? "#1cffffff" : "transparent"))
+                                    color: bluetoothDetailMouse.pressed ? "#2a000000" : (bluetoothDetailMouse.containsMouse ? "#20000000" : (modelData.connected ? "#1cffffff" : "transparent"))
                                     border.width: 0
                                     antialiasing: true
 

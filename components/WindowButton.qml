@@ -17,7 +17,7 @@ Rectangle {
     implicitWidth: Math.max(76, label.implicitWidth + 34)
     implicitHeight: 24
     radius: 8
-    color: active ? "#44ffffff" : trayed ? "#1a1b2330" : "#261b2330"
+    color: active ? "#44ffffff" : trayed ? "#1a000000" : "#26000000"
     border.width: 0
 
     RowLayout {

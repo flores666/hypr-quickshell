@@ -11,7 +11,7 @@ Item {
     property bool dragging: false
     property bool pointerReady: false
     property color fillColor: "#eef3f8"
-    property color backgroundColor: "#2affffff"
+    property color backgroundColor: "#30000000"
 
     signal valueCommitted(real value)
 
@@ -90,20 +90,6 @@ Item {
             antialiasing: true
         }
 
-        Rectangle {
-            width: root.dragging || sliderMouse.containsMouse ? 12 : 8
-            height: width
-            radius: width / 2
-            x: Math.max(0, Math.min(parent.width - width, parent.width * root.ratio() - width / 2))
-            anchors.verticalCenter: parent.verticalCenter
-            color: "#f4f7fb"
-            opacity: root.dragging || sliderMouse.containsMouse ? 1.0 : 0.72
-            border.width: 0
-            antialiasing: true
-
-            Behavior on width { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
-            Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
-        }
     }
 
     MouseArea {

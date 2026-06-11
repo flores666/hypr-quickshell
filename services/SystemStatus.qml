@@ -257,9 +257,6 @@ Item {
     }
 
     function enqueueLiveNotification(app, title, body, icon) {
-        if (notificationsSilent)
-            return;
-
         var item = {
             app: String(app || "Notification"),
             title: String(title || "Notification"),
@@ -799,6 +796,8 @@ Item {
     }
 
     function toggleMute() {
+        if (hasAudio)
+            muted = !muted;
         runAction(["toggle-mute"]);
     }
 
@@ -862,14 +861,6 @@ Item {
 
     function toggleNotificationsSilent() {
         notificationsSilent = !notificationsSilent;
-
-        if (notificationsSilent) {
-            pendingLiveNotifications = [];
-            activeLiveNotification = null;
-            liveNotifications = [];
-            mergeNotifications(historyNotifications.length);
-        }
-
         runAction(["notifications-toggle-silent"]);
     }
 

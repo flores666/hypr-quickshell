@@ -3,7 +3,7 @@ import QtQuick
 Rectangle {
     id: root
 
-    property color glassColor: "#66141822"
+    property color glassColor: "#6606080c"
     property int radiusSize: 16
 
     radius: radiusSize

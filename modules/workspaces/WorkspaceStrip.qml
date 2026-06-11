@@ -34,6 +34,9 @@ Item {
     property real activeDotCenterX: 0
     property bool ready: false
     property int animationDuration: 280
+    property real lastWheelSwitchAt: 0
+
+    signal workspaceScrolled()
 
     implicitWidth: sidePadding * 2 + workspaceCount * cellWidth
     implicitHeight: moduleHeight
@@ -141,6 +144,21 @@ Item {
         if (workspaceId > workspaceCount)
             return workspaceCount;
         return workspaceId;
+    }
+
+
+    function scrollWorkspace(deltaY) {
+        if (deltaY === 0)
+            return;
+
+        var now = Date.now();
+        if (now - lastWheelSwitchAt < 90)
+            return;
+
+        lastWheelSwitchAt = now;
+        var direction = deltaY > 0 ? -1 : 1;
+        root.workspaceScrolled();
+        Services.ShellActions.switchWorkspace(clampWorkspace(activeWorkspace + direction));
     }
 
     function workspaceCenterX(workspaceId) {
@@ -339,6 +357,14 @@ Item {
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: Services.ShellActions.switchWorkspace(cell.workspaceId)
+                    onWheel: function(wheel) {
+                        var deltaY = wheel.angleDelta.y;
+                        if (!deltaY)
+                            deltaY = wheel.pixelDelta.y;
+                        if (deltaY)
+                            root.scrollWorkspace(deltaY);
+                        wheel.accepted = true;
+                    }
                 }
             }
         }

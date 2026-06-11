@@ -67,7 +67,7 @@ PopupWindow {
             id: panel
             anchors.fill: parent
             radiusSize: 18
-            glassColor: "#b010131a"
+            glassColor: "#b006080c"
             clip: true
             antialiasing: true
         }

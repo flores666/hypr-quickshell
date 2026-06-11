@@ -73,7 +73,7 @@ PopupWindow {
             id: panel
             anchors.fill: parent
             radiusSize: 18
-            glassColor: "#b010131a"
+            glassColor: "#b006080c"
             clip: true
             antialiasing: true
         }
@@ -104,7 +104,7 @@ PopupWindow {
             anchors.fill: parent
             anchors.margins: root.outerMargin
             radius: 16
-            color: "#1019232f"
+            color: "#30000000"
             border.width: 0
             antialiasing: true
             opacity: root.clamp01((root.reveal - 0.10) / 0.90)

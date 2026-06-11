@@ -49,12 +49,22 @@ PanelWindow {
         if (!anyPopupOpen())
             return;
 
+        if (suppressPopupCloseAfterWorkspaceScroll.running)
+            return;
+
         if (event.name === "activewindow" || event.name === "activewindowv2")
             closePopupsFromOutside();
     }
 
     Component.onCompleted: {
         Hyprland.rawEvent.connect(handleHyprlandRawEvent);
+    }
+
+
+    Timer {
+        id: suppressPopupCloseAfterWorkspaceScroll
+        interval: 520
+        repeat: false
     }
 
     Shortcut {
@@ -74,7 +84,7 @@ PanelWindow {
             rightMargin: root.panelSideInset
         }
         radiusSize: 28
-        glassColor: "#b010131a"
+        glassColor: "#b006080c"
     }
 
     Item {
@@ -97,6 +107,7 @@ PanelWindow {
             height: implicitHeight
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
+            onWorkspaceScrolled: suppressPopupCloseAfterWorkspaceScroll.restart()
         }
 
         Calendar.CalendarModule {
