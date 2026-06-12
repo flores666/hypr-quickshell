@@ -32,6 +32,12 @@ Item {
     property bool rebuildQueued: false
     property bool tooltipOpen: false
     property string tooltipText: ""
+    property string tooltipDisplayText: ""
+    property string tooltipTextA: ""
+    property string tooltipTextB: ""
+    property bool tooltipUseA: true
+    property string tooltipPendingText: ""
+    property real tooltipPendingAnchorX: 0
     property string tooltipTargetId: ""
     property real tooltipAnchorX: 0
     property var panelItems: []
@@ -113,10 +119,12 @@ Item {
 
         tooltipTargetId = key;
         tooltipText = text;
-        tooltipAnchorX = localCenterX;
+        tooltipPendingText = text;
+        tooltipPendingAnchorX = localCenterX;
 
         if (tooltipOpen || tooltipState.renderVisible) {
             tooltipTimer.stop();
+            tooltipSwitchTimer.restart();
             tooltipOpen = true;
             return;
         }
@@ -128,14 +136,64 @@ Item {
         if (itemKey(item) !== tooltipTargetId)
             return;
         tooltipTimer.stop();
+        tooltipSwitchTimer.stop();
         tooltipTargetId = "";
         tooltipOpen = false;
     }
 
     function hideTooltip() {
         tooltipTimer.stop();
+        tooltipSwitchTimer.stop();
         tooltipTargetId = "";
         tooltipOpen = false;
+    }
+
+    function setTooltipVisualText(text, anchorX) {
+        var next = String(text || "").trim();
+        if (!next)
+            return;
+
+        tooltipAnchorX = anchorX;
+        if (!tooltipState.renderVisible && !tooltipOpen) {
+            tooltipTextA = next;
+            tooltipTextB = "";
+            tooltipUseA = true;
+            tooltipDisplayText = next;
+            return;
+        }
+
+        var current = tooltipUseA ? tooltipTextA : tooltipTextB;
+        if (current === next)
+            return;
+
+        if (tooltipUseA)
+            tooltipTextB = next;
+        else
+            tooltipTextA = next;
+        tooltipUseA = !tooltipUseA;
+        tooltipDisplayText = next;
+    }
+
+    function itemByKey(key) {
+        for (var i = 0; i < panelItems.length; i++) {
+            var item = panelItems[i];
+            if (itemKey(item) === key)
+                return item;
+        }
+        return null;
+    }
+
+    function refreshTooltipForTarget() {
+        if (!tooltipOpen || !tooltipTargetId)
+            return;
+        var item = itemByKey(tooltipTargetId);
+        if (!item)
+            return;
+        var text = tooltipFor(item);
+        if (text) {
+            tooltipPendingText = text;
+            tooltipSwitchTimer.restart();
+        }
     }
 
     function iconUrl(value) {
@@ -203,7 +261,7 @@ Item {
         return items;
     }
 
-    function pinnedOrderFromPreview() {
+    function dockOrderFromPreview() {
         var items = draggedPreviewOrder();
         var result = [];
         for (var i = 0; i < items.length; i++) {
@@ -211,10 +269,19 @@ Item {
             if (!canDragItem(item))
                 continue;
 
-            // Reordering treats visible desktop-backed icons equally. Items in
-            // the preview order become part of the persistent dock order, so the
-            // visual result after drop matches what the user arranged.
+            // Reordering treats every desktop-backed icon equally. It changes
+            // visual order only and does not change pin state.
             if (result.indexOf(item.desktopId) < 0)
+                result.push(item.desktopId);
+        }
+        return result;
+    }
+
+    function currentDockOrder() {
+        var result = [];
+        for (var i = 0; i < panelItems.length; i++) {
+            var item = panelItems[i];
+            if (canDragItem(item) && result.indexOf(item.desktopId) < 0)
                 result.push(item.desktopId);
         }
         return result;
@@ -259,7 +326,7 @@ Item {
     }
 
     function finishItemDrag() {
-        var nextPinned = pinnedOrderFromPreview();
+        var nextOrder = dockOrderFromPreview();
         var changed = draggingDesktopId.length > 0
                 && dragSourceIndex >= 0
                 && dragTargetIndex >= 0
@@ -271,7 +338,7 @@ Item {
         dragTargetIndex = -1;
 
         if (changed)
-            Services.AppPanelService.setPinnedOrder(nextPinned);
+            Services.AppPanelService.setOrder(nextOrder);
         if (rebuildQueued) {
             rebuildQueued = false;
             rebuildModel();
@@ -405,17 +472,40 @@ Item {
     function updateWindowState(item) {
         item.windows = sortWindows(item.windows);
         item.open = item.windows.length > 0;
-        item.active = false;
-        item.otherWorkspace = false;
-        for (var i = 0; i < item.windows.length; i++) {
-            if (item.windows[i].focused)
-                item.active = true;
-            if (String(item.windows[i].workspaceName || "").indexOf("special:") === 0
-                    || Number(item.windows[i].workspace || 0) !== Number(Services.ShellState.activeWorkspace || 0))
-                item.otherWorkspace = true;
-        }
         if (item.open)
             item.launching = false;
+    }
+
+    function itemIsActive(item) {
+        if (!item || !item.windows)
+            return false;
+        var focused = String(Services.ShellState.focusedAddress || "");
+        if (!focused)
+            return false;
+        for (var i = 0; i < item.windows.length; i++) {
+            if (String(item.windows[i].address || "") === focused)
+                return true;
+        }
+        return false;
+    }
+
+    function itemIsOtherWorkspace(item) {
+        if (!item || !item.windows || item.windows.length === 0)
+            return false;
+
+        var activeWorkspace = Number(Services.ShellState.activeWorkspace || 0);
+        var activeSpecial = String(Services.ShellState.activeSpecialWorkspaceName || "");
+        for (var i = 0; i < item.windows.length; i++) {
+            var win = item.windows[i] || {};
+            var workspaceName = String(win.workspaceName || "");
+            if (workspaceName.indexOf("special:") === 0) {
+                if (workspaceName !== activeSpecial)
+                    return true;
+            } else if (Number(win.workspace || 0) !== activeWorkspace) {
+                return true;
+            }
+        }
+        return false;
     }
 
     function modelSignature(items) {
@@ -423,21 +513,66 @@ Item {
         for (var i = 0; i < items.length; i++) {
             var item = items[i];
             var addresses = [];
-            for (var j = 0; j < item.windows.length; j++)
-                addresses.push((item.windows[j].address || "") + ":" + (item.windows[j].workspaceName || ""));
+            for (var j = 0; j < item.windows.length; j++) {
+                var win = item.windows[j] || {};
+                addresses.push((win.address || "")
+                    + ":" + (win.workspace || "")
+                    + ":" + (win.workspaceName || "")
+                    + ":" + (win.focusHistoryId || "")
+                    + ":" + (win.title || ""));
+            }
             result.push([
                 item.desktopId,
                 item.displayName,
                 item.icon,
                 item.pinned ? 1 : 0,
                 item.open ? 1 : 0,
-                item.active ? 1 : 0,
-                item.otherWorkspace ? 1 : 0,
                 item.launching ? 1 : 0,
                 addresses.join(",")
             ].join("|"));
         }
         return result.join("\n");
+    }
+
+    function orderedItems(items) {
+        var byDesktop = {};
+        var used = {};
+        var ordered = [];
+
+        for (var i = 0; i < items.length; i++) {
+            var item = items[i];
+            if (canDragItem(item))
+                byDesktop[item.desktopId] = item;
+        }
+
+        var order = Services.AppPanelService.orderIds || [];
+        for (var o = 0; o < order.length; o++) {
+            var desktopId = String(order[o] || "");
+            if (byDesktop[desktopId] && !used[desktopId]) {
+                ordered.push(byDesktop[desktopId]);
+                used[desktopId] = true;
+            }
+        }
+
+        var pins = Services.AppPanelService.pinnedIds || [];
+        for (var p = 0; p < pins.length; p++) {
+            var pinId = String(pins[p] || "");
+            if (byDesktop[pinId] && !used[pinId]) {
+                ordered.push(byDesktop[pinId]);
+                used[pinId] = true;
+            }
+        }
+
+        for (var r = 0; r < items.length; r++) {
+            var rest = items[r];
+            if (!canDragItem(rest) || !used[rest.desktopId]) {
+                ordered.push(rest);
+                if (canDragItem(rest))
+                    used[rest.desktopId] = true;
+            }
+        }
+
+        return ordered;
     }
 
     function rebuildModel() {
@@ -491,6 +626,8 @@ Item {
 
         for (var i = 0; i < result.length; i++)
             updateWindowState(result[i]);
+
+        result = orderedItems(result);
 
         Services.AppPanelService.markOpenApps(openDesktopIds);
         var signature = modelSignature(result);
@@ -550,9 +687,21 @@ Item {
 
     Timer {
         id: tooltipTimer
-        interval: 320
+        interval: 270
         repeat: false
-        onTriggered: root.tooltipOpen = root.tooltipText.length > 0 && root.tooltipTargetId.length > 0
+        onTriggered: {
+            root.setTooltipVisualText(root.tooltipPendingText, root.tooltipPendingAnchorX);
+            root.tooltipOpen = root.tooltipDisplayText.length > 0 && root.tooltipTargetId.length > 0;
+        }
+    }
+
+    Timer {
+        id: tooltipSwitchTimer
+        interval: 55
+        repeat: false
+        onTriggered: {
+            root.setTooltipVisualText(root.tooltipPendingText, root.tooltipPendingAnchorX);
+        }
     }
 
     Timer {
@@ -634,10 +783,10 @@ Item {
             launchNew(item);
             break;
         case "pin":
-            Services.AppPanelService.pinAt(item.desktopId, pinnedInsertionIndexFor(item));
+            Services.AppPanelService.pinWithOrder(item.desktopId, currentDockOrder());
             break;
         case "unpin":
-            Services.AppPanelService.unpin(item.desktopId);
+            Services.AppPanelService.unpinWithOrder(item.desktopId, currentDockOrder());
             break;
         case "close-window":
             Services.ShellActions.closeWindow(topWindow(item));
@@ -654,14 +803,14 @@ Item {
         target: Services.AppPanelService
         function onAppsChanged() { root.rebuildModel(); }
         function onPinnedIdsChanged() { root.rebuildModel(); }
+        function onOrderIdsChanged() { root.rebuildModel(); }
         function onLaunchingIdsChanged() { root.rebuildModel(); }
     }
 
     Connections {
         target: Services.ShellState
-        function onWindowsChanged() { root.rebuildModel(); }
-        function onFocusedAddressChanged() { root.rebuildModel(); }
-        function onActiveWorkspaceChanged() { root.rebuildModel(); }
+        function onWindowsChanged() { root.rebuildModel(); root.refreshTooltipForTarget(); }
+        function onFocusedAddressChanged() { root.refreshTooltipForTarget(); }
     }
 
     ListView {
@@ -705,8 +854,18 @@ Item {
             property real pressX: 0
             property real dragOffsetX: 0
             readonly property real visualOffsetX: dragging ? dragOffsetX : root.dragShiftFor(modelData)
+            readonly property bool itemActive: root.itemIsActive(modelData)
+            readonly property bool itemOtherWorkspace: root.itemIsOtherWorkspace(modelData)
+            property bool hoverActive: false
 
             Behavior on opacity { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+
+            Timer {
+                id: hoverDelayTimer
+                interval: 45
+                repeat: false
+                onTriggered: appDelegate.hoverActive = appMouse.containsMouse && !root.draggingItem
+            }
 
             Item {
                 id: visualContent
@@ -729,9 +888,9 @@ Item {
                 width: 50
                 height: 50
                 radius: 18
-                color: modelData.active
+                color: appDelegate.itemActive
                     ? "#2cffffff"
-                    : (appMouse.pressed ? "#20ffffff" : (appMouse.containsMouse ? "#16ffffff" : "transparent"))
+                    : (appMouse.pressed ? "#20ffffff" : (appDelegate.hoverActive ? "#16ffffff" : "transparent"))
                 border.width: 0
                 antialiasing: true
 
@@ -795,10 +954,10 @@ Item {
                     anchors.horizontalCenter: parent.horizontalCenter
                     anchors.bottom: parent.bottom
                     anchors.bottomMargin: 1
-                    width: modelData.active ? 24 : (modelData.open ? 11 : 0)
+                    width: appDelegate.itemActive ? 24 : (modelData.open ? 11 : 0)
                     height: modelData.open ? 4 : 0
                     radius: 3
-                    color: modelData.active ? "#f4f7fb" : (modelData.otherWorkspace ? "#86ffffff" : "#c8ffffff")
+                    color: appDelegate.itemActive ? "#f4f7fb" : (appDelegate.itemOtherWorkspace ? "#86ffffff" : "#c8ffffff")
                     opacity: modelData.open ? 0.95 : 0.0
                     antialiasing: true
 
@@ -816,8 +975,15 @@ Item {
                 acceptedButtons: Qt.LeftButton | Qt.RightButton
                 cursorShape: Qt.PointingHandCursor
 
-                onEntered: root.showTooltipFor(modelData, appDelegate.x + appDelegate.width / 2)
-                onExited: root.hideTooltipFor(modelData)
+                onEntered: {
+                    hoverDelayTimer.restart();
+                    root.showTooltipFor(modelData, appDelegate.x + appDelegate.width / 2);
+                }
+                onExited: {
+                    hoverDelayTimer.stop();
+                    appDelegate.hoverActive = false;
+                    root.hideTooltipFor(modelData);
+                }
 
                 onPressed: function(mouse) {
                     var pressPoint = appMouse.mapToItem(root, mouse.x, mouse.y);
@@ -834,6 +1000,7 @@ Item {
                     var dx = currentPoint.x - appDelegate.pressX;
                     if (Math.abs(dx) > 8 && !appDelegate.dragging) {
                         appDelegate.dragging = true;
+                        appDelegate.hoverActive = false;
                         root.beginItemDrag(modelData, root.contentXFromRootX(currentPoint.x));
                     }
                     if (appDelegate.dragging) {
@@ -993,7 +1160,7 @@ Item {
         anchor.window: root.hostWindow
         anchor.rect.x: root.tooltipXFor(implicitWidth)
         anchor.rect.y: root.tooltipYFor(implicitHeight)
-        implicitWidth: Math.max(64, Math.min(280, tooltipLabel.implicitWidth + 18))
+        implicitWidth: Math.max(64, Math.min(280, Math.max(tooltipLabelA.implicitWidth, tooltipLabelB.implicitWidth) + 18))
         implicitHeight: 28
         visible: tooltipState.renderVisible
         color: "transparent"
@@ -1026,19 +1193,39 @@ Item {
             }
 
             Components.StyledText {
-                id: tooltipLabel
+                id: tooltipLabelA
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.leftMargin: 9
                 anchors.rightMargin: 9
-                text: root.tooltipText
+                text: root.tooltipTextA
+                opacity: root.tooltipUseA ? 1.0 : 0.0
                 color: "#eef3f8"
                 font.pixelSize: 12
                 font.weight: Font.Medium
                 elide: Text.ElideRight
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
+                Behavior on opacity { NumberAnimation { duration: 135; easing.type: Easing.OutCubic } }
+            }
+
+            Components.StyledText {
+                id: tooltipLabelB
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.leftMargin: 9
+                anchors.rightMargin: 9
+                text: root.tooltipTextB
+                opacity: root.tooltipUseA ? 0.0 : 1.0
+                color: "#eef3f8"
+                font.pixelSize: 12
+                font.weight: Font.Medium
+                elide: Text.ElideRight
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                Behavior on opacity { NumberAnimation { duration: 135; easing.type: Easing.OutCubic } }
             }
         }
     }

@@ -13,6 +13,7 @@ Item {
     property bool actionRunning: false
     property var apps: []
     property var pinnedIds: []
+    property var orderIds: []
     property var missingPinned: []
     property string configPath: ""
     property var appsById: ({})
@@ -58,6 +59,11 @@ Item {
             pinnedIds = nextIds;
     }
 
+    function applyOrderIds(nextIds) {
+        if (!sameStringList(orderIds, nextIds))
+            orderIds = nextIds;
+    }
+
     function withoutPinned(desktopId) {
         var next = [];
         for (var i = 0; i < pinnedIds.length; i++) {
@@ -87,6 +93,7 @@ Item {
 
         apps = payload.apps || [];
         applyPinnedIds(payload.pinned || []);
+        applyOrderIds(payload.order || payload.pinned || []);
         missingPinned = payload.missingPinned || [];
         configPath = payload.configPath || "";
         rebuildAppsById();
@@ -128,41 +135,91 @@ Item {
         runAction("pin", [desktopId]);
     }
 
+    function withoutOrder(desktopId) {
+        var next = [];
+        for (var i = 0; i < orderIds.length; i++) {
+            if (orderIds[i] !== desktopId)
+                next.push(orderIds[i]);
+        }
+        return next;
+    }
+
     function pinAt(desktopId, index) {
         if (!desktopId)
             return;
-        var next = withoutPinned(desktopId);
-        var target = Math.max(0, Math.min(Number(index || 0), next.length));
-        next.splice(target, 0, desktopId);
-        applyPinnedIds(next);
+        var nextPins = withoutPinned(desktopId);
+        nextPins.push(desktopId);
+
+        var nextOrder = withoutOrder(desktopId);
+        var target = Math.max(0, Math.min(Number(index || 0), nextOrder.length));
+        nextOrder.splice(target, 0, desktopId);
+
+        applyPinnedIds(nextPins);
+        applyOrderIds(nextOrder);
         runAction("pin-at", [desktopId, target]);
     }
 
     function movePinned(desktopId, index) {
-        if (!desktopId || !isPinned(desktopId))
+        if (!desktopId)
             return;
-        var next = withoutPinned(desktopId);
-        var target = Math.max(0, Math.min(Number(index || 0), next.length));
-        next.splice(target, 0, desktopId);
-        applyPinnedIds(next);
+        var nextOrder = withoutOrder(desktopId);
+        var target = Math.max(0, Math.min(Number(index || 0), nextOrder.length));
+        nextOrder.splice(target, 0, desktopId);
+        applyOrderIds(nextOrder);
         runAction("move", [desktopId, target]);
     }
 
-
-    function setPinnedOrder(ids) {
+    function setOrder(ids) {
         var next = [];
         for (var i = 0; i < (ids || []).length; i++) {
             var id = String(ids[i] || "");
             if (id.length > 0 && next.indexOf(id) < 0)
                 next.push(id);
         }
-        applyPinnedIds(next);
+        applyOrderIds(next);
         runAction("set-order", next);
+    }
+
+    function setPinnedOrder(ids) {
+        setOrder(ids);
+    }
+
+    function uniqueOrder(ids) {
+        var next = [];
+        for (var i = 0; i < (ids || []).length; i++) {
+            var id = String(ids[i] || "");
+            if (id.length > 0 && next.indexOf(id) < 0)
+                next.push(id);
+        }
+        return next;
+    }
+
+    function pinWithOrder(desktopId, ids) {
+        if (!desktopId)
+            return;
+        var nextPins = withoutPinned(desktopId);
+        nextPins.push(desktopId);
+        var nextOrder = uniqueOrder(ids);
+        if (nextOrder.indexOf(desktopId) < 0)
+            nextOrder.push(desktopId);
+        applyPinnedIds(nextPins);
+        applyOrderIds(nextOrder);
+        runAction("pin-order", [desktopId].concat(nextOrder));
+    }
+
+    function unpinWithOrder(desktopId, ids) {
+        if (!desktopId)
+            return;
+        var nextOrder = uniqueOrder(ids);
+        applyPinnedIds(withoutPinned(desktopId));
+        applyOrderIds(nextOrder);
+        runAction("unpin-order", [desktopId].concat(nextOrder));
     }
 
     function unpin(desktopId) {
         if (!desktopId)
             return;
+        // Keep orderIds unchanged so an open app does not jump when it is unpinned.
         applyPinnedIds(withoutPinned(desktopId));
         runAction("unpin", [desktopId]);
     }

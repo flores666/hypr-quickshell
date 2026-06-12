@@ -282,27 +282,61 @@ def default_pins(apps: List[Dict[str, object]]) -> List[str]:
     return result
 
 
-def load_pins(apps: List[Dict[str, object]]) -> List[str]:
-    try:
-        data = json.loads(PINS_FILE.read_text(encoding="utf-8"))
-        if isinstance(data, dict) and isinstance(data.get("pinned"), list):
-            return [str(x) for x in data.get("pinned", []) if isinstance(x, str)]
-    except FileNotFoundError:
-        pins = default_pins(apps)
-        save_pins(pins)
-        return pins
-    except Exception as exc:
-        warn(f"cannot read pins config {PINS_FILE}: {exc}")
-    return []
+def unique_ids(values: List[str]) -> List[str]:
+    result: List[str] = []
+    for value in values or []:
+        desktop_id = str(value or "")
+        if desktop_id and desktop_id not in result:
+            result.append(desktop_id)
+    return result
 
 
-def save_pins(pins: List[str]) -> None:
+def save_config(pins: List[str], order: List[str]) -> None:
+    pins = unique_ids(pins)
+    order = unique_ids(order)
+    for pin in pins:
+        if pin not in order:
+            order.append(pin)
+
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     payload = {
         "pinned": pins,
-        "note": "Application panel pinned desktop ids. The list order is the dock order.",
+        "order": order,
+        "note": "Application panel config. 'pinned' controls pin state, 'order' controls visual dock order.",
     }
     PINS_FILE.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def load_config(apps: List[Dict[str, object]]) -> Tuple[List[str], List[str]]:
+    try:
+        data = json.loads(PINS_FILE.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            pins = unique_ids([str(x) for x in data.get("pinned", []) if isinstance(x, str)])
+            raw_order = data.get("order")
+            order = unique_ids([str(x) for x in raw_order if isinstance(x, str)]) if isinstance(raw_order, list) else pins[:]
+            for pin in pins:
+                if pin not in order:
+                    order.append(pin)
+            return pins, order
+    except FileNotFoundError:
+        pins = default_pins(apps)
+        save_config(pins, pins[:])
+        return pins, pins[:]
+    except Exception as exc:
+        warn(f"cannot read app panel config {PINS_FILE}: {exc}")
+    return [], []
+
+
+def load_pins(apps: List[Dict[str, object]]) -> List[str]:
+    return load_config(apps)[0]
+
+
+def load_order(apps: List[Dict[str, object]]) -> List[str]:
+    return load_config(apps)[1]
+
+
+def save_pins(pins: List[str]) -> None:
+    save_config(pins, pins[:])
 
 
 def app_map(apps: List[Dict[str, object]]) -> Dict[str, Dict[str, object]]:
@@ -311,19 +345,28 @@ def app_map(apps: List[Dict[str, object]]) -> Dict[str, Dict[str, object]]:
 
 def list_payload(force: bool = False) -> Dict[str, object]:
     apps = load_apps(force)
-    pins = load_pins(apps)
+    pins, order = load_config(apps)
     by_id = app_map(apps)
     visible_pins = []
+    visible_order = []
     missing_pins = []
+
+    for desktop_id in order:
+        if desktop_id in by_id and desktop_id not in visible_order:
+            visible_order.append(desktop_id)
+
     for pin in pins:
         if pin in by_id:
             visible_pins.append(pin)
+            if pin not in visible_order:
+                visible_order.append(pin)
         else:
             missing_pins.append(pin)
             warn(f"pinned desktop file not found: {pin}")
     return {
         "apps": apps,
         "pinned": visible_pins,
+        "order": visible_order,
         "missingPinned": missing_pins,
         "configPath": str(PINS_FILE),
     }
@@ -331,60 +374,95 @@ def list_payload(force: bool = False) -> Dict[str, object]:
 
 def pin_app(desktop_id: str) -> None:
     apps = load_apps()
-    pins = load_pins(apps)
+    pins, order = load_config(apps)
     by_id = app_map(apps)
     if desktop_id not in by_id:
         warn(f"cannot pin missing desktop id: {desktop_id}")
         return
     if desktop_id not in pins:
         pins.append(desktop_id)
-        save_pins(pins)
+    if desktop_id not in order:
+        order.append(desktop_id)
+    save_config(pins, order)
 
 
 def unpin_app(desktop_id: str) -> None:
     apps = load_apps()
-    pins = load_pins(apps)
+    pins, order = load_config(apps)
     pins = [item for item in pins if item != desktop_id]
-    save_pins(pins)
+    # Keep visual order. If the app is open, it stays in the same place. If it is
+    # closed, QML will simply skip it until the app appears again.
+    save_config(pins, order)
 
 
 def pin_app_at(desktop_id: str, index: int) -> None:
     apps = load_apps()
-    pins = load_pins(apps)
+    pins, order = load_config(apps)
     by_id = app_map(apps)
     if desktop_id not in by_id:
         warn(f"cannot pin missing desktop id: {desktop_id}")
         return
 
-    pins = [item for item in pins if item != desktop_id]
-    target = max(0, min(index, len(pins)))
-    pins.insert(target, desktop_id)
-    save_pins(pins)
+    if desktop_id not in pins:
+        pins.append(desktop_id)
+    order = [item for item in order if item != desktop_id]
+    target = max(0, min(index, len(order)))
+    order.insert(target, desktop_id)
+    save_config(pins, order)
 
 
 def move_pinned_app(desktop_id: str, index: int) -> None:
     apps = load_apps()
-    pins = load_pins(apps)
-    if desktop_id not in pins:
+    pins, order = load_config(apps)
+    if desktop_id not in pins and desktop_id not in order:
         return
 
-    pins = [item for item in pins if item != desktop_id]
-    target = max(0, min(index, len(pins)))
-    pins.insert(target, desktop_id)
-    save_pins(pins)
+    order = [item for item in order if item != desktop_id]
+    target = max(0, min(index, len(order)))
+    order.insert(target, desktop_id)
+    save_config(pins, order)
+
+
+def clean_order(desktop_ids: List[str], by_id: Dict[str, Dict[str, object]]) -> List[str]:
+    next_order: List[str] = []
+    for desktop_id in desktop_ids:
+        desktop_id = str(desktop_id)
+        if desktop_id in by_id and desktop_id not in next_order:
+            next_order.append(desktop_id)
+        elif desktop_id not in by_id:
+            warn(f"cannot include missing desktop id in dock order: {desktop_id}")
+    return next_order
 
 
 def set_pinned_order(desktop_ids: List[str]) -> None:
     apps = load_apps()
+    pins, _order = load_config(apps)
     by_id = app_map(apps)
-    next_pins: List[str] = []
-    for desktop_id in desktop_ids:
-        desktop_id = str(desktop_id)
-        if desktop_id in by_id and desktop_id not in next_pins:
-            next_pins.append(desktop_id)
-        elif desktop_id not in by_id:
-            warn(f"cannot include missing desktop id in pinned order: {desktop_id}")
-    save_pins(next_pins)
+    save_config(pins, clean_order(desktop_ids, by_id))
+
+
+def pin_with_order(desktop_id: str, desktop_ids: List[str]) -> None:
+    apps = load_apps()
+    pins, order = load_config(apps)
+    by_id = app_map(apps)
+    if desktop_id not in by_id:
+        warn(f"cannot pin missing desktop id: {desktop_id}")
+        return
+    if desktop_id not in pins:
+        pins.append(desktop_id)
+    next_order = clean_order(desktop_ids, by_id)
+    if desktop_id not in next_order:
+        next_order.append(desktop_id)
+    save_config(pins, next_order)
+
+
+def unpin_with_order(desktop_id: str, desktop_ids: List[str]) -> None:
+    apps = load_apps()
+    pins, order = load_config(apps)
+    by_id = app_map(apps)
+    pins = [item for item in pins if item != desktop_id]
+    next_order = clean_order(desktop_ids, by_id)
+    save_config(pins, next_order)
 
 def launch_app(desktop_id: str) -> int:
     apps = load_apps()
@@ -450,6 +528,14 @@ def main() -> int:
         set_pinned_order(sys.argv[2:])
         print(json.dumps(list_payload(False), ensure_ascii=False))
         return 0
+    if command == "pin-order" and len(sys.argv) > 2:
+        pin_with_order(sys.argv[2], sys.argv[3:])
+        print(json.dumps(list_payload(False), ensure_ascii=False))
+        return 0
+    if command == "unpin-order" and len(sys.argv) > 2:
+        unpin_with_order(sys.argv[2], sys.argv[3:])
+        print(json.dumps(list_payload(False), ensure_ascii=False))
+        return 0
     if command == "unpin" and len(sys.argv) > 2:
         unpin_app(sys.argv[2])
         print(json.dumps(list_payload(False), ensure_ascii=False))
@@ -457,7 +543,7 @@ def main() -> int:
     if command == "launch" and len(sys.argv) > 2:
         return launch_app(sys.argv[2])
 
-    warn("usage: app-panel.py list|refresh|pin DESKTOP_ID|pin-at DESKTOP_ID INDEX|move DESKTOP_ID INDEX|set-order DESKTOP_ID...|unpin DESKTOP_ID|launch DESKTOP_ID")
+    warn("usage: app-panel.py list|refresh|pin DESKTOP_ID|pin-at DESKTOP_ID INDEX|move DESKTOP_ID INDEX|set-order DESKTOP_ID...|pin-order DESKTOP_ID ORDER...|unpin-order DESKTOP_ID ORDER...|unpin DESKTOP_ID|launch DESKTOP_ID")
     return 1
 
 

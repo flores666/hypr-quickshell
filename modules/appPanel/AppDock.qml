@@ -149,7 +149,7 @@ PanelWindow {
 
         Components.GlassPanel {
             id: dockBackground
-            anchors.horizontalCenter: appPanel.horizontalCenter
+            anchors.horizontalCenter: parent.horizontalCenter
             anchors.verticalCenter: appPanel.verticalCenter
             width: Math.max(82, appPanel.implicitWidth + root.dockHorizontalPadding * 2)
             height: root.dockBackgroundHeight
@@ -160,13 +160,13 @@ PanelWindow {
 
         AppPanel {
             id: appPanel
-            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.horizontalCenter: dockBackground.horizontalCenter
             anchors.bottom: parent.bottom
             anchors.bottomMargin: root.dockBottomInset
             hostWindow: root
             hostWidth: root.width
             panelHeight: root.dockWindowHeight
-            popupBaseX: x
+            popupBaseX: Math.round((root.width - appPanel.width) / 2)
             popupTopY: dockBackground.y
             bottomDock: true
             itemSize: 58
