@@ -35,11 +35,7 @@ Item {
     property int dragTargetIndex: -1
     property bool rebuildQueued: false
     property bool tooltipOpen: false
-    property string tooltipText: ""
     property string tooltipDisplayText: ""
-    property string tooltipTextA: ""
-    property string tooltipTextB: ""
-    property bool tooltipUseA: true
     property string tooltipPendingText: ""
     property real tooltipPendingAnchorX: 0
     property string tooltipTargetId: ""
@@ -130,14 +126,14 @@ Item {
             return;
 
         tooltipTargetId = key;
-        tooltipText = text;
         tooltipPendingText = text;
         tooltipPendingAnchorX = localCenterX;
 
         if (tooltipOpen || tooltipState.renderVisible) {
             tooltipTimer.stop();
-            tooltipSwitchTimer.restart();
-            tooltipOpen = true;
+            tooltipSwitchTimer.stop();
+            setTooltipVisualText(tooltipPendingText, tooltipPendingAnchorX);
+            tooltipOpen = tooltipDisplayText.length > 0 && tooltipTargetId.length > 0;
             return;
         }
 
@@ -166,23 +162,6 @@ Item {
             return;
 
         tooltipAnchorX = anchorX;
-        if (!tooltipState.renderVisible && !tooltipOpen) {
-            tooltipTextA = next;
-            tooltipTextB = "";
-            tooltipUseA = true;
-            tooltipDisplayText = next;
-            return;
-        }
-
-        var current = tooltipUseA ? tooltipTextA : tooltipTextB;
-        if (current === next)
-            return;
-
-        if (tooltipUseA)
-            tooltipTextB = next;
-        else
-            tooltipTextA = next;
-        tooltipUseA = !tooltipUseA;
         tooltipDisplayText = next;
     }
 
@@ -1334,7 +1313,7 @@ Item {
         anchor.window: root.hostWindow
         anchor.rect.x: root.tooltipXFor(implicitWidth)
         anchor.rect.y: root.tooltipYFor(implicitHeight)
-        implicitWidth: Math.max(64, Math.min(280, Math.max(tooltipLabelA.implicitWidth, tooltipLabelB.implicitWidth) + 18))
+        implicitWidth: Math.max(64, Math.min(280, tooltipLabel.implicitWidth + 18))
         implicitHeight: 28
         visible: tooltipState.renderVisible
         color: "transparent"
@@ -1367,39 +1346,19 @@ Item {
             }
 
             Components.StyledText {
-                id: tooltipLabelA
+                id: tooltipLabel
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.leftMargin: 9
                 anchors.rightMargin: 9
-                text: root.tooltipTextA
-                opacity: root.tooltipUseA ? 1.0 : 0.0
+                text: root.tooltipDisplayText
                 color: "#eef3f8"
                 font.pixelSize: 12
                 font.weight: Font.Medium
                 elide: Text.ElideRight
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
-                Behavior on opacity { NumberAnimation { duration: 135; easing.type: Easing.OutCubic } }
-            }
-
-            Components.StyledText {
-                id: tooltipLabelB
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.leftMargin: 9
-                anchors.rightMargin: 9
-                text: root.tooltipTextB
-                opacity: root.tooltipUseA ? 0.0 : 1.0
-                color: "#eef3f8"
-                font.pixelSize: 12
-                font.weight: Font.Medium
-                elide: Text.ElideRight
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-                Behavior on opacity { NumberAnimation { duration: 135; easing.type: Easing.OutCubic } }
             }
         }
     }
