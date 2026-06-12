@@ -11,6 +11,8 @@ Item {
 
     property bool refreshQueued: false
     property bool refreshPendingAfterRun: false
+    property bool monitorRefreshQueued: false
+    property bool monitorRefreshPendingAfterRun: false
 
     function currentWorkspaceId() {
         if (Hyprland.focusedWorkspace && Hyprland.focusedWorkspace.id)
@@ -39,6 +41,47 @@ Item {
         }
 
         clientsProc.running = true;
+    }
+
+
+    function queueRefreshMonitors() {
+        if (monitorsProc.running) {
+            monitorRefreshPendingAfterRun = true;
+            return;
+        }
+
+        if (monitorRefreshQueued)
+            return;
+
+        monitorRefreshQueued = true;
+        monitorRefreshTimer.restart();
+    }
+
+    function refreshMonitorsNow() {
+        monitorRefreshQueued = false;
+        if (monitorsProc.running) {
+            monitorRefreshPendingAfterRun = true;
+            return;
+        }
+
+        monitorsProc.running = true;
+    }
+
+    function hyprEventNeedsMonitorRefresh(eventName) {
+        switch (eventName) {
+        case "activespecial":
+        case "workspace":
+        case "workspacev2":
+        case "focusedmon":
+        case "focusedmonv2":
+        case "openwindow":
+        case "closewindow":
+        case "movewindow":
+        case "movewindowv2":
+            return true;
+        default:
+            return false;
+        }
     }
 
     function hyprEventNeedsClientRefresh(eventName) {
@@ -162,9 +205,35 @@ Item {
             Services.ShellState.focusedAddress = focusedAddress;
     }
 
+
+    function updateMonitors(jsonText) {
+        var monitors = [];
+        try {
+            monitors = JSON.parse(jsonText || "[]");
+        } catch (e) {
+            console.log("hypr monitors parse error", e);
+            return;
+        }
+
+        var activeSpecial = "";
+        for (var i = 0; i < monitors.length; i++) {
+            var monitor = monitors[i] || {};
+            var special = monitor.specialWorkspace || {};
+            var name = String(special.name || "").trim();
+            var id = Number(special.id || 0);
+            if (name.length > 0 && name !== "special" && id !== 0) {
+                activeSpecial = name.indexOf("special:") === 0 ? name : "special:" + name;
+                break;
+            }
+        }
+
+        Services.ShellState.setActiveSpecialWorkspace(activeSpecial);
+    }
+
     Component.onCompleted: {
         Services.ShellState.activeWorkspace = currentWorkspaceId();
         queueRefreshClients();
+        queueRefreshMonitors();
     }
 
     Timer {
@@ -174,12 +243,38 @@ Item {
         onTriggered: service.refreshClientsNow()
     }
 
+
+    Timer {
+        id: monitorRefreshTimer
+        interval: 70
+        repeat: false
+        onTriggered: service.refreshMonitorsNow()
+    }
+
     // Rare events can miss a client refresh, so keep a lightweight fallback.
     Timer {
         interval: 12000
         repeat: true
         running: true
         onTriggered: service.queueRefreshClients()
+    }
+
+
+    Process {
+        id: monitorsProc
+        command: ["hyprctl", "-j", "monitors"]
+
+        stdout: StdioCollector {
+            onStreamFinished: service.updateMonitors(this.text)
+        }
+
+        onExited: {
+            running = false;
+            if (service.monitorRefreshPendingAfterRun) {
+                service.monitorRefreshPendingAfterRun = false;
+                service.queueRefreshMonitors();
+            }
+        }
     }
 
     Process {
@@ -203,15 +298,23 @@ Item {
         target: Hyprland
 
         function onRawEvent(event) {
-            if (!event || !service.hyprEventNeedsClientRefresh(event.name))
+            if (!event)
                 return;
 
-            service.queueRefreshClients();
+            if ((event.name === "workspace" || event.name === "workspacev2")
+                    && Services.ShellState.activeSpecialWorkspaceName.length > 0)
+                Services.ShellActions.closeActiveSpecialWorkspace();
+
+            if (service.hyprEventNeedsClientRefresh(event.name))
+                service.queueRefreshClients();
+            if (service.hyprEventNeedsMonitorRefresh(event.name))
+                service.queueRefreshMonitors();
         }
 
         function onFocusedWorkspaceChanged() {
             Services.ShellState.activeWorkspace = service.currentWorkspaceId();
             service.queueRefreshClients();
+            service.queueRefreshMonitors();
         }
     }
 }

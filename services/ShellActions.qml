@@ -9,6 +9,35 @@ QtObject {
 
     property string minimizedWorkspace: "special:magic"
 
+    function specialWorkspaceDispatchName() {
+        var name = String(minimizedWorkspace || "").trim()
+        if (name.indexOf("special:") === 0)
+            name = name.substring(8)
+        return name
+    }
+
+    function normalizedSpecialWorkspaceName() {
+        var name = specialWorkspaceDispatchName()
+        return name.length > 0 ? "special:" + name : ""
+    }
+
+    function activeSpecialDispatchName() {
+        var name = String(Services.ShellState.activeSpecialWorkspaceName || "").trim()
+        if (name.indexOf("special:") === 0)
+            name = name.substring(8)
+        return name
+    }
+
+    function closeActiveSpecialWorkspace() {
+        var name = activeSpecialDispatchName()
+        if (name.length === 0)
+            return false
+
+        Hyprland.dispatch("togglespecialworkspace " + name)
+        Services.ShellState.setActiveSpecialWorkspace("")
+        return true
+    }
+
     function focusWindow(window) {
         if (!window)
             return
@@ -16,12 +45,19 @@ QtObject {
         var workspaceName = String(window.workspaceName || "")
         if (workspaceName.indexOf("special:") === 0) {
             var specialName = workspaceName.substring(8)
-            Hyprland.dispatch(specialName.length > 0 ? "togglespecialworkspace " + specialName : "togglespecialworkspace")
+            if (Services.ShellState.activeSpecialWorkspaceName !== workspaceName)
+                Hyprland.dispatch(specialName.length > 0 ? "togglespecialworkspace " + specialName : "togglespecialworkspace")
+            Services.ShellState.setActiveSpecialWorkspace(workspaceName)
             return
         }
 
         var targetWorkspace = Number(window.workspace || 0)
         var activeWorkspace = Number(Services.ShellState.activeWorkspace || 0)
+
+        // If a special workspace is open above the regular workspace, close it
+        // first. Otherwise switching the underlying workspace keeps the special
+        // overlay visible and the target application looks like it did not open.
+        var specialWasClosed = closeActiveSpecialWorkspace()
 
         if (targetWorkspace > 0 && targetWorkspace !== activeWorkspace) {
             Services.ShellState.activeWorkspace = targetWorkspace
@@ -68,22 +104,21 @@ QtObject {
         if (!workspaceId)
             return
 
+        closeActiveSpecialWorkspace()
         Services.ShellState.activeWorkspace = workspaceId
         Hyprland.dispatch("workspace " + workspaceId)
-    }
-
-    function specialWorkspaceDispatchName() {
-        var name = String(minimizedWorkspace || "").trim()
-        if (name.indexOf("special:") === 0)
-            name = name.substring(8)
-        return name
     }
 
     function toggleSpecialWorkspace() {
         var name = specialWorkspaceDispatchName()
         Hyprland.dispatch(name.length > 0 ? "togglespecialworkspace " + name : "togglespecialworkspace")
-    }
 
+        var normalized = normalizedSpecialWorkspaceName()
+        if (Services.ShellState.activeSpecialWorkspaceName === normalized)
+            Services.ShellState.setActiveSpecialWorkspace("")
+        else
+            Services.ShellState.setActiveSpecialWorkspace(normalized)
+    }
 
     function closeWindow(window) {
         if (!window || !window.address)
@@ -104,6 +139,7 @@ QtObject {
         if (!app || !app.command)
             return
 
+        closeActiveSpecialWorkspace()
         Hyprland.dispatch("exec " + app.command)
     }
 }

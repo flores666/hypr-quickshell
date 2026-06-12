@@ -6,13 +6,16 @@ Rectangle {
     id: root
 
     property bool pointerReady: false
+    readonly property bool active: Services.ShellState.isSpecialWorkspaceActive(Services.ShellActions.minimizedWorkspace)
 
     signal toggled()
 
     implicitWidth: 28
     implicitHeight: 24
     radius: 12
-    color: buttonMouse.pressed ? "#22000000" : (buttonMouse.containsMouse ? "#18000000" : "transparent")
+    color: active
+        ? (buttonMouse.pressed ? "#44ffffff" : (buttonMouse.containsMouse ? "#36ffffff" : "#2cffffff"))
+        : (buttonMouse.pressed ? "#22000000" : (buttonMouse.containsMouse ? "#18000000" : "transparent"))
     border.width: 0
     antialiasing: true
 
@@ -20,6 +23,21 @@ Rectangle {
 
     Behavior on color {
         ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic }
+    }
+
+    Rectangle {
+        id: activeGlow
+        anchors.centerIn: parent
+        width: root.active ? 22 : 10
+        height: root.active ? 22 : 10
+        radius: width / 2
+        color: "#24ffffff"
+        opacity: root.active ? 1.0 : 0.0
+        antialiasing: true
+
+        Behavior on width { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+        Behavior on height { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+        Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
     }
 
     Image {
@@ -31,7 +49,7 @@ Rectangle {
         fillMode: Image.PreserveAspectFit
         smooth: true
         mipmap: true
-        opacity: buttonMouse.containsMouse ? 0.95 : 0.72
+        opacity: root.active ? 1.0 : (buttonMouse.containsMouse ? 0.95 : 0.72)
 
         Behavior on opacity {
             NumberAnimation { duration: 110; easing.type: Easing.OutCubic }

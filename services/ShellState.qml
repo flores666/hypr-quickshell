@@ -12,7 +12,29 @@ QtObject {
     property var occupiedWorkspaces: []
 
     property int activeWorkspace: 1
+    property string activeSpecialWorkspaceName: ""
     property string focusedAddress: ""
+
+
+    function normalizeSpecialWorkspaceName(value) {
+        var name = String(value || "").trim();
+        if (name.length === 0)
+            return "";
+        if (name.indexOf("special:") !== 0)
+            name = "special:" + name;
+        return name;
+    }
+
+    function setActiveSpecialWorkspace(name) {
+        var normalized = normalizeSpecialWorkspaceName(name);
+        if (activeSpecialWorkspaceName !== normalized)
+            activeSpecialWorkspaceName = normalized;
+    }
+
+    function isSpecialWorkspaceActive(name) {
+        var normalized = normalizeSpecialWorkspaceName(name);
+        return normalized.length > 0 && activeSpecialWorkspaceName === normalized;
+    }
 
     function cloneWindow(w) {
         return {
