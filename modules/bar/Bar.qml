@@ -8,6 +8,7 @@ import "../media-player" as Media
 import "../workspaces" as Workspaces
 import "../systemStatus" as SystemStatus
 import "../keyboardLayout" as KeyboardLayout
+import "../../services" as Services
 
 PanelWindow {
     id: root
@@ -58,6 +59,13 @@ PanelWindow {
 
     Component.onCompleted: {
         Hyprland.rawEvent.connect(handleHyprlandRawEvent);
+    }
+
+    Connections {
+        target: Services.ShellState
+        function onCloseTopbarPopupsNonceChanged() {
+            root.closePopups();
+        }
     }
 
 

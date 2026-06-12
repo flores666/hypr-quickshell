@@ -352,7 +352,7 @@ def list_payload(force: bool = False) -> Dict[str, object]:
     missing_pins = []
 
     for desktop_id in order:
-        if desktop_id in by_id and desktop_id not in visible_order:
+        if desktop_id and desktop_id not in visible_order:
             visible_order.append(desktop_id)
 
     for pin in pins:
@@ -424,14 +424,10 @@ def move_pinned_app(desktop_id: str, index: int) -> None:
 
 
 def clean_order(desktop_ids: List[str], by_id: Dict[str, Dict[str, object]]) -> List[str]:
-    next_order: List[str] = []
-    for desktop_id in desktop_ids:
-        desktop_id = str(desktop_id)
-        if desktop_id in by_id and desktop_id not in next_order:
-            next_order.append(desktop_id)
-        elif desktop_id not in by_id:
-            warn(f"cannot include missing desktop id in dock order: {desktop_id}")
-    return next_order
+    # Order may contain stable desktop ids and temporary window instance keys
+    # like firefox.desktop::abc123. Keep unknown keys because QML uses them for
+    # the current session and old configs still work with plain desktop ids.
+    return unique_ids([str(item) for item in desktop_ids if str(item or "").strip()])
 
 
 def set_pinned_order(desktop_ids: List[str]) -> None:

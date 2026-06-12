@@ -26,7 +26,7 @@ Item {
     property real pendingContextAnchorX: 0
     property bool pointerReady: false
     property bool draggingItem: false
-    property string draggingDesktopId: ""
+    property string draggingItemId: ""
     property int dragSourceIndex: -1
     property int dragTargetIndex: -1
     property bool rebuildQueued: false
@@ -108,7 +108,13 @@ Item {
     function itemKey(item) {
         if (!item)
             return "";
-        return String(item.desktopId || item.name || item.displayName || "");
+        return String(item.itemId || item.orderKey || item.desktopId || item.name || item.displayName || "");
+    }
+
+    function orderKeyFor(item) {
+        if (!item)
+            return "";
+        return String(item.orderKey || item.itemId || item.desktopId || "");
     }
 
     function showTooltipFor(item, localCenterX) {
@@ -208,20 +214,20 @@ Item {
     }
 
     function canDragItem(item) {
-        return item && item.hasDesktop && String(item.desktopId || "").length > 0
-                && String(item.desktopId).indexOf("__window__") !== 0;
+        return item && orderKeyFor(item).length > 0;
     }
 
-    function visualIndexForDesktop(desktopId) {
+    function visualIndexForItemKey(key) {
+        var lookup = String(key || "");
         for (var i = 0; i < panelItems.length; i++) {
-            if (panelItems[i] && panelItems[i].desktopId === desktopId)
+            if (itemKey(panelItems[i]) === lookup)
                 return i;
         }
         return panelItems.length;
     }
 
     function pinnedInsertionIndexFor(item) {
-        var visual = visualIndexForDesktop(item && item.desktopId);
+        var visual = visualIndexForItemKey(itemKey(item));
         var count = 0;
         for (var i = 0; i < Math.min(visual, panelItems.length); i++) {
             if (panelItems[i] && panelItems[i].pinned)
@@ -242,12 +248,12 @@ Item {
 
     function draggedPreviewOrder() {
         var items = panelItems.slice();
-        if (!draggingItem || !draggingDesktopId)
+        if (!draggingItem || !draggingItemId)
             return items;
 
         var from = -1;
         for (var i = 0; i < items.length; i++) {
-            if (items[i] && items[i].desktopId === draggingDesktopId) {
+            if (items[i] && itemKey(items[i]) === draggingItemId) {
                 from = i;
                 break;
             }
@@ -268,11 +274,9 @@ Item {
             var item = items[i];
             if (!canDragItem(item))
                 continue;
-
-            // Reordering treats every desktop-backed icon equally. It changes
-            // visual order only and does not change pin state.
-            if (result.indexOf(item.desktopId) < 0)
-                result.push(item.desktopId);
+            var key = orderKeyFor(item);
+            if (key.length > 0 && result.indexOf(key) < 0)
+                result.push(key);
         }
         return result;
     }
@@ -281,17 +285,20 @@ Item {
         var result = [];
         for (var i = 0; i < panelItems.length; i++) {
             var item = panelItems[i];
-            if (canDragItem(item) && result.indexOf(item.desktopId) < 0)
-                result.push(item.desktopId);
+            if (!canDragItem(item))
+                continue;
+            var key = orderKeyFor(item);
+            if (key.length > 0 && result.indexOf(key) < 0)
+                result.push(key);
         }
         return result;
     }
 
     function dragShiftFor(item) {
-        if (!draggingItem || !item || item.desktopId === draggingDesktopId)
+        if (!draggingItem || !item || itemKey(item) === draggingItemId)
             return 0;
 
-        var index = visualIndexForDesktop(item.desktopId);
+        var index = visualIndexForItemKey(itemKey(item));
         if (index < 0 || dragSourceIndex < 0 || dragTargetIndex < 0 || dragSourceIndex === dragTargetIndex)
             return 0;
 
@@ -312,9 +319,10 @@ Item {
         if (!canDragItem(item))
             return;
 
+        closePopup();
         draggingItem = true;
-        draggingDesktopId = item.desktopId;
-        dragSourceIndex = visualIndexForDesktop(draggingDesktopId);
+        draggingItemId = itemKey(item);
+        dragSourceIndex = visualIndexForItemKey(draggingItemId);
         dragTargetIndex = visualIndexAtContentX(contentX);
         hideTooltip();
     }
@@ -327,13 +335,13 @@ Item {
 
     function finishItemDrag() {
         var nextOrder = dockOrderFromPreview();
-        var changed = draggingDesktopId.length > 0
+        var changed = draggingItemId.length > 0
                 && dragSourceIndex >= 0
                 && dragTargetIndex >= 0
                 && dragTargetIndex !== dragSourceIndex;
 
         draggingItem = false;
-        draggingDesktopId = "";
+        draggingItemId = "";
         dragSourceIndex = -1;
         dragTargetIndex = -1;
 
@@ -347,7 +355,7 @@ Item {
 
     function cancelItemDrag() {
         draggingItem = false;
-        draggingDesktopId = "";
+        draggingItemId = "";
         dragSourceIndex = -1;
         dragTargetIndex = -1;
         if (rebuildQueued) {
@@ -426,36 +434,52 @@ Item {
         return bestScore >= 44 ? bestApp : null;
     }
 
-    function cloneAppItem(app, pinned) {
+    function windowAddressKey(window) {
+        var address = String(window && window.address || "").replace(/^0x/, "");
+        return address.length > 0 ? address : normalizeToken(window && (window.appId || window.rawClass || window.title) || "window");
+    }
+
+    function cloneAppItem(app, pinned, itemId, window, allWindows) {
+        var id = String(app.desktopId || "");
+        var key = String(itemId || id);
+        var wins = window ? [window] : [];
         return {
-            desktopId: app.desktopId || "",
-            name: app.name || app.desktopId || "Application",
-            displayName: app.name || app.desktopId || "Application",
+            itemId: key,
+            orderKey: key,
+            desktopId: id,
+            sourceDesktopId: id,
+            name: app.name || id || "Application",
+            displayName: app.name || id || "Application",
             icon: app.icon || "",
             command: app.command || "",
             pinned: !!pinned,
             hasDesktop: true,
-            windows: [],
+            windows: wins,
+            allWindows: allWindows || wins,
             active: false,
-            open: false,
+            open: wins.length > 0,
             otherWorkspace: false,
-            launching: !!Services.AppPanelService.launchingIds[app.desktopId]
+            launching: !window && !!Services.AppPanelService.launchingIds[id]
         };
     }
 
     function placeholderForWindow(window) {
-        var key = normalizeToken(window.appId || window.rawClass || window.title || window.address || "app");
+        var key = "__window__" + windowAddressKey(window);
         return {
-            desktopId: "__window__" + key,
+            itemId: key,
+            orderKey: key,
+            desktopId: key,
+            sourceDesktopId: "",
             name: window.appId || window.rawClass || window.title || "Application",
             displayName: window.appId || window.rawClass || window.title || "Application",
             icon: window.icon || "",
             command: "",
             pinned: false,
             hasDesktop: false,
-            windows: [],
+            windows: [window],
+            allWindows: [window],
             active: false,
-            open: false,
+            open: true,
             otherWorkspace: false,
             launching: false
         };
@@ -471,6 +495,7 @@ Item {
 
     function updateWindowState(item) {
         item.windows = sortWindows(item.windows);
+        item.allWindows = sortWindows(item.allWindows || item.windows);
         item.open = item.windows.length > 0;
         if (item.open)
             item.launching = false;
@@ -522,6 +547,8 @@ Item {
                     + ":" + (win.title || ""));
             }
             result.push([
+                itemKey(item),
+                orderKeyFor(item),
                 item.desktopId,
                 item.displayName,
                 item.icon,
@@ -535,44 +562,75 @@ Item {
     }
 
     function orderedItems(items) {
+        var byKey = {};
         var byDesktop = {};
         var used = {};
         var ordered = [];
 
         for (var i = 0; i < items.length; i++) {
             var item = items[i];
-            if (canDragItem(item))
-                byDesktop[item.desktopId] = item;
+            var key = orderKeyFor(item);
+            if (key.length > 0 && !byKey[key])
+                byKey[key] = item;
+            var desktopId = String(item.desktopId || "");
+            if (desktopId.length > 0) {
+                if (!byDesktop[desktopId])
+                    byDesktop[desktopId] = [];
+                byDesktop[desktopId].push(item);
+            }
         }
 
         var order = Services.AppPanelService.orderIds || [];
         for (var o = 0; o < order.length; o++) {
-            var desktopId = String(order[o] || "");
-            if (byDesktop[desktopId] && !used[desktopId]) {
-                ordered.push(byDesktop[desktopId]);
-                used[desktopId] = true;
+            var orderId = String(order[o] || "");
+            var exact = byKey[orderId];
+            if (exact && !used[itemKey(exact)]) {
+                ordered.push(exact);
+                used[itemKey(exact)] = true;
+                continue;
+            }
+
+            // Backward compatibility: old configs used desktop ids only. If an
+            // app now has several windows, the first window keeps the desktop id
+            // position and the extra instances appear next to it.
+            var list = byDesktop[orderId] || [];
+            for (var k = 0; k < list.length; k++) {
+                var candidate = list[k];
+                if (!used[itemKey(candidate)]) {
+                    ordered.push(candidate);
+                    used[itemKey(candidate)] = true;
+                }
             }
         }
 
         var pins = Services.AppPanelService.pinnedIds || [];
         for (var p = 0; p < pins.length; p++) {
             var pinId = String(pins[p] || "");
-            if (byDesktop[pinId] && !used[pinId]) {
-                ordered.push(byDesktop[pinId]);
-                used[pinId] = true;
+            var pinList = byDesktop[pinId] || [];
+            for (var pi = 0; pi < pinList.length; pi++) {
+                var pinItem = pinList[pi];
+                if (!used[itemKey(pinItem)]) {
+                    ordered.push(pinItem);
+                    used[itemKey(pinItem)] = true;
+                }
             }
         }
 
         for (var r = 0; r < items.length; r++) {
             var rest = items[r];
-            if (!canDragItem(rest) || !used[rest.desktopId]) {
+            if (!used[itemKey(rest)]) {
                 ordered.push(rest);
-                if (canDragItem(rest))
-                    used[rest.desktopId] = true;
+                used[itemKey(rest)] = true;
             }
         }
 
         return ordered;
+    }
+
+    function appendUnique(list, value) {
+        var text = String(value || "");
+        if (text.length > 0 && list.indexOf(text) < 0)
+            list.push(text);
     }
 
     function rebuildModel() {
@@ -581,51 +639,53 @@ Item {
             return;
         }
 
-        var byDesktop = {};
         var result = [];
         var openDesktopIds = [];
-
-        for (var p = 0; p < Services.AppPanelService.pinnedIds.length; p++) {
-            var pinId = Services.AppPanelService.pinnedIds[p];
-            var pinApp = Services.AppPanelService.appById(pinId);
-            if (!pinApp)
-                continue;
-            var pinItem = cloneAppItem(pinApp, true);
-            byDesktop[pinId] = pinItem;
-            result.push(pinItem);
-        }
-
-        var unmatched = {};
+        var windowsByDesktop = {};
+        var appByDesktop = {};
         var windows = Services.ShellState.windows || [];
+
         for (var w = 0; w < windows.length; w++) {
             var window = windows[w];
             if (!window || window.hiddenByShell || !window.address)
                 continue;
 
             var app = findAppForWindow(window);
-            var item = null;
             if (app) {
-                if (!byDesktop[app.desktopId]) {
-                    byDesktop[app.desktopId] = cloneAppItem(app, Services.AppPanelService.isPinned(app.desktopId));
-                    if (!byDesktop[app.desktopId].pinned)
-                        result.push(byDesktop[app.desktopId]);
-                }
-                item = byDesktop[app.desktopId];
-                if (openDesktopIds.indexOf(app.desktopId) < 0)
-                    openDesktopIds.push(app.desktopId);
+                var desktopId = String(app.desktopId || "");
+                if (!windowsByDesktop[desktopId])
+                    windowsByDesktop[desktopId] = [];
+                windowsByDesktop[desktopId].push(window);
+                appByDesktop[desktopId] = app;
+                appendUnique(openDesktopIds, desktopId);
             } else {
-                var placeholderKey = normalizeToken(window.appId || window.rawClass || window.title || window.address || "app");
-                if (!unmatched[placeholderKey]) {
-                    unmatched[placeholderKey] = placeholderForWindow(window);
-                    result.push(unmatched[placeholderKey]);
-                }
-                item = unmatched[placeholderKey];
+                result.push(placeholderForWindow(window));
             }
-            item.windows.push(window);
         }
 
-        for (var i = 0; i < result.length; i++)
-            updateWindowState(result[i]);
+        for (var desktopId in windowsByDesktop) {
+            var app = appByDesktop[desktopId];
+            var sorted = sortWindows(windowsByDesktop[desktopId]);
+            for (var i = 0; i < sorted.length; i++) {
+                var win = sorted[i];
+                var itemId = i === 0 ? desktopId : desktopId + "::" + windowAddressKey(win);
+                result.push(cloneAppItem(app, Services.AppPanelService.isPinned(desktopId), itemId, win, sorted));
+            }
+        }
+
+        var pins = Services.AppPanelService.pinnedIds || [];
+        for (var p = 0; p < pins.length; p++) {
+            var pinId = String(pins[p] || "");
+            if (windowsByDesktop[pinId])
+                continue;
+            var pinApp = Services.AppPanelService.appById(pinId);
+            if (!pinApp)
+                continue;
+            result.push(cloneAppItem(pinApp, true, pinId, null, []));
+        }
+
+        for (var x = 0; x < result.length; x++)
+            updateWindowState(result[x]);
 
         result = orderedItems(result);
 
@@ -792,7 +852,7 @@ Item {
             Services.ShellActions.closeWindow(topWindow(item));
             break;
         case "close-all":
-            Services.ShellActions.closeWindows(item.windows || []);
+            Services.ShellActions.closeWindows(item.allWindows || item.windows || []);
             break;
         }
     }

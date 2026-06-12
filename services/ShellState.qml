@@ -14,7 +14,12 @@ QtObject {
     property int activeWorkspace: 1
     property string activeSpecialWorkspaceName: ""
     property string focusedAddress: ""
+    property int closeTopbarPopupsNonce: 0
 
+
+    function requestCloseTopbarPopups() {
+        closeTopbarPopupsNonce += 1;
+    }
 
     function normalizeSpecialWorkspaceName(value) {
         var name = String(value || "").trim();

@@ -2,6 +2,7 @@ import Quickshell
 import Quickshell.Wayland
 import QtQuick
 import "../../components" as Components
+import "../../services" as Services
 
 PanelWindow {
     id: root
@@ -11,13 +12,13 @@ PanelWindow {
     readonly property int dockHorizontalPadding: 14
     readonly property int dockBackgroundHeight: 74
     readonly property int dockHotZoneHeight: 1
-    readonly property real dockHotZoneWidthRatio: 0.20
     readonly property real dockHiddenOffset: 108
     readonly property int dockKeepAliveHorizontalMargin: 10
     readonly property int dockKeepAliveTopMargin: 4
 
     property bool dockShown: false
-    readonly property bool dockAreaHovered: hotZoneMouse.containsMouse || dockKeepAliveMouse.containsMouse || appPanel.panelHovered
+    property bool popupGraceActive: false
+    readonly property bool dockAreaHovered: hotZoneMouse.containsMouse || dockKeepAliveMouse.containsMouse || appPanel.panelHovered || popupGraceActive
     property real dockReveal: dockShown ? 1.0 : 0.0
 
     anchors {
@@ -43,10 +44,10 @@ PanelWindow {
     // Visible state keeps pointer input on the dock plus the small lower gap,
     // so the panel does not disappear while moving below it or to its menu.
     mask: Region {
-        x: Math.round(root.dockShown || appPanel.popupOpen ? dockStack.x + dockKeepAliveArea.x : hotZone.x)
-        y: Math.round(root.dockShown || appPanel.popupOpen ? dockStack.y + dockKeepAliveArea.y : hotZone.y)
-        width: Math.round(root.dockShown || appPanel.popupOpen ? dockKeepAliveArea.width : hotZone.width)
-        height: Math.round(root.dockShown || appPanel.popupOpen ? dockKeepAliveArea.height : hotZone.height)
+        x: Math.round(root.dockShown || appPanel.popupOpen || root.popupGraceActive ? dockStack.x + dockKeepAliveArea.x : hotZone.x)
+        y: Math.round(root.dockShown || appPanel.popupOpen || root.popupGraceActive ? dockStack.y + dockKeepAliveArea.y : hotZone.y)
+        width: Math.round(root.dockShown || appPanel.popupOpen || root.popupGraceActive ? dockKeepAliveArea.width : hotZone.width)
+        height: Math.round(root.dockShown || appPanel.popupOpen || root.popupGraceActive ? dockKeepAliveArea.height : hotZone.height)
     }
 
     Behavior on dockReveal {
@@ -54,19 +55,20 @@ PanelWindow {
     }
 
     function showDock() {
+        Services.ShellState.requestCloseTopbarPopups();
         hideTimer.stop();
         dockShown = true;
         showGuardTimer.restart();
     }
 
     function scheduleHide() {
-        if (dockAreaHovered || appPanel.popupOpen)
+        if (dockAreaHovered || appPanel.popupOpen || popupGraceActive)
             return;
         hideTimer.restart();
     }
 
     function hideDockNow() {
-        if (!dockAreaHovered && !appPanel.popupOpen)
+        if (!dockAreaHovered && !appPanel.popupOpen && !popupGraceActive)
             dockShown = false;
     }
 
@@ -82,8 +84,18 @@ PanelWindow {
         interval: 620
         repeat: false
         onTriggered: {
-            if (!root.dockAreaHovered && !appPanel.popupOpen)
+            if (!root.dockAreaHovered && !appPanel.popupOpen && !root.popupGraceActive)
                 root.dockShown = false;
+        }
+    }
+
+    Timer {
+        id: popupGraceTimer
+        interval: 520
+        repeat: false
+        onTriggered: {
+            root.popupGraceActive = false;
+            root.scheduleHide();
         }
     }
 
@@ -91,18 +103,18 @@ PanelWindow {
         id: hideWatchdogTimer
         interval: 260
         repeat: true
-        running: root.dockShown || appPanel.popupOpen
+        running: root.dockShown || appPanel.popupOpen || root.popupGraceActive
         onTriggered: {
-            if (!root.dockAreaHovered && !appPanel.popupOpen)
+            if (!root.dockAreaHovered && !appPanel.popupOpen && !root.popupGraceActive)
                 root.dockShown = false;
         }
     }
 
     Rectangle {
         id: hotZone
-        anchors.horizontalCenter: parent.horizontalCenter
+        x: Math.round(Math.max(0, Math.min(root.width - width, dockBackground.x)))
         anchors.bottom: parent.bottom
-        width: Math.max(90, root.width * root.dockHotZoneWidthRatio)
+        width: Math.max(90, dockBackground.width)
         height: root.dockHotZoneHeight
         color: "transparent"
         opacity: 0.0
@@ -182,10 +194,14 @@ PanelWindow {
 
             onPopupOpened: root.showDock()
             onPopupOpenChanged: {
-                if (popupOpen)
+                if (popupOpen) {
+                    root.popupGraceActive = false;
+                    popupGraceTimer.stop();
                     root.showDock();
-                else
-                    root.scheduleHide();
+                } else {
+                    root.popupGraceActive = true;
+                    popupGraceTimer.restart();
+                }
             }
         }
 
