@@ -21,9 +21,13 @@ Item {
     property var contextItem: null
     property var contextActions: []
     property real contextAnchorX: 0
+    property string contextWindowAddress: ""
+    property var contextAllWindows: []
     property var pendingContextItem: null
     property var pendingContextActions: []
     property real pendingContextAnchorX: 0
+    property string pendingContextWindowAddress: ""
+    property var pendingContextAllWindows: []
     property bool pointerReady: false
     property bool draggingItem: false
     property string draggingItemId: ""
@@ -45,6 +49,8 @@ Item {
     property real itemSize: 54
     property real itemSpacing: 8
     property string lastModelKey: ""
+    property var windowInstanceOrder: ({})
+    property int nextWindowInstanceOrder: 0
     readonly property bool panelHovered: rootHover.hovered || listHover.hovered
 
     signal popupOpened()
@@ -439,13 +445,14 @@ Item {
         return address.length > 0 ? address : normalizeToken(window && (window.appId || window.rawClass || window.title) || "window");
     }
 
-    function cloneAppItem(app, pinned, itemId, window, allWindows) {
+    function cloneAppItem(app, pinned, itemId, window, allWindows, orderKey) {
         var id = String(app.desktopId || "");
         var key = String(itemId || id);
+        var orderingKey = String(orderKey || key);
         var wins = window ? [window] : [];
         return {
             itemId: key,
-            orderKey: key,
+            orderKey: orderingKey,
             desktopId: id,
             sourceDesktopId: id,
             name: app.name || id || "Application",
@@ -485,10 +492,69 @@ Item {
         };
     }
 
+    function normalizedWindowAddress(window) {
+        return String(window && window.address || "");
+    }
+
+    function rememberWindowInstance(window) {
+        var address = normalizedWindowAddress(window);
+        if (!address)
+            return 999999;
+
+        var map = windowInstanceOrder || {};
+        if (map[address] === undefined || map[address] === null) {
+            map[address] = nextWindowInstanceOrder;
+            nextWindowInstanceOrder += 1;
+            windowInstanceOrder = map;
+        }
+        return Number(map[address]);
+    }
+
+    function syncWindowInstanceOrder(windows) {
+        var map = windowInstanceOrder || {};
+        var live = {};
+        var changed = false;
+
+        for (var i = 0; i < (windows || []).length; i++) {
+            var address = normalizedWindowAddress(windows[i]);
+            if (!address)
+                continue;
+            live[address] = true;
+            if (map[address] === undefined || map[address] === null) {
+                map[address] = nextWindowInstanceOrder;
+                nextWindowInstanceOrder += 1;
+                changed = true;
+            }
+        }
+
+        var next = {};
+        for (var key in map) {
+            if (live[key])
+                next[key] = map[key];
+            else
+                changed = true;
+        }
+
+        if (changed)
+            windowInstanceOrder = next;
+    }
+
+    function windowOrderValue(window) {
+        var address = normalizedWindowAddress(window);
+        var map = windowInstanceOrder || {};
+        if (address && map[address] !== undefined && map[address] !== null)
+            return Number(map[address]);
+        return rememberWindowInstance(window);
+    }
+
     function sortWindows(windows) {
         var result = (windows || []).slice();
         result.sort(function(a, b) {
-            return Number(a.focusHistoryId || 9999) - Number(b.focusHistoryId || 9999);
+            var orderA = windowOrderValue(a);
+            var orderB = windowOrderValue(b);
+            if (orderA !== orderB)
+                return orderA - orderB;
+            return normalizedWindowAddress(a).localeCompare(normalizedWindowAddress(b));
         });
         return result;
     }
@@ -543,7 +609,6 @@ Item {
                 addresses.push((win.address || "")
                     + ":" + (win.workspace || "")
                     + ":" + (win.workspaceName || "")
-                    + ":" + (win.focusHistoryId || "")
                     + ":" + (win.title || ""));
             }
             result.push([
@@ -644,6 +709,7 @@ Item {
         var windowsByDesktop = {};
         var appByDesktop = {};
         var windows = Services.ShellState.windows || [];
+        syncWindowInstanceOrder(windows);
 
         for (var w = 0; w < windows.length; w++) {
             var window = windows[w];
@@ -668,8 +734,9 @@ Item {
             var sorted = sortWindows(windowsByDesktop[desktopId]);
             for (var i = 0; i < sorted.length; i++) {
                 var win = sorted[i];
-                var itemId = i === 0 ? desktopId : desktopId + "::" + windowAddressKey(win);
-                result.push(cloneAppItem(app, Services.AppPanelService.isPinned(desktopId), itemId, win, sorted));
+                var itemId = desktopId + "::" + windowAddressKey(win);
+                var orderKey = i === 0 ? desktopId : itemId;
+                result.push(cloneAppItem(app, Services.AppPanelService.isPinned(desktopId), itemId, win, sorted, orderKey));
             }
         }
 
@@ -703,6 +770,44 @@ Item {
         return item.windows[0];
     }
 
+    function findWindowByAddress(address) {
+        var lookup = String(address || "");
+        if (!lookup)
+            return null;
+
+        var sources = [
+            Services.ShellState.windows || [],
+            contextAllWindows || [],
+            contextItem && contextItem.allWindows ? contextItem.allWindows : [],
+            contextItem && contextItem.windows ? contextItem.windows : []
+        ];
+
+        for (var s = 0; s < sources.length; s++) {
+            var list = sources[s] || [];
+            for (var i = 0; i < list.length; i++) {
+                if (String(list[i] && list[i].address || "") === lookup)
+                    return list[i];
+            }
+        }
+
+        return null;
+    }
+
+    function contextTargetWindow(item) {
+        return findWindowByAddress(contextWindowAddress) || topWindow(item);
+    }
+
+    function activateItemWindow(item, window) {
+        hideTooltip();
+        if (!item)
+            return;
+        if (window) {
+            Services.ShellActions.focusWindow(window);
+            return;
+        }
+        activateItem(item);
+    }
+
     function activateItem(item) {
         hideTooltip();
         if (!item)
@@ -723,14 +828,19 @@ Item {
 
     function openContextMenu(item, localCenterX) {
         hideTooltip();
+        var win = topWindow(item);
         pendingContextItem = item;
         pendingContextActions = menuActionsFor(item);
         pendingContextAnchorX = localCenterX;
+        pendingContextWindowAddress = String(win && win.address || "");
+        pendingContextAllWindows = (item && (item.allWindows || item.windows)) ? (item.allWindows || item.windows).slice() : [];
 
         if (contextOpen || popupState.renderVisible) {
             contextItem = pendingContextItem;
             contextActions = pendingContextActions || [];
             contextAnchorX = pendingContextAnchorX;
+            contextWindowAddress = pendingContextWindowAddress;
+            contextAllWindows = pendingContextAllWindows || [];
             contextOpen = true;
             popupOpened();
             return;
@@ -772,6 +882,8 @@ Item {
             root.contextItem = root.pendingContextItem;
             root.contextActions = root.pendingContextActions || [];
             root.contextAnchorX = root.pendingContextAnchorX;
+            root.contextWindowAddress = root.pendingContextWindowAddress;
+            root.contextAllWindows = root.pendingContextAllWindows || [];
             root.contextOpen = true;
             root.popupOpened();
         }
@@ -822,7 +934,7 @@ Item {
 
         if (item.open)
             actions.push({ label: "Close window", action: "close-window", enabled: true });
-        if (item.open && item.windows && item.windows.length > 1)
+        if (item.open && item.allWindows && item.allWindows.length > 1)
             actions.push({ label: "Close all windows", action: "close-all", enabled: true });
 
         return actions;
@@ -830,13 +942,15 @@ Item {
 
     function runMenuAction(action) {
         var item = contextItem;
+        var targetWindow = contextTargetWindow(item);
+        var targetAllWindows = (contextAllWindows || []).slice();
         closePopup();
         if (!item)
             return;
 
         switch (action) {
         case "focus":
-            activateItem(item);
+            activateItemWindow(item, targetWindow);
             break;
         case "launch":
         case "new-window":
@@ -849,10 +963,10 @@ Item {
             Services.AppPanelService.unpinWithOrder(item.desktopId, currentDockOrder());
             break;
         case "close-window":
-            Services.ShellActions.closeWindow(topWindow(item));
+            Services.ShellActions.closeWindow(targetWindow);
             break;
         case "close-all":
-            Services.ShellActions.closeWindows(item.allWindows || item.windows || []);
+            Services.ShellActions.closeWindows(targetAllWindows.length > 0 ? targetAllWindows : (item.allWindows || item.windows || []));
             break;
         }
     }
@@ -945,9 +1059,9 @@ Item {
                 Rectangle {
                     id: hoverBackground
                 anchors.centerIn: parent
-                width: 50
-                height: 50
-                radius: 18
+                width: 48
+                height: 48
+                radius: 16
                 color: appDelegate.itemActive
                     ? "#2cffffff"
                     : (appMouse.pressed ? "#20ffffff" : (appDelegate.hoverActive ? "#16ffffff" : "transparent"))
@@ -995,9 +1109,9 @@ Item {
             Rectangle {
                 id: launchPulse
                 anchors.centerIn: hoverBackground
-                width: 48
-                height: 48
-                radius: 18
+                width: 46
+                height: 46
+                radius: 16
                 color: "transparent"
                 border.width: 1
                 border.color: "#55ffffff"
@@ -1140,9 +1254,9 @@ Item {
         Components.AnimatedPopupState {
             id: popupState
             targetVisible: root.contextOpen
-            openDuration: 180
-            closeDuration: 135
-            closeSafetyDelay: 190
+            openDuration: motion.popupOpenDuration
+            closeDuration: motion.popupCloseDuration
+            closeSafetyDelay: motion.popupCloseDuration + 55
         }
 
         Item {
@@ -1229,16 +1343,16 @@ Item {
         Components.AnimatedPopupState {
             id: tooltipState
             targetVisible: root.tooltipOpen && !root.contextOpen
-            openDuration: 155
-            closeDuration: 105
-            closeSafetyDelay: 140
+            openDuration: motion.popupOpenDuration
+            closeDuration: motion.popupCloseDuration
+            closeSafetyDelay: motion.popupCloseDuration + 55
         }
 
         Item {
             anchors.fill: parent
             opacity: tooltipState.reveal
-            y: root.bottomDock ? (5 - tooltipState.reveal * 5) : (-5 + tooltipState.reveal * 5)
-            scale: 0.985 + tooltipState.reveal * 0.015
+            y: root.bottomDock ? (9 - tooltipState.reveal * 9) : (-9 + tooltipState.reveal * 9)
+            scale: 0.972 + tooltipState.reveal * 0.028
             transformOrigin: root.bottomDock ? Item.Bottom : Item.Top
             enabled: false
             layer.enabled: tooltipState.reveal > 0.001 && tooltipState.reveal < 0.999

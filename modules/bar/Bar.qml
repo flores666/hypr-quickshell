@@ -115,7 +115,10 @@ PanelWindow {
             height: implicitHeight
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
-            onToggled: suppressPopupCloseAfterWorkspaceScroll.restart()
+            onToggled: {
+                root.closePopups();
+                suppressPopupCloseAfterWorkspaceScroll.restart();
+            }
         }
 
         Workspaces.WorkspaceStrip {
