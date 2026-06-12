@@ -120,6 +120,28 @@ QtObject {
             Services.ShellState.setActiveSpecialWorkspace(normalized)
     }
 
+    function moveWindowToWorkspace(window, workspaceId) {
+        if (!window || !window.address)
+            return
+
+        var target = Number(workspaceId || 0)
+        if (isNaN(target) || target <= 0)
+            return
+
+        Hyprland.dispatch("movetoworkspacesilent " + Math.floor(target) + ",address:" + window.address)
+    }
+
+    function moveWindowToSpecialWorkspace(window) {
+        if (!window || !window.address)
+            return
+
+        var target = normalizedSpecialWorkspaceName()
+        if (target.length === 0)
+            target = minimizedWorkspace
+
+        Hyprland.dispatch("movetoworkspacesilent " + target + ",address:" + window.address)
+    }
+
     function closeWindow(window) {
         if (!window || !window.address)
             return

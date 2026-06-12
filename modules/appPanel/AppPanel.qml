@@ -16,13 +16,16 @@ Item {
     property real panelHeight: 70
     property bool bottomDock: false
     readonly property real popupGap: 2
-    property bool popupOpen: contextOpen
+    readonly property bool popupOpen: contextOpen || workspaceMenuOpen
     property bool contextOpen: false
     property var contextItem: null
     property var contextActions: []
     property real contextAnchorX: 0
     property string contextWindowAddress: ""
     property var contextAllWindows: []
+    property bool workspaceMenuOpen: false
+    property bool workspaceMenuHovered: false
+    property int workspaceCount: 10
     property var pendingContextItem: null
     property var pendingContextActions: []
     property real pendingContextAnchorX: 0
@@ -47,7 +50,7 @@ Item {
     property string lastModelKey: ""
     property var windowInstanceOrder: ({})
     property int nextWindowInstanceOrder: 0
-    readonly property bool panelHovered: rootHover.hovered || listHover.hovered
+    readonly property bool panelHovered: rootHover.hovered || listHover.hovered || workspaceMenuHovered
     readonly property int hoverRevealDelay: 135
     readonly property int tooltipRevealDelay: 430
 
@@ -803,8 +806,88 @@ Item {
             Services.AppPanelService.launch(item.desktopId);
     }
 
+    function workspaceMenuItems() {
+        var result = [{ label: "Special workspace", workspace: "special" }];
+        for (var i = 1; i <= workspaceCount; i++)
+            result.push({ label: "Workspace " + i, workspace: i });
+        return result;
+    }
+
+    function workspaceMenuHeight() {
+        var count = workspaceMenuItems().length;
+        return Math.max(46, 16 + count * 28 + Math.max(0, count - 1) * 4);
+    }
+
+    function workspaceMenuXFor(width) {
+        var mainX = popupXFor(206);
+        var gap = 2;
+        var right = mainX + 206 + gap;
+        if (right + width <= hostWidth - 6)
+            return right;
+        return Math.max(6, mainX - width - gap);
+    }
+
+    function workspaceMenuYFor(height) {
+        if (bottomDock)
+            return popupTopY - Math.max(1, height) - popupGap;
+        return popupYFor(contextMenu.implicitHeight);
+    }
+
+    function workspaceMenuIsRight() {
+        return workspaceMenuXFor(154) >= contextMenu.anchor.rect.x;
+    }
+
+    function isCurrentContextWorkspace(workspace) {
+        var win = contextTargetWindow(contextItem);
+        if (!win)
+            return false;
+
+        var workspaceName = String(win.workspaceName || "");
+        if (workspace === "special")
+            return workspaceName === Services.ShellActions.normalizedSpecialWorkspaceName();
+
+        if (workspaceName.indexOf("special:") === 0)
+            return false;
+        return Number(win.workspace || 0) === Number(workspace || 0);
+    }
+
+    function protectedPopupX() {
+        if (!workspaceMenuOpen)
+            return popupXFor(206);
+        return Math.min(popupXFor(206), workspaceMenuXFor(154));
+    }
+
+    function protectedPopupY() {
+        if (!workspaceMenuOpen)
+            return popupYFor(contextMenu.implicitHeight);
+        return Math.min(popupYFor(contextMenu.implicitHeight), workspaceMenuYFor(workspaceMenu.implicitHeight));
+    }
+
+    function protectedPopupWidth() {
+        var mainX = popupXFor(206);
+        var mainRight = mainX + 206;
+        if (!workspaceMenuOpen)
+            return 206;
+        var subX = workspaceMenuXFor(154);
+        var subRight = subX + 154;
+        return Math.max(mainRight, subRight) - Math.min(mainX, subX);
+    }
+
+    function protectedPopupHeight() {
+        var mainY = popupYFor(contextMenu.implicitHeight);
+        var mainBottom = mainY + contextMenu.implicitHeight;
+        if (!workspaceMenuOpen)
+            return contextMenu.implicitHeight;
+        var subY = workspaceMenuYFor(workspaceMenu.implicitHeight);
+        var subBottom = subY + workspaceMenu.implicitHeight;
+        return Math.max(mainBottom, subBottom) - Math.min(mainY, subY);
+    }
+
     function openContextMenu(item, localCenterX) {
         hideTooltip();
+        workspaceMenuOpen = false;
+        workspaceMenuHovered = false;
+        workspaceMenuCloseTimer.stop();
         var win = topWindow(item);
         pendingContextItem = item;
         pendingContextActions = menuActionsFor(item);
@@ -829,7 +912,10 @@ Item {
 
     function closePopup() {
         contextOpen = false;
+        workspaceMenuOpen = false;
+        workspaceMenuHovered = false;
         contextOpenDelay.stop();
+        workspaceMenuCloseTimer.stop();
     }
 
     Timer {
@@ -869,6 +955,16 @@ Item {
         }
     }
 
+    Timer {
+        id: workspaceMenuCloseTimer
+        interval: 150
+        repeat: false
+        onTriggered: {
+            if (!root.workspaceMenuHovered)
+                root.workspaceMenuOpen = false;
+        }
+    }
+
     function popupXFor(popupWidth) {
         var raw = popupBaseX + contextAnchorX - popupWidth / 2;
         return Math.max(6, Math.min(raw, hostWidth - popupWidth - 6));
@@ -904,6 +1000,9 @@ Item {
         if (item.open && item.hasDesktop)
             actions.push({ label: "New window", action: "new-window", enabled: true });
 
+        if (item.open)
+            actions.push({ label: "Move to workspace", action: "move-workspace", enabled: true, submenu: "workspaces" });
+
         if (item.hasDesktop) {
             actions.push({
                 label: item.pinned ? "Unpin from panel" : "Pin to panel",
@@ -921,6 +1020,9 @@ Item {
     }
 
     function runMenuAction(action) {
+        if (action === "move-workspace")
+            return;
+
         var item = contextItem;
         var targetWindow = contextTargetWindow(item);
         var targetAllWindows = (contextAllWindows || []).slice();
@@ -949,6 +1051,19 @@ Item {
             Services.ShellActions.closeWindows(targetAllWindows.length > 0 ? targetAllWindows : (item.allWindows || item.windows || []));
             break;
         }
+    }
+
+    function moveContextWindowToWorkspace(workspace) {
+        var item = contextItem;
+        var targetWindow = contextTargetWindow(item);
+        closePopup();
+        if (!item || !targetWindow)
+            return;
+
+        if (workspace === "special")
+            Services.ShellActions.moveWindowToSpecialWorkspace(targetWindow);
+        else
+            Services.ShellActions.moveWindowToWorkspace(targetWindow, workspace);
     }
 
     Component.onCompleted: rebuildModel()
@@ -1206,10 +1321,10 @@ Item {
         hostWindow: root.hostWindow
         hostWidth: root.hostWidth
         panelHeight: root.panelHeight
-        popupX: root.popupXFor(206)
-        popupY: root.popupYFor(contextMenu.implicitHeight)
-        popupWidth: 206
-        popupHeight: contextMenu.implicitHeight
+        popupX: root.protectedPopupX()
+        popupY: root.protectedPopupY()
+        popupWidth: root.protectedPopupWidth()
+        popupHeight: root.protectedPopupHeight()
         bottomMode: root.bottomDock
     }
 
@@ -1283,7 +1398,7 @@ Item {
                             anchors.left: parent.left
                             anchors.leftMargin: 9
                             anchors.right: parent.right
-                            anchors.rightMargin: 9
+                            anchors.rightMargin: modelData.submenu === "workspaces" ? 24 : 9
                             anchors.verticalCenter: parent.verticalCenter
                             text: modelData.label || "Action"
                             color: "#eef3f8"
@@ -1293,15 +1408,138 @@ Item {
                             verticalAlignment: Text.AlignVCenter
                         }
 
+                        Components.StyledText {
+                            anchors.right: parent.right
+                            anchors.rightMargin: 9
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "›"
+                            visible: modelData.submenu === "workspaces"
+                            color: "#dce6f0"
+                            font.pixelSize: 16
+                            font.weight: Font.Medium
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
                         MouseArea {
                             id: actionMouse
                             anchors.fill: parent
                             hoverEnabled: true
                             acceptedButtons: Qt.LeftButton
                             cursorShape: Qt.PointingHandCursor
+
+                            onEntered: {
+                                if (modelData.submenu === "workspaces") {
+                                    root.workspaceMenuHovered = false;
+                                    workspaceMenuCloseTimer.stop();
+                                    root.workspaceMenuOpen = true;
+                                } else {
+                                    root.workspaceMenuHovered = false;
+                                    root.workspaceMenuOpen = false;
+                                    workspaceMenuCloseTimer.stop();
+                                }
+                            }
+
+                            onExited: {
+                            }
+
                             onClicked: {
                                 root.runMenuAction(modelData.action);
                             }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    PopupWindow {
+        id: workspaceMenu
+        anchor.window: root.hostWindow
+        anchor.rect.x: root.workspaceMenuXFor(154)
+        anchor.rect.y: root.workspaceMenuYFor(implicitHeight)
+        implicitWidth: 154
+        implicitHeight: root.workspaceMenuHeight()
+        visible: root.workspaceMenuOpen && root.contextOpen
+        color: "transparent"
+        surfaceFormat.opaque: false
+
+        Item {
+            anchors.fill: parent
+            clip: true
+            enabled: root.workspaceMenuOpen && root.contextOpen
+
+            Components.GlassPanel {
+                anchors.fill: parent
+                radiusSize: 16
+                glassColor: "#b006080c"
+                clip: true
+                antialiasing: true
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                hoverEnabled: true
+                acceptedButtons: Qt.NoButton
+                onEntered: {
+                    root.workspaceMenuHovered = true;
+                    workspaceMenuCloseTimer.stop();
+                }
+                onExited: {
+                    root.workspaceMenuHovered = false;
+                }
+            }
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 8
+                spacing: 4
+
+                Repeater {
+                    model: root.workspaceMenuItems()
+
+                    delegate: Rectangle {
+                        id: workspaceRow
+
+                        required property var modelData
+
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 28
+                        radius: 9
+                        color: workspaceMouse.pressed ? "#20ffffff" : (workspaceMouse.containsMouse ? "#14ffffff" : "transparent")
+                        antialiasing: true
+
+                        Behavior on color { ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic } }
+
+                        readonly property bool currentWorkspace: root.isCurrentContextWorkspace(modelData.workspace)
+
+                        Components.StyledText {
+                            anchors.left: parent.left
+                            anchors.leftMargin: 9
+                            anchors.right: parent.right
+                            anchors.rightMargin: 9
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: modelData.label || "Workspace"
+                            color: "#eef3f8"
+                            font.pixelSize: 12
+                            font.weight: workspaceRow.currentWorkspace ? Font.DemiBold : Font.Medium
+                            elide: Text.ElideRight
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        MouseArea {
+                            id: workspaceMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            acceptedButtons: Qt.LeftButton
+                            cursorShape: Qt.PointingHandCursor
+                            onEntered: {
+                                root.workspaceMenuHovered = true;
+                                workspaceMenuCloseTimer.stop();
+                            }
+                            onExited: {
+                                root.workspaceMenuHovered = false;
+                            }
+                            onClicked: root.moveContextWindowToWorkspace(modelData.workspace)
                         }
                     }
                 }
