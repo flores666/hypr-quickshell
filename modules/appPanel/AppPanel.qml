@@ -38,6 +38,7 @@ Item {
     property string tooltipDisplayText: ""
     property string tooltipPendingText: ""
     property real tooltipPendingAnchorX: 0
+    property string tooltipPendingTargetId: ""
     property string tooltipTargetId: ""
     property real tooltipAnchorX: 0
     property var panelItems: []
@@ -48,6 +49,8 @@ Item {
     property var windowInstanceOrder: ({})
     property int nextWindowInstanceOrder: 0
     readonly property bool panelHovered: rootHover.hovered || listHover.hovered
+    readonly property int hoverRevealDelay: 135
+    readonly property int tooltipRevealDelay: 430
 
     signal popupOpened()
 
@@ -125,26 +128,20 @@ Item {
         if (!text || !key)
             return;
 
-        tooltipTargetId = key;
+        tooltipPendingTargetId = key;
         tooltipPendingText = text;
         tooltipPendingAnchorX = localCenterX;
-
-        if (tooltipOpen || tooltipState.renderVisible) {
-            tooltipTimer.stop();
-            tooltipSwitchTimer.stop();
-            setTooltipVisualText(tooltipPendingText, tooltipPendingAnchorX);
-            tooltipOpen = tooltipDisplayText.length > 0 && tooltipTargetId.length > 0;
-            return;
-        }
-
+        tooltipSwitchTimer.stop();
         tooltipTimer.restart();
     }
 
     function hideTooltipFor(item) {
-        if (itemKey(item) !== tooltipTargetId)
+        var key = itemKey(item);
+        if (key !== tooltipTargetId && key !== tooltipPendingTargetId)
             return;
         tooltipTimer.stop();
         tooltipSwitchTimer.stop();
+        tooltipPendingTargetId = "";
         tooltipTargetId = "";
         tooltipOpen = false;
     }
@@ -152,6 +149,7 @@ Item {
     function hideTooltip() {
         tooltipTimer.stop();
         tooltipSwitchTimer.stop();
+        tooltipPendingTargetId = "";
         tooltipTargetId = "";
         tooltipOpen = false;
     }
@@ -836,11 +834,14 @@ Item {
 
     Timer {
         id: tooltipTimer
-        interval: 270
+        interval: root.tooltipRevealDelay
         repeat: false
         onTriggered: {
-            root.setTooltipVisualText(root.tooltipPendingText, root.tooltipPendingAnchorX);
-            root.tooltipOpen = root.tooltipDisplayText.length > 0 && root.tooltipTargetId.length > 0;
+            if (root.tooltipPendingTargetId) {
+                root.tooltipTargetId = root.tooltipPendingTargetId;
+                root.setTooltipVisualText(root.tooltipPendingText, root.tooltipPendingAnchorX);
+                root.tooltipOpen = root.tooltipDisplayText.length > 0 && root.tooltipTargetId.length > 0;
+            }
         }
     }
 
@@ -1015,7 +1016,7 @@ Item {
 
             Timer {
                 id: hoverDelayTimer
-                interval: 45
+                interval: root.hoverRevealDelay
                 repeat: false
                 onTriggered: appDelegate.hoverActive = appMouse.containsMouse && !root.draggingItem
             }
