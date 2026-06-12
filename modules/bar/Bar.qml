@@ -121,6 +121,7 @@ PanelWindow {
             onWorkspaceScrolled: suppressPopupCloseAfterWorkspaceScroll.restart()
         }
 
+
         Calendar.CalendarModule {
             id: calendar
             z: 1
@@ -134,7 +135,7 @@ PanelWindow {
             popupBaseX: barContent.x + x
             onPopupOpened: {
                 mediaPlayer.closePopup();
-                keyboardLayout.closePopup();
+                        keyboardLayout.closePopup();
                 systemStatus.closePopup();
             }
         }
@@ -153,7 +154,7 @@ PanelWindow {
             popupBaseX: barContent.x + x
             onPopupOpened: {
                 calendar.closePopup();
-                keyboardLayout.closePopup();
+                        keyboardLayout.closePopup();
                 systemStatus.closePopup();
             }
         }
@@ -173,7 +174,7 @@ PanelWindow {
             onPopupOpened: {
                 calendar.closePopup();
                 mediaPlayer.closePopup();
-                systemStatus.closePopup();
+                        systemStatus.closePopup();
             }
         }
 
@@ -191,7 +192,7 @@ PanelWindow {
             onPopupOpened: {
                 calendar.closePopup();
                 mediaPlayer.closePopup();
-                keyboardLayout.closePopup();
+                        keyboardLayout.closePopup();
             }
         }
     }

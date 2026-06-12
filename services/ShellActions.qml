@@ -68,6 +68,22 @@ QtObject {
         Hyprland.dispatch(name.length > 0 ? "togglespecialworkspace " + name : "togglespecialworkspace")
     }
 
+
+    function closeWindow(window) {
+        if (!window || !window.address)
+            return
+
+        Hyprland.dispatch("closewindow address:" + window.address)
+    }
+
+    function closeWindows(windows) {
+        if (!windows)
+            return
+
+        for (var i = 0; i < windows.length; i++)
+            closeWindow(windows[i])
+    }
+
     function launchApp(app) {
         if (!app || !app.command)
             return

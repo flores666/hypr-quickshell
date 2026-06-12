@@ -5,6 +5,7 @@ import "./modules/bar" as Bar
 import "./modules/tray" as Tray
 import "./modules/launcher" as Launcher
 import "./modules/roundedCorners" as RoundedCorners
+import "./modules/appPanel" as AppPanel
 
 Scope {
     id: root
@@ -14,6 +15,8 @@ Scope {
     Services.TrayBridge {}
 
     Bar.Bar {}
+
+    AppPanel.AppDock {}
 
     RoundedCorners.ScreenCorners {}
 

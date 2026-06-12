@@ -1,12 +1,11 @@
-# Blur для quickshell taskbar и popup.
-# Namespace задан в modules/bar/Bar.qml:
-# WlrLayershell.namespace: "quickshell:taskbar"
+# Blur for quickshell topbar, dock and popups.
+# Both topbar and app dock reuse the quickshell:taskbar namespace.
 
 layerrule = blur true, match:namespace quickshell:taskbar
 layerrule = blur_popups true, match:namespace quickshell:taskbar
 layerrule = ignore_alpha 0.2, match:namespace quickshell:taskbar
 
-# Для дополнительных панелей:
+# Additional panels:
 layerrule = blur true, match:namespace quickshell:tray-panel
 layerrule = blur_popups true, match:namespace quickshell:tray-panel
 layerrule = ignore_alpha 0.2, match:namespace quickshell:tray-panel
