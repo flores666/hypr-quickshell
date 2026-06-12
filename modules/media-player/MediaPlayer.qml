@@ -333,7 +333,6 @@ Item {
         } catch (e) {
             clearPendingSeek();
             syncPositionFromPlayer(true);
-            console.log("media seek failed", e);
         }
     }
 

@@ -17,6 +17,7 @@ Item {
     property var missingPinned: []
     property string configPath: ""
     property var appsById: ({})
+    property string appsSignature: ""
     property var launchingIds: ({})
     property var launchStartedAt: ({})
     property string pendingCommand: ""
@@ -30,6 +31,33 @@ Item {
                 next[app.desktopId] = app;
         }
         appsById = next;
+    }
+
+    function appListSignature(list) {
+        var result = [];
+        var source = list || [];
+        for (var i = 0; i < source.length; i++) {
+            var app = source[i] || {};
+            result.push([
+                app.desktopId || "",
+                app.name || "",
+                app.icon || "",
+                app.command || "",
+                (app.matchKeys || []).join(",")
+            ].join("|"));
+        }
+        return result.join("\n");
+    }
+
+    function applyApps(nextApps) {
+        var list = nextApps || [];
+        var signature = appListSignature(list);
+        if (signature === appsSignature)
+            return;
+
+        appsSignature = signature;
+        apps = list;
+        rebuildAppsById();
     }
 
     function isPinned(desktopId) {
@@ -87,16 +115,14 @@ Item {
         try {
             payload = JSON.parse(text || "{}");
         } catch (e) {
-            console.log("app panel parse error", e);
             return;
         }
 
-        apps = payload.apps || [];
+        applyApps(payload.apps || []);
         applyPinnedIds(payload.pinned || []);
         applyOrderIds(payload.order || payload.pinned || []);
         missingPinned = payload.missingPinned || [];
         configPath = payload.configPath || "";
-        rebuildAppsById();
         ready = true;
     }
 

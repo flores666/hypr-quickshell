@@ -97,11 +97,9 @@ QtObject {
             w.initialClass || "",
             w.initialTitle || "",
             Number(w.pid || 0),
-            Number(w.focusHistoryId || 9999),
             w.icon || "",
             normalizeWorkspaceId(w.workspace),
             w.workspaceName || "",
-            w.focused ? "1" : "0",
             w.hiddenByShell ? "1" : "0",
             w.hiddenReason || ""
         ].join("|");

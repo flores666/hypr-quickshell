@@ -28,7 +28,6 @@ Item {
     property real pendingContextAnchorX: 0
     property string pendingContextWindowAddress: ""
     property var pendingContextAllWindows: []
-    property bool pointerReady: false
     property bool draggingItem: false
     property string draggingItemId: ""
     property int dragSourceIndex: -1
@@ -366,11 +365,10 @@ Item {
         return result;
     }
 
-    function appMatchScore(window, app) {
+    function appMatchScore(window, app, tokens) {
         if (!window || !app)
             return 0;
 
-        var tokens = windowTokens(window);
         var keys = app.matchKeys || [];
         var best = 0;
 
@@ -406,12 +404,16 @@ Item {
     function findAppForWindow(window) {
         var bestApp = null;
         var bestScore = 0;
-        for (var i = 0; i < Services.AppPanelService.apps.length; i++) {
-            var app = Services.AppPanelService.apps[i];
-            var score = appMatchScore(window, app);
+        var apps = Services.AppPanelService.apps || [];
+        var tokens = windowTokens(window);
+        for (var i = 0; i < apps.length; i++) {
+            var app = apps[i];
+            var score = appMatchScore(window, app, tokens);
             if (score > bestScore) {
                 bestScore = score;
                 bestApp = app;
+                if (bestScore >= 100)
+                    break;
             }
         }
         return bestScore >= 44 ? bestApp : null;
@@ -669,12 +671,6 @@ Item {
         return ordered;
     }
 
-    function appendUnique(list, value) {
-        var text = String(value || "");
-        if (text.length > 0 && list.indexOf(text) < 0)
-            list.push(text);
-    }
-
     function rebuildModel() {
         if (draggingItem) {
             rebuildQueued = true;
@@ -683,6 +679,7 @@ Item {
 
         var result = [];
         var openDesktopIds = [];
+        var openDesktopSeen = {};
         var windowsByDesktop = {};
         var appByDesktop = {};
         var windows = Services.ShellState.windows || [];
@@ -700,7 +697,10 @@ Item {
                     windowsByDesktop[desktopId] = [];
                 windowsByDesktop[desktopId].push(window);
                 appByDesktop[desktopId] = app;
-                appendUnique(openDesktopIds, desktopId);
+                if (!openDesktopSeen[desktopId]) {
+                    openDesktopSeen[desktopId] = true;
+                    openDesktopIds.push(desktopId);
+                }
             } else {
                 result.push(placeholderForWindow(window));
             }

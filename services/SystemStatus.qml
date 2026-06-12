@@ -747,7 +747,6 @@ Item {
             var data = JSON.parse(text || "{}");
             return data[key] || data || {};
         } catch (e) {
-            console.log(label + " status parse error", e, text);
             return {};
         }
     }

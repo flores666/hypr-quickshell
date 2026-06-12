@@ -162,7 +162,6 @@ Item {
         try {
             clients = JSON.parse(jsonText || "[]");
         } catch (e) {
-            console.log("hypr clients parse error", e);
             return;
         }
 
@@ -211,7 +210,6 @@ Item {
         try {
             monitors = JSON.parse(jsonText || "[]");
         } catch (e) {
-            console.log("hypr monitors parse error", e);
             return;
         }
 
