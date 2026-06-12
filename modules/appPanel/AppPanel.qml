@@ -16,8 +16,10 @@ Item {
     property real panelHeight: 70
     property bool bottomDock: false
     readonly property real popupGap: 2
-    readonly property bool popupOpen: contextOpen || workspaceMenuOpen
+    readonly property bool popupOpen: contextOpen || workspaceMenuOpen || contextSwitchPending || contextRenderVisible
     property bool contextOpen: false
+    property bool contextRenderVisible: false
+    property bool contextSwitchPending: false
     property var contextItem: null
     property var contextActions: []
     property real contextAnchorX: 0
@@ -883,6 +885,14 @@ Item {
         return Math.max(mainBottom, subBottom) - Math.min(mainY, subY);
     }
 
+    function applyPendingContext() {
+        contextItem = pendingContextItem;
+        contextActions = pendingContextActions || [];
+        contextAnchorX = pendingContextAnchorX;
+        contextWindowAddress = pendingContextWindowAddress;
+        contextAllWindows = pendingContextAllWindows || [];
+    }
+
     function openContextMenu(item, localCenterX) {
         hideTooltip();
         workspaceMenuOpen = false;
@@ -895,14 +905,10 @@ Item {
         pendingContextWindowAddress = String(win && win.address || "");
         pendingContextAllWindows = (item && (item.allWindows || item.windows)) ? (item.allWindows || item.windows).slice() : [];
 
-        if (contextOpen || popupState.renderVisible) {
-            contextItem = pendingContextItem;
-            contextActions = pendingContextActions || [];
-            contextAnchorX = pendingContextAnchorX;
-            contextWindowAddress = pendingContextWindowAddress;
-            contextAllWindows = pendingContextAllWindows || [];
-            contextOpen = true;
-            popupOpened();
+        if (contextOpen || contextRenderVisible) {
+            contextOpenDelay.stop();
+            contextSwitchPending = true;
+            contextOpen = false;
             return;
         }
 
@@ -911,6 +917,7 @@ Item {
     }
 
     function closePopup() {
+        contextSwitchPending = false;
         contextOpen = false;
         workspaceMenuOpen = false;
         workspaceMenuHovered = false;
@@ -945,11 +952,7 @@ Item {
         interval: 16
         repeat: false
         onTriggered: {
-            root.contextItem = root.pendingContextItem;
-            root.contextActions = root.pendingContextActions || [];
-            root.contextAnchorX = root.pendingContextAnchorX;
-            root.contextWindowAddress = root.pendingContextWindowAddress;
-            root.contextAllWindows = root.pendingContextAllWindows || [];
+            root.applyPendingContext();
             root.contextOpen = true;
             root.popupOpened();
         }
@@ -1352,6 +1355,16 @@ Item {
             openDuration: motion.popupOpenDuration
             closeDuration: motion.popupCloseDuration
             closeSafetyDelay: motion.popupCloseDuration + 55
+            onRenderVisibleChanged: root.contextRenderVisible = renderVisible
+            onClosed: {
+                root.contextRenderVisible = false;
+                if (root.contextSwitchPending) {
+                    root.contextSwitchPending = false;
+                    root.applyPendingContext();
+                    root.contextOpen = true;
+                    root.popupOpened();
+                }
+            }
         }
 
         Item {
