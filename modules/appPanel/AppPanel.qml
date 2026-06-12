@@ -21,7 +21,19 @@ Item {
     property var contextItem: null
     property var contextActions: []
     property real contextAnchorX: 0
+    property var pendingContextItem: null
+    property var pendingContextActions: []
+    property real pendingContextAnchorX: 0
     property bool pointerReady: false
+    property bool draggingItem: false
+    property string draggingDesktopId: ""
+    property int dragSourceIndex: -1
+    property int dragTargetIndex: -1
+    property bool rebuildQueued: false
+    property bool tooltipOpen: false
+    property string tooltipText: ""
+    property string tooltipTargetId: ""
+    property real tooltipAnchorX: 0
     property var panelItems: []
     property int maxVisibleItems: 11
     property real itemSize: 54
@@ -63,6 +75,69 @@ Item {
         return text.length > 0 ? text.charAt(0).toUpperCase() : "A";
     }
 
+    function isBrowserItem(item) {
+        if (!item)
+            return false;
+        var text = [item.desktopId, item.name, item.displayName, item.command].join(" ");
+        var key = normalizeToken(text);
+        var browsers = ["firefox", "zenbrowser", "chromium", "googlechrome", "chrome", "brave", "vivaldi", "opera", "microsoftedge", "browser"];
+        for (var i = 0; i < browsers.length; i++) {
+            if (key.indexOf(browsers[i]) >= 0)
+                return true;
+        }
+        return false;
+    }
+
+    function tooltipFor(item) {
+        if (!item)
+            return "";
+        var appName = String(item.displayName || item.name || item.desktopId || "Application").trim();
+        var win = topWindow(item);
+        var title = String(win && win.title || "").trim();
+        if (title.length > 0 && isBrowserItem(item))
+            return title;
+        return appName.length > 0 ? appName : title;
+    }
+
+    function itemKey(item) {
+        if (!item)
+            return "";
+        return String(item.desktopId || item.name || item.displayName || "");
+    }
+
+    function showTooltipFor(item, localCenterX) {
+        var text = tooltipFor(item);
+        var key = itemKey(item);
+        if (!text || !key)
+            return;
+
+        tooltipTargetId = key;
+        tooltipText = text;
+        tooltipAnchorX = localCenterX;
+
+        if (tooltipOpen || tooltipState.renderVisible) {
+            tooltipTimer.stop();
+            tooltipOpen = true;
+            return;
+        }
+
+        tooltipTimer.restart();
+    }
+
+    function hideTooltipFor(item) {
+        if (itemKey(item) !== tooltipTargetId)
+            return;
+        tooltipTimer.stop();
+        tooltipTargetId = "";
+        tooltipOpen = false;
+    }
+
+    function hideTooltip() {
+        tooltipTimer.stop();
+        tooltipTargetId = "";
+        tooltipOpen = false;
+    }
+
     function iconUrl(value) {
         var icon = String(value || "").trim();
         if (!icon)
@@ -72,6 +147,146 @@ Item {
         if (icon.charAt(0) === "/")
             return "file://" + icon;
         return "";
+    }
+
+    function canDragItem(item) {
+        return item && item.hasDesktop && String(item.desktopId || "").length > 0
+                && String(item.desktopId).indexOf("__window__") !== 0;
+    }
+
+    function visualIndexForDesktop(desktopId) {
+        for (var i = 0; i < panelItems.length; i++) {
+            if (panelItems[i] && panelItems[i].desktopId === desktopId)
+                return i;
+        }
+        return panelItems.length;
+    }
+
+    function pinnedInsertionIndexFor(item) {
+        var visual = visualIndexForDesktop(item && item.desktopId);
+        var count = 0;
+        for (var i = 0; i < Math.min(visual, panelItems.length); i++) {
+            if (panelItems[i] && panelItems[i].pinned)
+                count++;
+        }
+        return count;
+    }
+
+    function visualIndexAtContentX(contentX) {
+        var count = Math.max(0, panelItems.length);
+        if (count <= 0)
+            return 0;
+
+        var step = itemSize + itemSpacing;
+        var index = Math.round((contentX - itemSize / 2) / step);
+        return Math.max(0, Math.min(index, count - 1));
+    }
+
+    function draggedPreviewOrder() {
+        var items = panelItems.slice();
+        if (!draggingItem || !draggingDesktopId)
+            return items;
+
+        var from = -1;
+        for (var i = 0; i < items.length; i++) {
+            if (items[i] && items[i].desktopId === draggingDesktopId) {
+                from = i;
+                break;
+            }
+        }
+        if (from < 0)
+            return items;
+
+        var item = items.splice(from, 1)[0];
+        var to = Math.max(0, Math.min(dragTargetIndex, items.length));
+        items.splice(to, 0, item);
+        return items;
+    }
+
+    function pinnedOrderFromPreview() {
+        var items = draggedPreviewOrder();
+        var result = [];
+        for (var i = 0; i < items.length; i++) {
+            var item = items[i];
+            if (!canDragItem(item))
+                continue;
+
+            // Reordering treats visible desktop-backed icons equally. Items in
+            // the preview order become part of the persistent dock order, so the
+            // visual result after drop matches what the user arranged.
+            if (result.indexOf(item.desktopId) < 0)
+                result.push(item.desktopId);
+        }
+        return result;
+    }
+
+    function dragShiftFor(item) {
+        if (!draggingItem || !item || item.desktopId === draggingDesktopId)
+            return 0;
+
+        var index = visualIndexForDesktop(item.desktopId);
+        if (index < 0 || dragSourceIndex < 0 || dragTargetIndex < 0 || dragSourceIndex === dragTargetIndex)
+            return 0;
+
+        var step = itemSize + itemSpacing;
+        if (dragTargetIndex > dragSourceIndex && index > dragSourceIndex && index <= dragTargetIndex)
+            return -step;
+        if (dragTargetIndex < dragSourceIndex && index >= dragTargetIndex && index < dragSourceIndex)
+            return step;
+        return 0;
+    }
+
+    function contentXFromRootX(rootX) {
+        var point = appList.mapFromItem(root, rootX, 0);
+        return appList.contentX + point.x;
+    }
+
+    function beginItemDrag(item, contentX) {
+        if (!canDragItem(item))
+            return;
+
+        draggingItem = true;
+        draggingDesktopId = item.desktopId;
+        dragSourceIndex = visualIndexForDesktop(draggingDesktopId);
+        dragTargetIndex = visualIndexAtContentX(contentX);
+        hideTooltip();
+    }
+
+    function updateItemDragTarget(contentX) {
+        if (!draggingItem)
+            return;
+        dragTargetIndex = visualIndexAtContentX(contentX);
+    }
+
+    function finishItemDrag() {
+        var nextPinned = pinnedOrderFromPreview();
+        var changed = draggingDesktopId.length > 0
+                && dragSourceIndex >= 0
+                && dragTargetIndex >= 0
+                && dragTargetIndex !== dragSourceIndex;
+
+        draggingItem = false;
+        draggingDesktopId = "";
+        dragSourceIndex = -1;
+        dragTargetIndex = -1;
+
+        if (changed)
+            Services.AppPanelService.setPinnedOrder(nextPinned);
+        if (rebuildQueued) {
+            rebuildQueued = false;
+            rebuildModel();
+        }
+    }
+
+    function cancelItemDrag() {
+        draggingItem = false;
+        draggingDesktopId = "";
+        dragSourceIndex = -1;
+        dragTargetIndex = -1;
+        if (rebuildQueued) {
+            rebuildQueued = false;
+            rebuildModel();
+        }
     }
 
     function stringContainsAppKey(text, key) {
@@ -195,7 +410,8 @@ Item {
         for (var i = 0; i < item.windows.length; i++) {
             if (item.windows[i].focused)
                 item.active = true;
-            if (Number(item.windows[i].workspace || 0) !== Number(Services.ShellState.activeWorkspace || 0))
+            if (String(item.windows[i].workspaceName || "").indexOf("special:") === 0
+                    || Number(item.windows[i].workspace || 0) !== Number(Services.ShellState.activeWorkspace || 0))
                 item.otherWorkspace = true;
         }
         if (item.open)
@@ -208,7 +424,7 @@ Item {
             var item = items[i];
             var addresses = [];
             for (var j = 0; j < item.windows.length; j++)
-                addresses.push(item.windows[j].address || "");
+                addresses.push((item.windows[j].address || "") + ":" + (item.windows[j].workspaceName || ""));
             result.push([
                 item.desktopId,
                 item.displayName,
@@ -225,6 +441,11 @@ Item {
     }
 
     function rebuildModel() {
+        if (draggingItem) {
+            rebuildQueued = true;
+            return;
+        }
+
         var byDesktop = {};
         var result = [];
         var openDesktopIds = [];
@@ -286,6 +507,7 @@ Item {
     }
 
     function activateItem(item) {
+        hideTooltip();
         if (!item)
             return;
         var win = topWindow(item);
@@ -303,15 +525,47 @@ Item {
     }
 
     function openContextMenu(item, localCenterX) {
-        contextItem = item;
-        contextActions = menuActionsFor(item);
-        contextAnchorX = localCenterX;
-        contextOpen = true;
-        popupOpened();
+        hideTooltip();
+        pendingContextItem = item;
+        pendingContextActions = menuActionsFor(item);
+        pendingContextAnchorX = localCenterX;
+
+        if (contextOpen || popupState.renderVisible) {
+            contextItem = pendingContextItem;
+            contextActions = pendingContextActions || [];
+            contextAnchorX = pendingContextAnchorX;
+            contextOpen = true;
+            popupOpened();
+            return;
+        }
+
+        contextOpenDelay.interval = 16;
+        contextOpenDelay.restart();
     }
 
     function closePopup() {
         contextOpen = false;
+        contextOpenDelay.stop();
+    }
+
+    Timer {
+        id: tooltipTimer
+        interval: 320
+        repeat: false
+        onTriggered: root.tooltipOpen = root.tooltipText.length > 0 && root.tooltipTargetId.length > 0
+    }
+
+    Timer {
+        id: contextOpenDelay
+        interval: 16
+        repeat: false
+        onTriggered: {
+            root.contextItem = root.pendingContextItem;
+            root.contextActions = root.pendingContextActions || [];
+            root.contextAnchorX = root.pendingContextAnchorX;
+            root.contextOpen = true;
+            root.popupOpened();
+        }
     }
 
     function popupXFor(popupWidth) {
@@ -322,6 +576,17 @@ Item {
     function popupYFor(popupHeight) {
         if (bottomDock)
             return popupTopY - Math.max(1, popupHeight) - popupGap;
+        return panelHeight + popupGap;
+    }
+
+    function tooltipXFor(tooltipWidth) {
+        var raw = popupBaseX + tooltipAnchorX - tooltipWidth / 2;
+        return Math.max(6, Math.min(raw, hostWidth - tooltipWidth - 6));
+    }
+
+    function tooltipYFor(tooltipHeight) {
+        if (bottomDock)
+            return popupTopY - Math.max(1, tooltipHeight) - popupGap;
         return panelHeight + popupGap;
     }
 
@@ -369,7 +634,7 @@ Item {
             launchNew(item);
             break;
         case "pin":
-            Services.AppPanelService.pin(item.desktopId);
+            Services.AppPanelService.pinAt(item.desktopId, pinnedInsertionIndexFor(item));
             break;
         case "unpin":
             Services.AppPanelService.unpin(item.desktopId);
@@ -406,7 +671,7 @@ Item {
         height: root.implicitHeight
         orientation: ListView.Horizontal
         boundsBehavior: Flickable.StopAtBounds
-        interactive: contentWidth > width
+        interactive: contentWidth > width && !root.draggingItem
         clip: true
         spacing: root.itemSpacing
         model: root.panelItems
@@ -422,7 +687,7 @@ Item {
             NumberAnimation { properties: "opacity,scale"; to: 0.0; duration: 210; easing.type: Easing.InCubic }
         }
         displaced: Transition {
-            NumberAnimation { properties: "x"; duration: 320; easing.type: Easing.OutCubic }
+            NumberAnimation { properties: "x"; duration: 260; easing.type: Easing.OutCubic }
         }
 
         delegate: Item {
@@ -433,14 +698,33 @@ Item {
             width: root.itemSize
             height: root.implicitHeight
             opacity: modelData.open || modelData.pinned ? 1.0 : 0.76
-            scale: appMouse.pressed ? 0.96 : (appMouse.containsMouse ? 1.045 : 1.0)
-            transformOrigin: Item.Center
+            z: dragging ? 20 : 0
+
+            property bool dragging: false
+            property bool blockNextClick: false
+            property real pressX: 0
+            property real dragOffsetX: 0
+            readonly property real visualOffsetX: dragging ? dragOffsetX : root.dragShiftFor(modelData)
 
             Behavior on opacity { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
-            Behavior on scale { NumberAnimation { duration: appMouse.pressed ? motion.pressDuration : motion.releaseDuration; easing.type: Easing.OutCubic } }
 
-            Rectangle {
-                id: hoverBackground
+            Item {
+                id: visualContent
+                width: parent.width
+                height: parent.height
+                x: appDelegate.visualOffsetX
+                y: 0
+                scale: appMouse.pressed ? 0.96 : 1.0
+                transformOrigin: Item.Center
+
+                Behavior on x {
+                    enabled: !appDelegate.dragging
+                    NumberAnimation { duration: 230; easing.type: Easing.OutCubic }
+                }
+                Behavior on scale { NumberAnimation { duration: appMouse.pressed ? motion.pressDuration : motion.releaseDuration; easing.type: Easing.OutCubic } }
+
+                Rectangle {
+                    id: hoverBackground
                 anchors.centerIn: parent
                 width: 50
                 height: 50
@@ -457,8 +741,8 @@ Item {
             Image {
                 id: appIcon
                 anchors.centerIn: hoverBackground
-                width: appMouse.containsMouse ? 37 : 35
-                height: appMouse.containsMouse ? 37 : 35
+                width: 37
+                height: 37
                 source: root.iconUrl(modelData.icon)
                 visible: source.toString().length > 0 && status !== Image.Error
                 opacity: modelData.launching ? 0.58 : 0.94
@@ -468,8 +752,6 @@ Item {
                 smooth: true
                 mipmap: true
                 Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
-                Behavior on width { NumberAnimation { duration: 170; easing.type: Easing.OutCubic } }
-                Behavior on height { NumberAnimation { duration: 170; easing.type: Easing.OutCubic } }
             }
 
             Rectangle {
@@ -508,22 +790,23 @@ Item {
                 Behavior on scale { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
             }
 
-            Rectangle {
-                id: openIndicator
-                anchors.horizontalCenter: parent.horizontalCenter
-                anchors.bottom: parent.bottom
-                anchors.bottomMargin: 1
-                width: modelData.active ? 24 : (modelData.open ? 11 : 0)
-                height: modelData.open ? 4 : 0
-                radius: 3
-                color: modelData.active ? "#f4f7fb" : (modelData.otherWorkspace ? "#86ffffff" : "#c8ffffff")
-                opacity: modelData.open ? 0.95 : 0.0
-                antialiasing: true
+                Rectangle {
+                    id: openIndicator
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.bottom: parent.bottom
+                    anchors.bottomMargin: 1
+                    width: modelData.active ? 24 : (modelData.open ? 11 : 0)
+                    height: modelData.open ? 4 : 0
+                    radius: 3
+                    color: modelData.active ? "#f4f7fb" : (modelData.otherWorkspace ? "#86ffffff" : "#c8ffffff")
+                    opacity: modelData.open ? 0.95 : 0.0
+                    antialiasing: true
 
-                Behavior on width { NumberAnimation { duration: 230; easing.type: Easing.OutCubic } }
-                Behavior on height { NumberAnimation { duration: 190; easing.type: Easing.OutCubic } }
-                Behavior on opacity { NumberAnimation { duration: 190; easing.type: Easing.OutCubic } }
-                Behavior on color { ColorAnimation { duration: 220; easing.type: Easing.OutCubic } }
+                    Behavior on width { NumberAnimation { duration: 230; easing.type: Easing.OutCubic } }
+                    Behavior on height { NumberAnimation { duration: 190; easing.type: Easing.OutCubic } }
+                    Behavior on opacity { NumberAnimation { duration: 190; easing.type: Easing.OutCubic } }
+                    Behavior on color { ColorAnimation { duration: 220; easing.type: Easing.OutCubic } }
+                }
             }
 
             MouseArea {
@@ -533,7 +816,58 @@ Item {
                 acceptedButtons: Qt.LeftButton | Qt.RightButton
                 cursorShape: Qt.PointingHandCursor
 
+                onEntered: root.showTooltipFor(modelData, appDelegate.x + appDelegate.width / 2)
+                onExited: root.hideTooltipFor(modelData)
+
+                onPressed: function(mouse) {
+                    var pressPoint = appMouse.mapToItem(root, mouse.x, mouse.y);
+                    appDelegate.pressX = pressPoint.x;
+                    appDelegate.dragging = false;
+                    appDelegate.blockNextClick = false;
+                }
+
+                onPositionChanged: function(mouse) {
+                    if (!root.canDragItem(modelData) || (mouse.buttons & Qt.LeftButton) === 0)
+                        return;
+
+                    var currentPoint = appMouse.mapToItem(root, mouse.x, mouse.y);
+                    var dx = currentPoint.x - appDelegate.pressX;
+                    if (Math.abs(dx) > 8 && !appDelegate.dragging) {
+                        appDelegate.dragging = true;
+                        root.beginItemDrag(modelData, root.contentXFromRootX(currentPoint.x));
+                    }
+                    if (appDelegate.dragging) {
+                        appDelegate.dragOffsetX = dx;
+                        root.updateItemDragTarget(root.contentXFromRootX(currentPoint.x));
+                    }
+                }
+
+                onReleased: function(mouse) {
+                    if (!appDelegate.dragging)
+                        return;
+
+                    appDelegate.blockNextClick = true;
+                    appDelegate.dragging = false;
+                    appDelegate.dragOffsetX = 0;
+                    root.finishItemDrag();
+                    mouse.accepted = true;
+                }
+
+                onCanceled: {
+                    appDelegate.dragging = false;
+                    appDelegate.dragOffsetX = 0;
+                    appDelegate.blockNextClick = false;
+                    root.hideTooltip();
+                    root.cancelItemDrag();
+                }
+
                 onClicked: function(mouse) {
+                    if (appDelegate.blockNextClick) {
+                        appDelegate.blockNextClick = false;
+                        mouse.accepted = true;
+                        return;
+                    }
+
                     if (mouse.button === Qt.RightButton) {
                         root.openContextMenu(modelData, appDelegate.x + appDelegate.width / 2);
                     } else {
@@ -579,16 +913,16 @@ Item {
         Components.AnimatedPopupState {
             id: popupState
             targetVisible: root.contextOpen
-            openDuration: motion.popupOpenDuration
-            closeDuration: motion.popupCloseDuration
-            closeSafetyDelay: motion.popupCloseDuration + 55
+            openDuration: 180
+            closeDuration: 135
+            closeSafetyDelay: 190
         }
 
         Item {
             anchors.fill: parent
             opacity: popupState.reveal
-            y: root.bottomDock ? (5 - popupState.reveal * 5) : (-7 + popupState.reveal * 7)
-            scale: 0.982 + popupState.reveal * 0.018
+            y: root.bottomDock ? (9 - popupState.reveal * 9) : (-9 + popupState.reveal * 9)
+            scale: 0.972 + popupState.reveal * 0.028
             transformOrigin: root.bottomDock ? Item.Bottom : Item.Top
             enabled: root.contextOpen && popupState.reveal > 0.45
             layer.enabled: popupState.reveal > 0.001 && popupState.reveal < 0.999
@@ -653,4 +987,60 @@ Item {
             }
         }
     }
+
+    PopupWindow {
+        id: tooltipPopup
+        anchor.window: root.hostWindow
+        anchor.rect.x: root.tooltipXFor(implicitWidth)
+        anchor.rect.y: root.tooltipYFor(implicitHeight)
+        implicitWidth: Math.max(64, Math.min(280, tooltipLabel.implicitWidth + 18))
+        implicitHeight: 28
+        visible: tooltipState.renderVisible
+        color: "transparent"
+        surfaceFormat.opaque: false
+
+        Components.AnimatedPopupState {
+            id: tooltipState
+            targetVisible: root.tooltipOpen && !root.contextOpen
+            openDuration: 155
+            closeDuration: 105
+            closeSafetyDelay: 140
+        }
+
+        Item {
+            anchors.fill: parent
+            opacity: tooltipState.reveal
+            y: root.bottomDock ? (5 - tooltipState.reveal * 5) : (-5 + tooltipState.reveal * 5)
+            scale: 0.985 + tooltipState.reveal * 0.015
+            transformOrigin: root.bottomDock ? Item.Bottom : Item.Top
+            enabled: false
+            layer.enabled: tooltipState.reveal > 0.001 && tooltipState.reveal < 0.999
+            layer.smooth: true
+
+            Components.GlassPanel {
+                anchors.fill: parent
+                radiusSize: 11
+                glassColor: "#b006080c"
+                clip: true
+                antialiasing: true
+            }
+
+            Components.StyledText {
+                id: tooltipLabel
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.leftMargin: 9
+                anchors.rightMargin: 9
+                text: root.tooltipText
+                color: "#eef3f8"
+                font.pixelSize: 12
+                font.weight: Font.Medium
+                elide: Text.ElideRight
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+            }
+        }
+    }
+
 }

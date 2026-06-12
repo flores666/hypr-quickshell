@@ -17,9 +17,7 @@ PanelWindow {
     readonly property int dockKeepAliveTopMargin: 4
 
     property bool dockShown: false
-    property bool dockHovered: false
-    property bool hotZoneHovered: false
-    readonly property bool dockAreaHovered: dockHovered || appPanel.panelHovered
+    readonly property bool dockAreaHovered: hotZoneMouse.containsMouse || dockKeepAliveMouse.containsMouse || appPanel.panelHovered
     property real dockReveal: dockShown ? 1.0 : 0.0
 
     anchors {
@@ -89,6 +87,17 @@ PanelWindow {
         }
     }
 
+    Timer {
+        id: hideWatchdogTimer
+        interval: 260
+        repeat: true
+        running: root.dockShown || appPanel.popupOpen
+        onTriggered: {
+            if (!root.dockAreaHovered && !appPanel.popupOpen)
+                root.dockShown = false;
+        }
+    }
+
     Rectangle {
         id: hotZone
         anchors.horizontalCenter: parent.horizontalCenter
@@ -98,13 +107,12 @@ PanelWindow {
         color: "transparent"
         opacity: 0.0
 
-        HoverHandler {
-            id: hotZoneHover
-            onHoveredChanged: {
-                root.hotZoneHovered = hovered;
-                if (hovered)
-                    root.showDock();
-            }
+        MouseArea {
+            id: hotZoneMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            acceptedButtons: Qt.NoButton
+            onEntered: root.showDock()
         }
     }
 
@@ -129,15 +137,13 @@ PanelWindow {
             width: Math.min(root.width, dockBackground.width + root.dockKeepAliveHorizontalMargin * 2)
             height: Math.max(1, root.dockWindowHeight - y)
 
-            HoverHandler {
-                id: dockKeepAliveHover
-                onHoveredChanged: {
-                    root.dockHovered = hovered;
-                    if (hovered)
-                        root.showDock();
-                    else
-                        root.scheduleHide();
-                }
+            MouseArea {
+                id: dockKeepAliveMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                acceptedButtons: Qt.NoButton
+                onEntered: root.showDock()
+                onExited: root.scheduleHide()
             }
         }
 

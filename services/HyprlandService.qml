@@ -73,12 +73,22 @@ Item {
         return Math.floor(id);
     }
 
+    function extractWorkspaceName(client) {
+        if (!client || !client.workspace)
+            return "";
+        return String(client.workspace.name || "");
+    }
+
+    function isSpecialWorkspace(client) {
+        return extractWorkspaceName(client).indexOf("special:") === 0;
+    }
+
     function shouldUseClient(client) {
         if (!client)
             return false;
 
         var workspaceId = extractWorkspaceId(client);
-        if (workspaceId <= 0)
+        if (workspaceId <= 0 && !isSpecialWorkspace(client))
             return false;
 
         // Hyprland can report hidden or unmapped clients. Keep only visible windows.
@@ -122,6 +132,7 @@ Item {
                 continue;
 
             var workspaceId = extractWorkspaceId(client);
+            var workspaceName = extractWorkspaceName(client);
             var address = client.address || "";
             var focused = client.focusHistoryID === 0;
 
@@ -139,6 +150,7 @@ Item {
                 "focusHistoryId": Number(client.focusHistoryID || 9999),
                 "icon": iconForClient(client),
                 "workspace": workspaceId,
+                "workspaceName": workspaceName,
                 "focused": focused,
                 "hiddenByShell": false,
                 "hiddenReason": ""

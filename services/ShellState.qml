@@ -26,6 +26,7 @@ QtObject {
             "focusHistoryId": Number(w.focusHistoryId || 9999),
             "icon": w.icon || "",
             "workspace": w.workspace || 0,
+            "workspaceName": w.workspaceName || "",
             "focused": !!w.focused,
             "hiddenByShell": !!w.hiddenByShell,
             "hiddenReason": w.hiddenReason || ""
@@ -72,6 +73,7 @@ QtObject {
             Number(w.focusHistoryId || 9999),
             w.icon || "",
             normalizeWorkspaceId(w.workspace),
+            w.workspaceName || "",
             w.focused ? "1" : "0",
             w.hiddenByShell ? "1" : "0",
             w.hiddenReason || ""

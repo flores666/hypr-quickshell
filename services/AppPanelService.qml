@@ -43,6 +43,30 @@ Item {
         return appsById && appsById[desktopId] ? appsById[desktopId] : null;
     }
 
+    function sameStringList(a, b) {
+        if (!a || !b || a.length !== b.length)
+            return false;
+        for (var i = 0; i < a.length; i++) {
+            if (a[i] !== b[i])
+                return false;
+        }
+        return true;
+    }
+
+    function applyPinnedIds(nextIds) {
+        if (!sameStringList(pinnedIds, nextIds))
+            pinnedIds = nextIds;
+    }
+
+    function withoutPinned(desktopId) {
+        var next = [];
+        for (var i = 0; i < pinnedIds.length; i++) {
+            if (pinnedIds[i] !== desktopId)
+                next.push(pinnedIds[i]);
+        }
+        return next;
+    }
+
     function normalizeToken(value) {
         var text = String(value || "").trim().toLowerCase();
         if (text.lastIndexOf(".desktop") === text.length - 8)
@@ -62,7 +86,7 @@ Item {
         }
 
         apps = payload.apps || [];
-        pinnedIds = payload.pinned || [];
+        applyPinnedIds(payload.pinned || []);
         missingPinned = payload.missingPinned || [];
         configPath = payload.configPath || "";
         rebuildAppsById();
@@ -104,9 +128,42 @@ Item {
         runAction("pin", [desktopId]);
     }
 
+    function pinAt(desktopId, index) {
+        if (!desktopId)
+            return;
+        var next = withoutPinned(desktopId);
+        var target = Math.max(0, Math.min(Number(index || 0), next.length));
+        next.splice(target, 0, desktopId);
+        applyPinnedIds(next);
+        runAction("pin-at", [desktopId, target]);
+    }
+
+    function movePinned(desktopId, index) {
+        if (!desktopId || !isPinned(desktopId))
+            return;
+        var next = withoutPinned(desktopId);
+        var target = Math.max(0, Math.min(Number(index || 0), next.length));
+        next.splice(target, 0, desktopId);
+        applyPinnedIds(next);
+        runAction("move", [desktopId, target]);
+    }
+
+
+    function setPinnedOrder(ids) {
+        var next = [];
+        for (var i = 0; i < (ids || []).length; i++) {
+            var id = String(ids[i] || "");
+            if (id.length > 0 && next.indexOf(id) < 0)
+                next.push(id);
+        }
+        applyPinnedIds(next);
+        runAction("set-order", next);
+    }
+
     function unpin(desktopId) {
         if (!desktopId)
             return;
+        applyPinnedIds(withoutPinned(desktopId));
         runAction("unpin", [desktopId]);
     }
 

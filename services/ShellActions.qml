@@ -13,9 +13,25 @@ QtObject {
         if (!window)
             return
 
-        Services.ShellState.setFocused(window.address)
+        var workspaceName = String(window.workspaceName || "")
+        if (workspaceName.indexOf("special:") === 0) {
+            var specialName = workspaceName.substring(8)
+            Hyprland.dispatch(specialName.length > 0 ? "togglespecialworkspace " + specialName : "togglespecialworkspace")
+            return
+        }
 
-        Hyprland.dispatch("focuswindow address:" + window.address)
+        var targetWorkspace = Number(window.workspace || 0)
+        var activeWorkspace = Number(Services.ShellState.activeWorkspace || 0)
+
+        if (targetWorkspace > 0 && targetWorkspace !== activeWorkspace) {
+            Services.ShellState.activeWorkspace = targetWorkspace
+            Hyprland.dispatch("workspace " + targetWorkspace)
+            return
+        }
+
+        // Do not call focuswindow for applications already on the active workspace.
+        // In Hyprland this can warp the pointer depending on user settings. Dock
+        // clicks should never move the cursor.
     }
 
     function minimizeToTray(window) {

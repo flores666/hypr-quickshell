@@ -300,7 +300,7 @@ def save_pins(pins: List[str]) -> None:
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     payload = {
         "pinned": pins,
-        "note": "Application panel pinned desktop ids. Edit order here if drag-and-drop is not used yet.",
+        "note": "Application panel pinned desktop ids. The list order is the dock order.",
     }
     PINS_FILE.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
@@ -348,6 +348,44 @@ def unpin_app(desktop_id: str) -> None:
     save_pins(pins)
 
 
+def pin_app_at(desktop_id: str, index: int) -> None:
+    apps = load_apps()
+    pins = load_pins(apps)
+    by_id = app_map(apps)
+    if desktop_id not in by_id:
+        warn(f"cannot pin missing desktop id: {desktop_id}")
+        return
+
+    pins = [item for item in pins if item != desktop_id]
+    target = max(0, min(index, len(pins)))
+    pins.insert(target, desktop_id)
+    save_pins(pins)
+
+
+def move_pinned_app(desktop_id: str, index: int) -> None:
+    apps = load_apps()
+    pins = load_pins(apps)
+    if desktop_id not in pins:
+        return
+
+    pins = [item for item in pins if item != desktop_id]
+    target = max(0, min(index, len(pins)))
+    pins.insert(target, desktop_id)
+    save_pins(pins)
+
+
+def set_pinned_order(desktop_ids: List[str]) -> None:
+    apps = load_apps()
+    by_id = app_map(apps)
+    next_pins: List[str] = []
+    for desktop_id in desktop_ids:
+        desktop_id = str(desktop_id)
+        if desktop_id in by_id and desktop_id not in next_pins:
+            next_pins.append(desktop_id)
+        elif desktop_id not in by_id:
+            warn(f"cannot include missing desktop id in pinned order: {desktop_id}")
+    save_pins(next_pins)
+
 def launch_app(desktop_id: str) -> int:
     apps = load_apps()
     by_id = app_map(apps)
@@ -392,6 +430,26 @@ def main() -> int:
         pin_app(sys.argv[2])
         print(json.dumps(list_payload(False), ensure_ascii=False))
         return 0
+    if command == "pin-at" and len(sys.argv) > 3:
+        try:
+            index = int(sys.argv[3])
+        except ValueError:
+            index = 0
+        pin_app_at(sys.argv[2], index)
+        print(json.dumps(list_payload(False), ensure_ascii=False))
+        return 0
+    if command == "move" and len(sys.argv) > 3:
+        try:
+            index = int(sys.argv[3])
+        except ValueError:
+            index = 0
+        move_pinned_app(sys.argv[2], index)
+        print(json.dumps(list_payload(False), ensure_ascii=False))
+        return 0
+    if command == "set-order" and len(sys.argv) > 2:
+        set_pinned_order(sys.argv[2:])
+        print(json.dumps(list_payload(False), ensure_ascii=False))
+        return 0
     if command == "unpin" and len(sys.argv) > 2:
         unpin_app(sys.argv[2])
         print(json.dumps(list_payload(False), ensure_ascii=False))
@@ -399,7 +457,7 @@ def main() -> int:
     if command == "launch" and len(sys.argv) > 2:
         return launch_app(sys.argv[2])
 
-    warn("usage: app-panel.py list|refresh|pin DESKTOP_ID|unpin DESKTOP_ID|launch DESKTOP_ID")
+    warn("usage: app-panel.py list|refresh|pin DESKTOP_ID|pin-at DESKTOP_ID INDEX|move DESKTOP_ID INDEX|set-order DESKTOP_ID...|unpin DESKTOP_ID|launch DESKTOP_ID")
     return 1
 
 
