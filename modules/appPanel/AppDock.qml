@@ -8,7 +8,7 @@ PanelWindow {
     id: root
 
     readonly property int dockWindowHeight: 132
-    readonly property int dockBottomInset: 18
+    readonly property int dockBottomInset: 10
     readonly property int dockHorizontalPadding: 14
     readonly property int dockBackgroundHeight: 74
     readonly property int dockHotZoneHeight: 1
@@ -51,7 +51,10 @@ PanelWindow {
     }
 
     Behavior on dockReveal {
-        NumberAnimation { duration: 330; easing.type: Easing.OutCubic }
+        NumberAnimation {
+            duration: 330
+            easing.type: Easing.OutCubic
+        }
     }
 
     function showDock() {
@@ -204,6 +207,5 @@ PanelWindow {
                 }
             }
         }
-
     }
 }
