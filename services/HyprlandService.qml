@@ -13,6 +13,8 @@ Item {
     property bool refreshPendingAfterRun: false
     property bool monitorRefreshQueued: false
     property bool monitorRefreshPendingAfterRun: false
+    property bool workspaceRefreshQueued: false
+    property bool workspaceRefreshPendingAfterRun: false
 
     function currentWorkspaceId() {
         if (Hyprland.focusedWorkspace && Hyprland.focusedWorkspace.id)
@@ -67,6 +69,29 @@ Item {
         monitorsProc.running = true;
     }
 
+    function queueRefreshWorkspaces() {
+        if (workspacesProc.running) {
+            workspaceRefreshPendingAfterRun = true;
+            return;
+        }
+
+        if (workspaceRefreshQueued)
+            return;
+
+        workspaceRefreshQueued = true;
+        workspaceRefreshTimer.restart();
+    }
+
+    function refreshWorkspacesNow() {
+        workspaceRefreshQueued = false;
+        if (workspacesProc.running) {
+            workspaceRefreshPendingAfterRun = true;
+            return;
+        }
+
+        workspacesProc.running = true;
+    }
+
     function hyprEventNeedsMonitorRefresh(eventName) {
         switch (eventName) {
         case "activespecial":
@@ -90,7 +115,10 @@ Item {
         case "closewindow":
         case "movewindow":
         case "movewindowv2":
+        case "resizewindow":
+        case "movefloating":
         case "workspace":
+        case "workspacev2":
         case "focusedmon":
         case "activewindow":
         case "activewindowv2":
@@ -141,6 +169,34 @@ Item {
             return false;
 
         return true;
+    }
+
+    function updateWorkspaces(jsonText) {
+        var workspaces = [];
+        try {
+            workspaces = JSON.parse(jsonText || "[]");
+        } catch (e) {
+            return;
+        }
+
+        var next = [];
+        for (var i = 0; i < workspaces.length; i++) {
+            var workspace = workspaces[i] || {};
+            var id = Number(workspace.id || 0);
+            var name = String(workspace.name || "");
+            if (isNaN(id) || id <= 0 || name.indexOf("special:") === 0)
+                continue;
+            next.push({
+                "id": Math.floor(id),
+                "name": name.length > 0 ? name : String(Math.floor(id)),
+                "windows": Number(workspace.windows || 0),
+                "monitor": workspace.monitor || "",
+                "lastWindow": workspace.lastwindow || workspace.lastWindow || "",
+                "lastWindowTitle": workspace.lastwindowtitle || workspace.lastWindowTitle || ""
+            });
+        }
+
+        Services.ShellState.setWorkspaces(next);
     }
 
     function iconForClient(client) {
@@ -195,7 +251,13 @@ Item {
                 "workspaceName": workspaceName,
                 "focused": focused,
                 "hiddenByShell": false,
-                "hiddenReason": ""
+                "hiddenReason": "",
+                "x": client.at && client.at.length > 0 ? Number(client.at[0] || 0) : 0,
+                "y": client.at && client.at.length > 1 ? Number(client.at[1] || 0) : 0,
+                "width": client.size && client.size.length > 0 ? Number(client.size[0] || 0) : 0,
+                "height": client.size && client.size.length > 1 ? Number(client.size[1] || 0) : 0,
+                "floating": !!client.floating,
+                "fullscreen": !!client.fullscreen
             });
         }
 
@@ -232,6 +294,7 @@ Item {
         Services.ShellState.activeWorkspace = currentWorkspaceId();
         queueRefreshClients();
         queueRefreshMonitors();
+        queueRefreshWorkspaces();
     }
 
     Timer {
@@ -249,12 +312,22 @@ Item {
         onTriggered: service.refreshMonitorsNow()
     }
 
+    Timer {
+        id: workspaceRefreshTimer
+        interval: 75
+        repeat: false
+        onTriggered: service.refreshWorkspacesNow()
+    }
+
     // Rare events can miss a client refresh, so keep a lightweight fallback.
     Timer {
         interval: 12000
         repeat: true
         running: true
-        onTriggered: service.queueRefreshClients()
+        onTriggered: {
+            service.queueRefreshClients();
+            service.queueRefreshWorkspaces();
+        }
     }
 
 
@@ -271,6 +344,23 @@ Item {
             if (service.monitorRefreshPendingAfterRun) {
                 service.monitorRefreshPendingAfterRun = false;
                 service.queueRefreshMonitors();
+            }
+        }
+    }
+
+    Process {
+        id: workspacesProc
+        command: ["hyprctl", "-j", "workspaces"]
+
+        stdout: StdioCollector {
+            onStreamFinished: service.updateWorkspaces(this.text)
+        }
+
+        onExited: {
+            running = false;
+            if (service.workspaceRefreshPendingAfterRun) {
+                service.workspaceRefreshPendingAfterRun = false;
+                service.queueRefreshWorkspaces();
             }
         }
     }
@@ -299,6 +389,15 @@ Item {
             if (!event)
                 return;
 
+            if (event.name === "quickshelloverview") {
+                var overviewState = String(event.data || "").trim();
+                if (overviewState === "open")
+                    Services.ShellState.setWorkspaceOverviewOpen(true);
+                else if (overviewState === "close")
+                    Services.ShellState.setWorkspaceOverviewOpen(false);
+                return;
+            }
+
             if ((event.name === "workspace" || event.name === "workspacev2")
                     && Services.ShellState.activeSpecialWorkspaceName.length > 0)
                 Services.ShellActions.closeActiveSpecialWorkspace();
@@ -307,12 +406,15 @@ Item {
                 service.queueRefreshClients();
             if (service.hyprEventNeedsMonitorRefresh(event.name))
                 service.queueRefreshMonitors();
+            if (service.hyprEventNeedsClientRefresh(event.name) || service.hyprEventNeedsMonitorRefresh(event.name))
+                service.queueRefreshWorkspaces();
         }
 
         function onFocusedWorkspaceChanged() {
             Services.ShellState.activeWorkspace = service.currentWorkspaceId();
             service.queueRefreshClients();
             service.queueRefreshMonitors();
+            service.queueRefreshWorkspaces();
         }
     }
 }

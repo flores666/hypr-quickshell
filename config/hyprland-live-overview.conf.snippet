@@ -1,0 +1,37 @@
+# Minimal live workspace overview plugin.
+# Managed by hypr-quickshell/scripts/live-overview-plugin.sh
+# It renders only a dim background and scaled live workspace previews.
+
+exec-once = hyprctl plugin load /home/me/hypr-quickshell/plugins/quickshell-gnome-overview/quickshell-gnome-overview.so
+bind = SUPER, TAB, qs-gnome-overview:toggle
+
+plugin {
+    overview {
+        panelColor = rgba(0000007a)
+        workspaceActiveBackground = rgba(08090b47)
+        workspaceInactiveBackground = rgba(06070a38)
+        workspaceActiveBorder = rgba(ffffff00)
+        workspaceInactiveBorder = rgba(ffffff00)
+
+        reservedArea = 110
+        workspaceMargin = 16
+        showEmptyWorkspace = true
+        showNewWorkspace = false
+        showSpecialWorkspace = false
+
+        panelBorderWidth = 0
+        workspaceBorderSize = 0
+        hideBackgroundLayers = true
+        hideTopLayers = true
+        hideOverlayLayers = true
+        hideRealLayers = false
+        affectStrut = false
+        overrideGaps = false
+        autoDrag = false
+        disableGestures = true
+        disableBlur = true
+        exitOnClick = true
+        exitOnSwitch = true
+        exitKey = Escape
+    }
+}

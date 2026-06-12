@@ -18,7 +18,7 @@ PanelWindow {
 
     property bool dockShown: false
     property bool popupGraceActive: false
-    readonly property bool dockAreaHovered: hotZoneMouse.containsMouse || dockKeepAliveMouse.containsMouse || appPanel.panelHovered || popupGraceActive
+    readonly property bool dockAreaHovered: Services.ShellState.workspaceOverviewOpen || hotZoneMouse.containsMouse || dockKeepAliveMouse.containsMouse || appPanel.panelHovered || popupGraceActive
     property real dockReveal: dockShown ? 1.0 : 0.0
 
     anchors {
@@ -44,10 +44,10 @@ PanelWindow {
     // Visible state keeps pointer input on the dock plus the small lower gap,
     // so the panel does not disappear while moving below it or to its menu.
     mask: Region {
-        x: Math.round(root.dockShown || appPanel.popupOpen || root.popupGraceActive ? dockStack.x + dockKeepAliveArea.x : hotZone.x)
-        y: Math.round(root.dockShown || appPanel.popupOpen || root.popupGraceActive ? dockStack.y + dockKeepAliveArea.y : hotZone.y)
-        width: Math.round(root.dockShown || appPanel.popupOpen || root.popupGraceActive ? dockKeepAliveArea.width : hotZone.width)
-        height: Math.round(root.dockShown || appPanel.popupOpen || root.popupGraceActive ? dockKeepAliveArea.height : hotZone.height)
+        x: Math.round(root.dockShown || appPanel.popupOpen || Services.ShellState.workspaceOverviewOpen || root.popupGraceActive ? dockStack.x + dockKeepAliveArea.x : hotZone.x)
+        y: Math.round(root.dockShown || appPanel.popupOpen || Services.ShellState.workspaceOverviewOpen || root.popupGraceActive ? dockStack.y + dockKeepAliveArea.y : hotZone.y)
+        width: Math.round(root.dockShown || appPanel.popupOpen || Services.ShellState.workspaceOverviewOpen || root.popupGraceActive ? dockKeepAliveArea.width : hotZone.width)
+        height: Math.round(root.dockShown || appPanel.popupOpen || Services.ShellState.workspaceOverviewOpen || root.popupGraceActive ? dockKeepAliveArea.height : hotZone.height)
     }
 
     Behavior on dockReveal {
@@ -65,13 +65,13 @@ PanelWindow {
     }
 
     function scheduleHide() {
-        if (dockAreaHovered || appPanel.popupOpen || popupGraceActive)
+        if (dockAreaHovered || appPanel.popupOpen || Services.ShellState.workspaceOverviewOpen || popupGraceActive)
             return;
         hideTimer.restart();
     }
 
     function hideDockNow() {
-        if (!dockAreaHovered && !appPanel.popupOpen && !popupGraceActive)
+        if (!dockAreaHovered && !appPanel.popupOpen && !Services.ShellState.workspaceOverviewOpen && !popupGraceActive)
             dockShown = false;
     }
 
@@ -87,7 +87,7 @@ PanelWindow {
         interval: 620
         repeat: false
         onTriggered: {
-            if (!root.dockAreaHovered && !appPanel.popupOpen && !root.popupGraceActive)
+            if (!root.dockAreaHovered && !appPanel.popupOpen && !Services.ShellState.workspaceOverviewOpen && !root.popupGraceActive)
                 root.dockShown = false;
         }
     }
@@ -102,13 +102,24 @@ PanelWindow {
         }
     }
 
+
+    Connections {
+        target: Services.ShellState
+        function onWorkspaceOverviewOpenChanged() {
+            if (Services.ShellState.workspaceOverviewOpen)
+                root.showDock();
+            else
+                root.scheduleHide();
+        }
+    }
+
     Timer {
         id: hideWatchdogTimer
         interval: 260
         repeat: true
-        running: root.dockShown || appPanel.popupOpen || root.popupGraceActive
+        running: root.dockShown || appPanel.popupOpen || Services.ShellState.workspaceOverviewOpen || root.popupGraceActive
         onTriggered: {
-            if (!root.dockAreaHovered && !appPanel.popupOpen && !root.popupGraceActive)
+            if (!root.dockAreaHovered && !appPanel.popupOpen && !Services.ShellState.workspaceOverviewOpen && !root.popupGraceActive)
                 root.dockShown = false;
         }
     }
@@ -141,7 +152,7 @@ PanelWindow {
         opacity: root.dockReveal
         scale: 0.965 + root.dockReveal * 0.035
         transformOrigin: Item.Bottom
-        enabled: root.dockShown || appPanel.popupOpen
+        enabled: root.dockShown || appPanel.popupOpen || Services.ShellState.workspaceOverviewOpen
         layer.enabled: root.dockReveal > 0.001 && root.dockReveal < 0.999
         layer.smooth: true
 

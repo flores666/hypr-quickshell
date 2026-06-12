@@ -28,6 +28,80 @@ QtObject {
         return name
     }
 
+
+    function nativeOverviewDispatcher(action) {
+        if (action === "open")
+            return Services.ShellState.nativeWorkspaceOverviewOpenDispatcher
+        if (action === "close")
+            return Services.ShellState.nativeWorkspaceOverviewCloseDispatcher
+        return Services.ShellState.nativeWorkspaceOverviewToggleDispatcher
+    }
+
+    function nativeOverviewDispatch(action) {
+        var dispatcher = String(nativeOverviewDispatcher(action) || "").trim()
+        if (dispatcher.length === 0)
+            return false
+
+        Hyprland.dispatch(dispatcher)
+        return true
+    }
+
+    function openWorkspaceOverview() {
+        if (Services.ShellState.nativeWorkspaceOverviewEnabled) {
+            if (nativeOverviewDispatch("open"))
+                Services.ShellState.setWorkspaceOverviewOpen(true)
+            return
+        }
+
+        Services.ShellState.setWorkspaceOverviewOpen(true)
+    }
+
+    function closeWorkspaceOverview() {
+        if (Services.ShellState.nativeWorkspaceOverviewEnabled)
+            nativeOverviewDispatch("close")
+
+        Services.ShellState.setWorkspaceOverviewOpen(false)
+    }
+
+    function toggleWorkspaceOverview() {
+        if (Services.ShellState.nativeWorkspaceOverviewEnabled) {
+            if (Services.ShellState.workspaceOverviewOpen) {
+                closeWorkspaceOverview()
+            } else {
+                if (nativeOverviewDispatch("open"))
+                    Services.ShellState.setWorkspaceOverviewOpen(true)
+            }
+            return
+        }
+
+        Services.ShellState.toggleWorkspaceOverview()
+    }
+
+    function focusWindowFromOverview(window) {
+        if (!window || !window.address) {
+            closeWorkspaceOverview()
+            return
+        }
+
+        var workspaceName = String(window.workspaceName || "")
+        if (workspaceName.indexOf("special:") === 0) {
+            closeWorkspaceOverview()
+            focusWindow(window)
+            return
+        }
+
+        var targetWorkspace = Number(window.workspace || 0)
+        if (!isNaN(targetWorkspace) && targetWorkspace > 0) {
+            closeActiveSpecialWorkspace()
+            Services.ShellState.activeWorkspace = Math.floor(targetWorkspace)
+            Hyprland.dispatch("workspace " + Math.floor(targetWorkspace))
+        }
+
+        Hyprland.dispatch("focuswindow address:" + window.address)
+        Services.ShellState.setFocused(window.address)
+        closeWorkspaceOverview()
+    }
+
     function closeActiveSpecialWorkspace() {
         var name = activeSpecialDispatchName()
         if (name.length === 0)
@@ -104,6 +178,7 @@ QtObject {
         if (!workspaceId)
             return
 
+        closeWorkspaceOverview()
         closeActiveSpecialWorkspace()
         Services.ShellState.activeWorkspace = workspaceId
         Hyprland.dispatch("workspace " + workspaceId)
@@ -161,6 +236,7 @@ QtObject {
         if (!app || !app.command)
             return
 
+        closeWorkspaceOverview()
         closeActiveSpecialWorkspace()
         Hyprland.dispatch("exec " + app.command)
     }

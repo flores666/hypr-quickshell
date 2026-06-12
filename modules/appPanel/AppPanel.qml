@@ -49,6 +49,9 @@ Item {
     property int maxVisibleItems: 11
     property real itemSize: 54
     property real itemSpacing: 8
+    readonly property int overviewSectionWidth: 68
+    readonly property int overviewButtonVisualSize: 48
+    readonly property real appListViewportWidth: Math.min(maxPanelWidth(), Math.max(0, appList.contentWidth))
     property string lastModelKey: ""
     property var windowInstanceOrder: ({})
     property int nextWindowInstanceOrder: 0
@@ -58,7 +61,7 @@ Item {
 
     signal popupOpened()
 
-    implicitWidth: Math.min(maxPanelWidth(), Math.max(0, appList.contentWidth))
+    implicitWidth: overviewSectionWidth + appListViewportWidth
     implicitHeight: 62
     clip: true
 
@@ -300,6 +303,13 @@ Item {
     function contentXFromRootX(rootX) {
         var point = appList.mapFromItem(root, rootX, 0);
         return appList.contentX + point.x;
+    }
+
+    function delegateCenterX(delegateItem) {
+        if (!delegateItem)
+            return 0;
+        var point = delegateItem.mapToItem(root, delegateItem.width / 2, delegateItem.height / 2);
+        return point.x;
     }
 
     function beginItemDrag(item, contentX) {
@@ -780,6 +790,7 @@ Item {
     }
 
     function activateItemWindow(item, window) {
+        Services.ShellActions.closeWorkspaceOverview();
         hideTooltip();
         if (!item)
             return;
@@ -791,6 +802,7 @@ Item {
     }
 
     function activateItem(item) {
+        Services.ShellActions.closeWorkspaceOverview();
         hideTooltip();
         if (!item)
             return;
@@ -804,6 +816,7 @@ Item {
     }
 
     function launchNew(item) {
+        Services.ShellActions.closeWorkspaceOverview();
         if (item && item.hasDesktop && item.desktopId)
             Services.AppPanelService.launch(item.desktopId);
     }
@@ -1085,10 +1098,86 @@ Item {
         function onFocusedAddressChanged() { root.refreshTooltipForTarget(); }
     }
 
+    Item {
+        id: overviewSlot
+        x: 0
+        anchors.verticalCenter: parent.verticalCenter
+        width: root.overviewSectionWidth
+        height: root.implicitHeight
+
+        readonly property bool overviewActive: Services.ShellState.workspaceOverviewOpen
+
+        Rectangle {
+            id: overviewButtonBackground
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.left: parent.left
+            anchors.leftMargin: 2
+            width: root.overviewButtonVisualSize
+            height: root.overviewButtonVisualSize
+            radius: 16
+            color: overviewSlot.overviewActive
+                ? "#2cffffff"
+                : (overviewButtonMouse.pressed ? "#20ffffff" : (overviewButtonMouse.containsMouse ? "#16ffffff" : "transparent"))
+            antialiasing: true
+            scale: overviewButtonMouse.pressed ? 0.96 : 1.0
+
+            Behavior on color { ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic } }
+            Behavior on scale { NumberAnimation { duration: overviewButtonMouse.pressed ? motion.pressDuration : motion.releaseDuration; easing.type: Easing.OutCubic } }
+
+            Grid {
+                anchors.centerIn: parent
+                columns: 2
+                rows: 2
+                spacing: 4
+
+                Repeater {
+                    model: 4
+                    Rectangle {
+                        width: 9
+                        height: 9
+                        radius: 3
+                        color: overviewSlot.overviewActive ? "#f4f7fb" : "#dce6f0"
+                        opacity: overviewSlot.overviewActive ? 0.98 : 0.86
+                        antialiasing: true
+                        Behavior on color { ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic } }
+                        Behavior on opacity { NumberAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic } }
+                    }
+                }
+            }
+
+            MouseArea {
+                id: overviewButtonMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                acceptedButtons: Qt.LeftButton
+                cursorShape: Qt.PointingHandCursor
+                onEntered: root.hideTooltip()
+                onClicked: function(mouse) {
+                    root.closePopup();
+                    Services.ShellState.requestCloseTopbarPopups();
+                    Services.ShellActions.toggleWorkspaceOverview();
+                    mouse.accepted = true;
+                }
+            }
+        }
+
+        Rectangle {
+            anchors.left: overviewButtonBackground.right
+            anchors.leftMargin: 8
+            anchors.verticalCenter: parent.verticalCenter
+            width: 1
+            height: 32
+            radius: 1
+            color: "#20ffffff"
+            antialiasing: true
+        }
+    }
+
     ListView {
         id: appList
+        x: root.overviewSectionWidth
         anchors.verticalCenter: parent.verticalCenter
-        width: root.implicitWidth
+        width: root.appListViewportWidth
         height: root.implicitHeight
         orientation: ListView.Horizontal
         boundsBehavior: Flickable.StopAtBounds
@@ -1249,7 +1338,7 @@ Item {
 
                 onEntered: {
                     hoverDelayTimer.restart();
-                    root.showTooltipFor(modelData, appDelegate.x + appDelegate.width / 2);
+                    root.showTooltipFor(modelData, root.delegateCenterX(appDelegate));
                 }
                 onExited: {
                     hoverDelayTimer.stop();
@@ -1308,7 +1397,7 @@ Item {
                     }
 
                     if (mouse.button === Qt.RightButton) {
-                        root.openContextMenu(modelData, appDelegate.x + appDelegate.width / 2);
+                        root.openContextMenu(modelData, root.delegateCenterX(appDelegate));
                     } else {
                         root.closePopup();
                         root.activateItem(modelData);

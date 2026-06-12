@@ -12,6 +12,17 @@ Rectangle {
 
     signal clicked()
 
+    function iconUrl(value) {
+        var icon = String(value || "").trim();
+        if (!icon)
+            return "";
+        if (icon.indexOf("file://") === 0 || icon.indexOf("qrc:/") === 0 || icon.indexOf("http://") === 0 || icon.indexOf("https://") === 0)
+            return icon;
+        if (icon.charAt(0) === "/")
+            return "file://" + icon;
+        return "";
+    }
+
     implicitWidth: 38
     implicitHeight: 34
     radius: 11
@@ -21,11 +32,33 @@ Rectangle {
         anchors.centerIn: parent
         spacing: 1
 
-        IconImage {
+        Item {
             Layout.alignment: Qt.AlignHCenter
             implicitWidth: 20
             implicitHeight: 20
-            source: root.icon
+
+            Image {
+                id: appIconImage
+                anchors.fill: parent
+                source: root.iconUrl(root.icon)
+                visible: source.toString().length > 0 && status !== Image.Error
+                fillMode: Image.PreserveAspectFit
+                asynchronous: true
+                cache: true
+                smooth: true
+            }
+
+            Text {
+                anchors.centerIn: parent
+                visible: !appIconImage.visible
+                text: root.label.substring(0, 1).toUpperCase()
+                color: "#edf4fa"
+                font.pixelSize: 12
+                font.weight: Font.DemiBold
+                renderType: Text.NativeRendering
+                font.hintingPreference: Font.PreferFullHinting
+                font.kerning: false
+            }
         }
 
         Rectangle {

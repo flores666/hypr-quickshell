@@ -10,6 +10,17 @@ QtObject {
     property var windows: []
     property var trayedWindows: []
     property var occupiedWorkspaces: []
+    property var workspaces: []
+
+    property bool workspaceOverviewOpen: false
+    // True = the dock button controls the local Hyprland live-preview plugin.
+    // The plugin is based on Hyprspace and exposes both qs-gnome-overview:* and overview:* aliases.
+    // Set to false to use the QML fallback overview with window cards.
+    property bool nativeWorkspaceOverviewEnabled: true
+    property string nativeWorkspaceOverviewOpenDispatcher: "qs-gnome-overview:open"
+    property string nativeWorkspaceOverviewCloseDispatcher: "qs-gnome-overview:close"
+    property string nativeWorkspaceOverviewToggleDispatcher: "qs-gnome-overview:toggle"
+    property int workspaceOverviewNonce: 0
 
     property int activeWorkspace: 1
     property string activeSpecialWorkspaceName: ""
@@ -56,7 +67,13 @@ QtObject {
             "workspaceName": w.workspaceName || "",
             "focused": !!w.focused,
             "hiddenByShell": !!w.hiddenByShell,
-            "hiddenReason": w.hiddenReason || ""
+            "hiddenReason": w.hiddenReason || "",
+            "x": Number(w.x || 0),
+            "y": Number(w.y || 0),
+            "width": Number(w.width || 0),
+            "height": Number(w.height || 0),
+            "floating": !!w.floating,
+            "fullscreen": !!w.fullscreen
         };
     }
 
@@ -100,6 +117,12 @@ QtObject {
             w.icon || "",
             normalizeWorkspaceId(w.workspace),
             w.workspaceName || "",
+            Number(w.x || 0),
+            Number(w.y || 0),
+            Number(w.width || 0),
+            Number(w.height || 0),
+            w.floating ? "1" : "0",
+            w.fullscreen ? "1" : "0",
             w.hiddenByShell ? "1" : "0",
             w.hiddenReason || ""
         ].join("|");
@@ -115,6 +138,66 @@ QtObject {
         }
 
         return true;
+    }
+
+
+    function workspaceKey(w) {
+        return [
+            normalizeWorkspaceId(w.id),
+            w.name || "",
+            Number(w.windows || 0),
+            w.monitor || "",
+            w.lastWindow || "",
+            w.lastWindowTitle || ""
+        ].join("|");
+    }
+
+    function workspacesEqual(a, b) {
+        if (!a || !b || a.length !== b.length)
+            return false;
+
+        for (var i = 0; i < a.length; i++) {
+            if (workspaceKey(a[i]) !== workspaceKey(b[i]))
+                return false;
+        }
+
+        return true;
+    }
+
+    function setWorkspaces(nextWorkspaces) {
+        var result = [];
+        for (var i = 0; i < (nextWorkspaces || []).length; i++) {
+            var item = nextWorkspaces[i] || {};
+            var id = normalizeWorkspaceId(item.id);
+            var name = String(item.name || "");
+            if (id <= 0 || name.indexOf("special:") === 0)
+                continue;
+
+            result.push({
+                "id": id,
+                "name": name.length > 0 ? name : String(id),
+                "windows": Number(item.windows || 0),
+                "monitor": item.monitor || "",
+                "lastWindow": item.lastWindow || "",
+                "lastWindowTitle": item.lastWindowTitle || ""
+            });
+        }
+
+        result.sort(function(a, b) { return normalizeWorkspaceId(a.id) - normalizeWorkspaceId(b.id); });
+        if (!workspacesEqual(workspaces, result))
+            workspaces = result;
+    }
+
+    function setWorkspaceOverviewOpen(value) {
+        var next = !!value;
+        if (workspaceOverviewOpen === next)
+            return;
+        workspaceOverviewOpen = next;
+        workspaceOverviewNonce += 1;
+    }
+
+    function toggleWorkspaceOverview() {
+        setWorkspaceOverviewOpen(!workspaceOverviewOpen);
     }
 
     function setOccupiedWorkspaces(nextOccupied) {
