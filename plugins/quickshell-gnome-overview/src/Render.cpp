@@ -152,7 +152,28 @@ void renderLayerStub(PHLLS pLayer, PHLMONITOR pMonitor, CBox rectOverride, CBox 
         &renderdata);
 }
 
-// Minimal overview renderer: fullscreen dim + scaled workspace previews with live windows only.
+bool renderFullscreenBackground(PHLMONITOR pMonitor, const CBox& monitorClip, const Time::steady_tp& time) {
+    if (!pMonitor)
+        return false;
+
+    bool rendered = false;
+    for (auto& ls : pMonitor->m_layerSurfaceLayers[0]) {
+        if (!ls)
+            continue;
+
+        const Vector2D layerPos = (ls->m_realPosition->value() - pMonitor->m_position) * pMonitor->m_scale;
+        const Vector2D layerSize = ls->m_realSize->value() * pMonitor->m_scale;
+        if (!(layerSize.x > 1 && layerSize.y > 1))
+            continue;
+
+        renderLayerStub(ls.lock(), pMonitor, CBox{layerPos, layerSize}, monitorClip, time);
+        rendered = true;
+    }
+
+    return rendered;
+}
+
+// Minimal overview renderer: fullscreen wallpaper dim + one continuous workspace strip with live windows only.
 void CHyprspaceWidget::draw() {
     workspaceBoxes.clear();
 
@@ -168,8 +189,23 @@ void CHyprspaceWidget::draw() {
 
     g_pHyprRenderer->m_renderData.clipBox = monitorClip;
 
-    // Only dim the real desktop. No panel, no blur, no decorative borders.
-    renderRect(CBox{0, 0, owner->m_transformedSize.x, owner->m_transformedSize.y}, Config::panelBaseColor);
+    // Draw the real desktop background over the whole monitor first.
+    // The overview should feel like one continuous workspace ribbon over the actual wallpaper,
+    // not like separate dark cards. Topbar/AppDock are layer surfaces rendered by Hyprland after
+    // this POST_WINDOWS hook, so they remain visible and clickable.
+    const bool hasBackground = renderFullscreenBackground(owner, monitorClip, time);
+    if (!hasBackground)
+        renderRect(CBox{0, 0, owner->m_transformedSize.x, owner->m_transformedSize.y}, CHyprColor(0.02, 0.025, 0.032, 1.0));
+
+    // One global background layer for the whole overview:
+    // wallpaper -> blur/dim overlay -> live workspace strip.
+    // Do not draw any additional wallpaper/dim layer inside the strip itself, otherwise
+    // the image looks like three separate layers instead of one unified GNOME-like canvas.
+    const CBox fullscreenDim = CBox{0, 0, owner->m_transformedSize.x, owner->m_transformedSize.y};
+    if (!Config::disableBlur)
+        renderRectWithBlur(fullscreenDim, CHyprColor(0.02, 0.025, 0.032, 0.36));
+    else
+        renderRect(fullscreenDim, CHyprColor(0.02, 0.025, 0.032, 0.42));
 
     std::vector<int> workspaces;
     int highestID = std::max(1, static_cast<int>(owner->activeWorkspaceID()));
@@ -198,6 +234,11 @@ void CHyprspaceWidget::draw() {
         return;
 
     const double margin = std::max<double>(8.0, Config::workspaceMargin * owner->m_scale);
+    // Do not leave a dim strip between workspace previews. The outer margin is still used
+    // for screen edges, but adjacent previews touch each other with a tiny overlap so
+    // rounding does not reveal the fullscreen dim background between them.
+    const double workspaceGap = 0.0;
+    const double workspaceOverlap = 1.0;
     const double reservedBottom = std::max<double>(0.0, Config::reservedArea * owner->m_scale);
     const double availableW = owner->m_transformedSize.x;
     const double availableH = std::max<double>(120.0, owner->m_transformedSize.y - reservedBottom);
@@ -217,8 +258,8 @@ void CHyprspaceWidget::draw() {
         }
     }
 
-    const double step = workspaceBoxW + margin;
-    const double groupWidth = workspaceBoxW * workspaces.size() + margin * std::max<int>(0, workspaces.size() - 1);
+    const double step = std::max<double>(1.0, workspaceBoxW + workspaceGap - workspaceOverlap);
+    const double groupWidth = workspaceBoxW * workspaces.size() + (workspaceGap - workspaceOverlap) * std::max<int>(0, workspaces.size() - 1);
     const double minStart = availableW - groupWidth - margin;
     const double maxStart = margin;
 
@@ -238,8 +279,25 @@ void CHyprspaceWidget::draw() {
         const auto ws = g_pCompositor->getWorkspaceByID(wsID);
         CBox workspaceBox = {startX + index * step, startY, workspaceBoxW, workspaceBoxH};
 
-        // Minimal workspace surface. This is only here so empty workspaces are still visible.
-        renderRect(workspaceBox, ws == owner->m_activeWorkspace ? Config::workspaceActiveBackground : Config::workspaceInactiveBackground);
+        // Keep the backdrop uniform. Do not draw a per-workspace background under windows,
+        // otherwise gaps between tiled windows look like the background is split into pieces.
+        bool hasVisibleWindow = false;
+        if (ws) {
+            for (auto& w : g_pCompositor->m_windows) {
+                if (!w)
+                    continue;
+                if (w->m_workspace != ws)
+                    continue;
+                if (!w->m_isMapped)
+                    continue;
+
+                hasVisibleWindow = true;
+                break;
+            }
+        }
+
+        if (!hasVisibleWindow)
+            renderRect(workspaceBox, ws == owner->m_activeWorkspace ? Config::workspaceActiveBackground : Config::workspaceInactiveBackground);
 
         if (ws) {
             for (auto& w : g_pCompositor->m_windows) {

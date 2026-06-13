@@ -60,17 +60,16 @@ write_snippet() {
   cat > "$SNIPPET_PATH" <<EOF_SNIPPET
 # Minimal live workspace overview plugin.
 # Managed by hypr-quickshell/scripts/live-overview-plugin.sh
-# It renders only a dim background and scaled live workspace previews.
+# It renders one fullscreen wallpaper blur/dim layer and a live workspace ribbon above it.
 
 exec-once = hyprctl plugin load $SO_PATH
 bind = SUPER, TAB, qs-gnome-overview:toggle
-bind = , Escape, qs-gnome-overview:close
 
 plugin {
     overview {
-        panelColor = rgba(0000007a)
-        workspaceActiveBackground = rgba(08090b47)
-        workspaceInactiveBackground = rgba(06070a38)
+        panelColor = rgba(0506086b)
+        workspaceActiveBackground = rgba(00000000)
+        workspaceInactiveBackground = rgba(00000000)
         workspaceActiveBorder = rgba(ffffff00)
         workspaceInactiveBorder = rgba(ffffff00)
 
@@ -82,7 +81,7 @@ plugin {
 
         panelBorderWidth = 0
         workspaceBorderSize = 0
-        hideBackgroundLayers = true
+        hideBackgroundLayers = false
         hideTopLayers = true
         hideOverlayLayers = true
         hideRealLayers = false
@@ -90,7 +89,7 @@ plugin {
         overrideGaps = false
         autoDrag = false
         disableGestures = true
-        disableBlur = true
+        disableBlur = false
         exitOnClick = true
         exitOnSwitch = true
         exitKey = Escape

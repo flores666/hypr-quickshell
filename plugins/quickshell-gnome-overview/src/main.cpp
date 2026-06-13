@@ -17,10 +17,10 @@ void* pRenderLayer;
 std::vector<std::shared_ptr<CHyprspaceWidget>> g_overviewWidgets;
 
 
-CHyprColor Config::panelBaseColor = CHyprColor(0, 0, 0, 0.48);
+CHyprColor Config::panelBaseColor = CHyprColor(0.02, 0.025, 0.032, 0.42);
 CHyprColor Config::panelBorderColor = CHyprColor(1, 1, 1, 0);
-CHyprColor Config::workspaceActiveBackground = CHyprColor(0.03, 0.035, 0.045, 0.28);
-CHyprColor Config::workspaceInactiveBackground = CHyprColor(0.025, 0.03, 0.038, 0.22);
+CHyprColor Config::workspaceActiveBackground = CHyprColor(0, 0, 0, 0);
+CHyprColor Config::workspaceInactiveBackground = CHyprColor(0, 0, 0, 0);
 CHyprColor Config::workspaceActiveBorder = CHyprColor(1, 1, 1, 0);
 CHyprColor Config::workspaceInactiveBorder = CHyprColor(1, 1, 1, 0);
 
@@ -32,7 +32,7 @@ int Config::workspaceBorderSize = 0;
 bool Config::adaptiveHeight = false; // TODO: implement
 bool Config::centerAligned = true;
 bool Config::onBottom = true; // Keep overview above the bottom AppDock.
-bool Config::hideBackgroundLayers = true;
+bool Config::hideBackgroundLayers = false;
 bool Config::hideTopLayers = true;
 bool Config::hideOverlayLayers = true;
 bool Config::drawActiveWorkspace = true;
@@ -55,7 +55,7 @@ bool Config::showSpecialWorkspace = false;
 bool Config::disableGestures = true;
 bool Config::reverseSwipe = false;
 
-bool Config::disableBlur = true;
+bool Config::disableBlur = false;
 
 float Config::overrideAnimSpeed = 1.0;
 
@@ -453,10 +453,10 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE inHandle) {
 
     Log::logger->log(Log::DEBUG, "Loading Quickshell GNOME Overview plugin");
 
-    HyprlandAPI::addConfigValue(pHandle, "plugin:overview:panelColor", Hyprlang::INT{CHyprColor(0, 0, 0, 0.48).getAsHex()});
+    HyprlandAPI::addConfigValue(pHandle, "plugin:overview:panelColor", Hyprlang::INT{CHyprColor(0.02, 0.025, 0.032, 0.42).getAsHex()});
     HyprlandAPI::addConfigValue(pHandle, "plugin:overview:panelBorderColor", Hyprlang::INT{CHyprColor(1, 1, 1, 0).getAsHex()});
-    HyprlandAPI::addConfigValue(pHandle, "plugin:overview:workspaceActiveBackground", Hyprlang::INT{CHyprColor(0.03, 0.035, 0.045, 0.28).getAsHex()});
-    HyprlandAPI::addConfigValue(pHandle, "plugin:overview:workspaceInactiveBackground", Hyprlang::INT{CHyprColor(0.025, 0.03, 0.038, 0.22).getAsHex()});
+    HyprlandAPI::addConfigValue(pHandle, "plugin:overview:workspaceActiveBackground", Hyprlang::INT{CHyprColor(0, 0, 0, 0).getAsHex()});
+    HyprlandAPI::addConfigValue(pHandle, "plugin:overview:workspaceInactiveBackground", Hyprlang::INT{CHyprColor(0, 0, 0, 0).getAsHex()});
     HyprlandAPI::addConfigValue(pHandle, "plugin:overview:workspaceActiveBorder", Hyprlang::INT{CHyprColor(1, 1, 1, 0).getAsHex()});
     HyprlandAPI::addConfigValue(pHandle, "plugin:overview:workspaceInactiveBorder", Hyprlang::INT{CHyprColor(1, 1, 1, 0).getAsHex()});
 
@@ -468,7 +468,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE inHandle) {
     HyprlandAPI::addConfigValue(pHandle, "plugin:overview:adaptiveHeight", Hyprlang::INT{0});
     HyprlandAPI::addConfigValue(pHandle, "plugin:overview:centerAligned", Hyprlang::INT{1});
     HyprlandAPI::addConfigValue(pHandle, "plugin:overview:onBottom", Hyprlang::INT{1});
-    HyprlandAPI::addConfigValue(pHandle, "plugin:overview:hideBackgroundLayers", Hyprlang::INT{1});
+    HyprlandAPI::addConfigValue(pHandle, "plugin:overview:hideBackgroundLayers", Hyprlang::INT{0});
     HyprlandAPI::addConfigValue(pHandle, "plugin:overview:hideTopLayers", Hyprlang::INT{1});
     HyprlandAPI::addConfigValue(pHandle, "plugin:overview:hideOverlayLayers", Hyprlang::INT{1});
     HyprlandAPI::addConfigValue(pHandle, "plugin:overview:drawActiveWorkspace", Hyprlang::INT{1});
@@ -491,7 +491,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE inHandle) {
     HyprlandAPI::addConfigValue(pHandle, "plugin:overview:disableGestures", Hyprlang::INT{1});
     HyprlandAPI::addConfigValue(pHandle, "plugin:overview:reverseSwipe", Hyprlang::INT{0});
 
-    HyprlandAPI::addConfigValue(pHandle, "plugin:overview:disableBlur", Hyprlang::INT{1});
+    HyprlandAPI::addConfigValue(pHandle, "plugin:overview:disableBlur", Hyprlang::INT{0});
     HyprlandAPI::addConfigValue(pHandle, "plugin:overview:overrideAnimSpeed", Hyprlang::FLOAT{1.0});
     HyprlandAPI::addConfigValue(pHandle, "plugin:overview:dragAlpha", Hyprlang::FLOAT{0.2});
     HyprlandAPI::addConfigValue(pHandle, "plugin:overview:exitKey", Hyprlang::STRING{"Escape"});
