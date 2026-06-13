@@ -97,6 +97,9 @@ plugin {
         hotCorner = true
         hotCornerSize = 1
         hotCornerCooldown = 450
+        hotCornerApproachDistance = 72
+        hotCornerMinTravel = 18
+        hotCornerMinSpeed = 0.18
     }
 }
 EOF_SNIPPET

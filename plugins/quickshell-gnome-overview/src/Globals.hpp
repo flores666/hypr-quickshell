@@ -95,6 +95,9 @@ namespace Config {
     extern bool hotCorner;
     extern int hotCornerSize;
     extern int hotCornerCooldown;
+    extern int hotCornerApproachDistance;
+    extern int hotCornerMinTravel;
+    extern float hotCornerMinSpeed;
 }
 
 

@@ -9,6 +9,7 @@
 #include <hyprutils/memory/SharedPtr.hpp>
 #include <any>
 #include <chrono>
+#include <cmath>
 #include "Overview.hpp"
 #include "Globals.hpp"
 
@@ -67,6 +68,9 @@ std::string Config::mainModKey = "Super_L";
 bool Config::hotCorner = true;
 int Config::hotCornerSize = 1;
 int Config::hotCornerCooldown = 450;
+int Config::hotCornerApproachDistance = 72;
+int Config::hotCornerMinTravel = 18;
+float Config::hotCornerMinSpeed = 0.18;
 
 int numWorkspaces = -1; //hyprsplit/split-monitor-workspaces support
 
@@ -122,6 +126,9 @@ static std::chrono::steady_clock::time_point g_mainModPressTime;
 static bool g_hotCornerInside = false;
 static bool g_hotCornerHasLastCoords = false;
 static Vector2D g_hotCornerLastCoords;
+static bool g_hotCornerApproachActive = false;
+static Vector2D g_hotCornerApproachStartCoords;
+static std::chrono::steady_clock::time_point g_hotCornerApproachStartTime;
 static bool g_mouseButtonDown = false;
 static std::chrono::steady_clock::time_point g_hotCornerLastOpen = std::chrono::steady_clock::now() - std::chrono::seconds(10);
 
@@ -171,6 +178,7 @@ static void maybeOpenHotCorner() {
     if (!monitor)
         return;
 
+    const auto now = std::chrono::steady_clock::now();
     const auto coords = g_pInputManager->getMouseCoordsInternal();
     const bool inside = isPointInHotCorner(monitor, coords);
 
@@ -185,14 +193,30 @@ static void maybeOpenHotCorner() {
     const bool wasInside = isPointInHotCorner(monitor, previous);
     g_hotCornerLastCoords = coords;
 
+    const double left = monitor->m_position.x;
+    const double top = monitor->m_position.y;
+    const double approachDistance = static_cast<double>(std::max(1, Config::hotCornerApproachDistance));
+    const bool inApproachZone = coords.x >= left && coords.x < left + approachDistance &&
+                                coords.y >= top && coords.y < top + approachDistance;
+
     if (!inside) {
         g_hotCornerInside = false;
+
+        if (inApproachZone) {
+            // Start measuring only when the pointer enters the small top-left approach zone.
+            // This makes the hot corner react to a real push into the corner, not to a slow
+            // accidental hover over the 1px activation point.
+            if (!g_hotCornerApproachActive) {
+                g_hotCornerApproachActive = true;
+                g_hotCornerApproachStartCoords = coords;
+                g_hotCornerApproachStartTime = now;
+            }
+        } else {
+            g_hotCornerApproachActive = false;
+        }
         return;
     }
 
-    // GNOME-like behavior: the overview opens only when the pointer is actively
-    // pushed into the top-left corner from outside. A pointer that is already
-    // resting in the corner must not open the overview on a passive hover.
     const bool enteredCorner = !wasInside;
     const bool movedTowardCorner = coords.x < previous.x || coords.y < previous.y;
 
@@ -202,7 +226,23 @@ static void maybeOpenHotCorner() {
     if (!Config::hotCorner || isAnyOverviewActive() || g_mouseButtonDown || g_mainModDown)
         return;
 
-    const auto now = std::chrono::steady_clock::now();
+    if (!g_hotCornerApproachActive)
+        return;
+
+    const double dx = g_hotCornerApproachStartCoords.x - coords.x;
+    const double dy = g_hotCornerApproachStartCoords.y - coords.y;
+    const double travel = std::sqrt(dx * dx + dy * dy);
+    const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(now - g_hotCornerApproachStartTime).count();
+    const double speed = elapsedMs > 0 ? travel / static_cast<double>(elapsedMs) : travel;
+
+    const bool enoughTravel = travel >= static_cast<double>(std::max(1, Config::hotCornerMinTravel));
+    const bool enoughSpeed = speed >= static_cast<double>(Config::hotCornerMinSpeed);
+
+    g_hotCornerApproachActive = false;
+
+    if (!enoughTravel || !enoughSpeed)
+        return;
+
     const auto cooldownMs = std::chrono::duration_cast<std::chrono::milliseconds>(now - g_hotCornerLastOpen).count();
     if (cooldownMs < Config::hotCornerCooldown)
         return;
@@ -606,8 +646,14 @@ void reloadConfig() {
     Config::hotCorner = getConfigValueOr<Hyprlang::INT>("plugin:overview:hotCorner", Config::hotCorner) != 0;
     Config::hotCornerSize = getConfigValueOr<Hyprlang::INT>("plugin:overview:hotCornerSize", Config::hotCornerSize);
     Config::hotCornerCooldown = getConfigValueOr<Hyprlang::INT>("plugin:overview:hotCornerCooldown", Config::hotCornerCooldown);
+    Config::hotCornerApproachDistance = getConfigValueOr<Hyprlang::INT>("plugin:overview:hotCornerApproachDistance", Config::hotCornerApproachDistance);
+    Config::hotCornerMinTravel = getConfigValueOr<Hyprlang::INT>("plugin:overview:hotCornerMinTravel", Config::hotCornerMinTravel);
+    Config::hotCornerMinSpeed = getConfigValueOr<Hyprlang::FLOAT>("plugin:overview:hotCornerMinSpeed", Config::hotCornerMinSpeed);
     if (Config::hotCornerSize < 1) Config::hotCornerSize = 1;
     if (Config::hotCornerCooldown < 0) Config::hotCornerCooldown = 0;
+    if (Config::hotCornerApproachDistance < Config::hotCornerSize) Config::hotCornerApproachDistance = Config::hotCornerSize;
+    if (Config::hotCornerMinTravel < 1) Config::hotCornerMinTravel = 1;
+    if (Config::hotCornerMinSpeed < 0.01f) Config::hotCornerMinSpeed = 0.01f;
 
     g_mainModKeysym = xkb_keysym_from_name(Config::mainModKey.c_str(), XKB_KEYSYM_CASE_INSENSITIVE);
     if (g_mainModKeysym == XKB_KEY_NoSymbol) {
@@ -687,6 +733,9 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE inHandle) {
     HyprlandAPI::addConfigValue(pHandle, "plugin:overview:hotCorner", Hyprlang::INT{1});
     HyprlandAPI::addConfigValue(pHandle, "plugin:overview:hotCornerSize", Hyprlang::INT{1});
     HyprlandAPI::addConfigValue(pHandle, "plugin:overview:hotCornerCooldown", Hyprlang::INT{450});
+    HyprlandAPI::addConfigValue(pHandle, "plugin:overview:hotCornerApproachDistance", Hyprlang::INT{72});
+    HyprlandAPI::addConfigValue(pHandle, "plugin:overview:hotCornerMinTravel", Hyprlang::INT{18});
+    HyprlandAPI::addConfigValue(pHandle, "plugin:overview:hotCornerMinSpeed", Hyprlang::FLOAT{0.18});
 
     g_pConfigReloadHook = Event::bus()->m_events.config.reloaded.listen([]() { reloadConfig(); });
     g_pStartHook = Event::bus()->m_events.start.listen([]() {
