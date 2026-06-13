@@ -412,9 +412,10 @@ Item {
 
             if (event.name === "quickshelloverview") {
                 var overviewState = String(event.data || "").trim();
-                if (overviewState === "open")
+                if (overviewState === "open") {
+                    Services.ShellState.setActiveSpecialWorkspace("");
                     Services.ShellState.setWorkspaceOverviewOpen(true);
-                else if (overviewState === "close")
+                } else if (overviewState === "close")
                     Services.ShellState.setWorkspaceOverviewOpen(false);
                 return;
             }
@@ -423,8 +424,12 @@ Item {
                 service.handleActiveSpecialEvent(event.data);
 
             if ((event.name === "workspace" || event.name === "workspacev2")
-                    && Services.ShellState.activeSpecialWorkspaceName.length > 0)
-                Services.ShellActions.closeActiveSpecialWorkspace();
+                    && Services.ShellState.activeSpecialWorkspaceName.length > 0) {
+                if (Services.ShellState.workspaceOverviewOpen)
+                    Services.ShellState.setActiveSpecialWorkspace("");
+                else
+                    Services.ShellActions.closeActiveSpecialWorkspace();
+            }
 
             if (service.hyprEventNeedsClientRefresh(event.name))
                 service.queueRefreshClients();

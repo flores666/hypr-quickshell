@@ -204,7 +204,7 @@ static bool isCoordsOverInteractiveLayer(PHLMONITORREF monitor, const Vector2D& 
             // handles outside clicks, while hover/click inside large modal popup
             // windows keeps working. Do not do this for every Quickshell panel,
             // otherwise overview would stop blocking desktop clicks.
-            if (layer->popupsCount() > 0 && monitorBox.containsPoint(coords))
+            if (layer->popupsCount() > 0 && quickshellLayer && monitorBox.containsPoint(coords))
                 return true;
         }
     }

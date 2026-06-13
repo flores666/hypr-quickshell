@@ -356,7 +356,7 @@ PanelWindow {
                 var raw = horizontal ? wheel.angleDelta.x : -wheel.angleDelta.y;
                 if (raw === 0)
                     return;
-                root.scrollBy(raw > 0 ? -root.thumbnailStep * 0.38 : root.thumbnailStep * 0.38);
+                root.scrollBy(raw > 0 ? -root.thumbnailStep * 0.86 : root.thumbnailStep * 0.86);
                 wheel.accepted = true;
             }
         }
@@ -401,11 +401,11 @@ PanelWindow {
                         width: root.thumbnailWidth
                         height: stripViewport.height
                         y: Math.round((stripViewport.height - root.thumbnailHeight) / 2)
-                        scale: activeWorkspace ? 1.025 : (workspaceHovered ? 1.015 : 1.0)
+                        scale: activeWorkspace ? (workspaceHovered ? 1.04 : 1.025) : (workspaceHovered ? 1.035 : 1.0)
                         transformOrigin: Item.Center
                         opacity: 0.9 + overviewState.reveal * 0.1
 
-                        Behavior on scale { NumberAnimation { duration: 190; easing.type: Easing.OutCubic } }
+                        Behavior on scale { NumberAnimation { duration: 105; easing.type: Easing.OutCubic } }
                         Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
 
                         Components.StyledText {

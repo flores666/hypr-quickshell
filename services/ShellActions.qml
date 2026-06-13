@@ -48,6 +48,8 @@ QtObject {
     }
 
     function openWorkspaceOverview() {
+        closeActiveSpecialWorkspace()
+
         if (Services.ShellState.nativeWorkspaceOverviewEnabled) {
             if (nativeOverviewDispatch("open"))
                 Services.ShellState.setWorkspaceOverviewOpen(true)
@@ -76,12 +78,15 @@ QtObject {
             if (Services.ShellState.workspaceOverviewOpen) {
                 closeWorkspaceOverview()
             } else {
+                closeActiveSpecialWorkspace()
                 if (nativeOverviewDispatch("open"))
                     Services.ShellState.setWorkspaceOverviewOpen(true)
             }
             return
         }
 
+        if (!Services.ShellState.workspaceOverviewOpen)
+            closeActiveSpecialWorkspace()
         Services.ShellState.toggleWorkspaceOverview()
     }
 

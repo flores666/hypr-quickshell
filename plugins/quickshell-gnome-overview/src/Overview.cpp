@@ -2,6 +2,8 @@
 #include "Globals.hpp"
 #include <hyprland/src/config/shared/animation/AnimationTree.hpp>
 #include <hyprland/src/managers/EventManager.hpp>
+#include <algorithm>
+#include <cmath>
 
 static void notifyQuickshellOverviewState(const char* state) {
     if (g_pEventManager)
@@ -30,24 +32,56 @@ PHLMONITOR CHyprspaceWidget::getOwner() {
     return g_pCompositor->getMonitorFromID(ownerID);
 }
 
+void CHyprspaceWidget::closeOwnerSpecialWorkspace() {
+    auto owner = getOwner();
+    if (!owner)
+        return;
+
+    // Opening overview must detach any visible special workspace first. If the
+    // special overlay is left attached, selecting the underlying workspace can
+    // make Hyprland/Quickshell toggle the same special workspace back on.
+    owner->setSpecialWorkspace(nullptr);
+}
+
+double CHyprspaceWidget::currentWorkspaceStep() const {
+    if (workspaceBoxes.size() >= 2) {
+        const auto first = std::get<1>(workspaceBoxes[0]);
+        const auto second = std::get<1>(workspaceBoxes[1]);
+        const double step = std::abs(second.x - first.x);
+        if (step > 1.0)
+            return step;
+    }
+
+    const auto owner = g_pCompositor->getMonitorFromID(ownerID);
+    if (owner)
+        return std::max<double>(180.0, owner->m_size.x * 0.38);
+
+    return 300.0;
+}
+
 void CHyprspaceWidget::show() {
     const bool wasActive = active;
     auto owner = getOwner();
     if (!owner)
         return;
 
+    // Treat live overview as a regular-workspace mode. Close the special
+    // workspace before overview becomes active, no matter whether overview was
+    // opened from the dock button, the hot corner, or the single Super key.
+    closeOwnerSpecialWorkspace();
+
     active = true;
     workspaceScrollOffset->setValueAndWarp(0);
     curYOffset->setValueAndWarp(0);
 
+    lastWorkspaceHoverFrameValid = false;
+
     if (!wasActive)
         notifyQuickshellOverviewState("open");
 
-    // Force Hyprland to re-evaluate pointer focus/cursor state when entering
-    // the virtual overview area. Without this, the cursor shape can remain
-    // stuck as the shape from the previously hovered client.
-    g_pInputManager->refocus();
-    g_pInputManager->simulateMouseMovement();
+    // Do not synthesize pointer motion while entering overview. Sending motion
+    // to the real client below the cursor made buttons/links under the preview
+    // hoverable for a moment. Real pointer events are blocked by the input hooks.
 
     g_pHyprRenderer->damageMonitor(owner);
     g_pCompositor->scheduleFrameForMonitor(owner);
@@ -64,9 +98,13 @@ void CHyprspaceWidget::hide() {
     workspaceScrollOffset->setValueAndWarp(0);
     curYOffset->setValueAndWarp(0);
 
+    workspaceHoverProgress.clear();
+    lastWorkspaceHoverFrameValid = false;
+
     if (wasActive)
         notifyQuickshellOverviewState("close");
 
+    // After leaving overview, restore normal pointer focus/cursor state.
     g_pInputManager->refocus();
     g_pInputManager->simulateMouseMovement();
 

@@ -1,6 +1,8 @@
 #pragma once
 #include <hyprland/src/Compositor.hpp>
 #include <hyprutils/animation/AnimationConfig.hpp>
+#include <chrono>
+#include <unordered_map>
 
 class CHyprspaceWidget {
 
@@ -41,6 +43,15 @@ class CHyprspaceWidget {
     // immediately instead of first fighting the final startX clamp in draw().
     double workspaceScrollMin = 0.0;
     double workspaceScrollMax = 0.0;
+
+    // Per-workspace hover progress for the small GNOME-like zoom on hover.
+    std::unordered_map<int, float> workspaceHoverProgress;
+    std::chrono::steady_clock::time_point lastWorkspaceHoverFrame;
+    bool lastWorkspaceHoverFrameValid = false;
+
+    double currentWorkspaceStep() const;
+
+    void closeOwnerSpecialWorkspace();
 
 public:
 

@@ -3,6 +3,7 @@
 
 #include "Overview.hpp"
 #include "Globals.hpp"
+#include <cmath>
 
 bool CHyprspaceWidget::buttonEvent(bool pressed, Vector2D coords) {
     if (!active)
@@ -31,7 +32,15 @@ bool CHyprspaceWidget::buttonEvent(bool pressed, Vector2D coords) {
         if (targetWorkspace->m_isSpecialWorkspace) {
             getOwner()->activeSpecialWorkspaceID() == targetWorkspaceID ? getOwner()->setSpecialWorkspace(nullptr) : getOwner()->setSpecialWorkspace(targetWorkspaceID);
         } else if (targetWorkspace->m_monitor) {
-            g_pCompositor->getMonitorFromID(targetWorkspace->m_monitor->m_id)->changeWorkspace(targetWorkspace->m_id);
+            const auto owner = getOwner();
+            closeOwnerSpecialWorkspace();
+
+            // If this is the same regular workspace that was under the special
+            // workspace, only close the special/overview layers. Calling
+            // changeWorkspace on it again can race with Quickshell's stale
+            // activeSpecial state and reopen the special workspace.
+            if (!owner || owner->activeWorkspaceID() != targetWorkspace->m_id)
+                g_pCompositor->getMonitorFromID(targetWorkspace->m_monitor->m_id)->changeWorkspace(targetWorkspace->m_id);
         }
         hide();
         return false;
@@ -47,8 +56,17 @@ bool CHyprspaceWidget::axisEvent(double delta, wl_pointer_axis axis, Vector2D co
     if (!active)
         return true;
 
-    const double speed = axis == WL_POINTER_AXIS_HORIZONTAL_SCROLL ? 2.0 : 1.5;
-    const double next = std::clamp<double>(workspaceScrollOffset->goal() - delta * speed, workspaceScrollMin, workspaceScrollMax);
+    const double step = currentWorkspaceStep();
+    const double absDelta = std::abs(delta);
+
+    // Mouse wheel deltas are usually coarse. Move close to one workspace per
+    // notch, like GNOME, instead of creeping a few pixels at a time. Touchpad
+    // deltas stay smooth but use a higher multiplier than before.
+    const double amount = (absDelta >= 8.0 && step > 1.0)
+        ? (delta > 0.0 ? step * 0.82 : -step * 0.82)
+        : delta * (axis == WL_POINTER_AXIS_HORIZONTAL_SCROLL ? 10.0 : 8.5);
+
+    const double next = std::clamp<double>(workspaceScrollOffset->goal() - amount, workspaceScrollMin, workspaceScrollMax);
     *workspaceScrollOffset = next;
     return false;
 }

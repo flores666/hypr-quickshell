@@ -10,6 +10,7 @@
 #include <hyprutils/utils/ScopeGuard.hpp>
 #include <algorithm>
 #include <climits>
+#include <cmath>
 
 
 void renderRect(CBox box, CHyprColor color) {
@@ -286,12 +287,46 @@ void CHyprspaceWidget::draw() {
     // Keep previews above the AppDock area, with no bottom panel from the plugin itself.
     const double startY = std::max<double>(margin, ((availableH - workspaceBoxH) * 0.5));
 
-    const double monitorScaleForPreview = previewScale * owner->m_scale;
+    const auto frameNow = std::chrono::steady_clock::now();
+    double frameDt = 1.0 / 60.0;
+    if (lastWorkspaceHoverFrameValid) {
+        frameDt = std::chrono::duration<double>(frameNow - lastWorkspaceHoverFrame).count();
+        if (!(frameDt > 0.0) || frameDt > 0.12)
+            frameDt = 1.0 / 60.0;
+    }
+    lastWorkspaceHoverFrame = frameNow;
+    lastWorkspaceHoverFrameValid = true;
+    const double hoverEase = std::clamp<double>(frameDt / 0.075, 0.0, 1.0);
+    const auto mouseCoords = g_pInputManager->getMouseCoordsInternal();
 
     for (size_t index = 0; index < workspaces.size(); ++index) {
         const int wsID = workspaces[index];
         const auto ws = g_pCompositor->getWorkspaceByID(wsID);
         CBox workspaceBox = {startX + index * step, startY, workspaceBoxW, workspaceBoxH};
+
+        CBox baseInputBox = workspaceBox;
+        baseInputBox.scale(1 / owner->m_scale);
+        baseInputBox.x += owner->m_position.x;
+        baseInputBox.y += owner->m_position.y;
+
+        const bool hoveredWorkspace = baseInputBox.containsPoint(mouseCoords);
+        float& hoverProgress = workspaceHoverProgress[wsID];
+        const float targetHover = hoveredWorkspace ? 1.0F : 0.0F;
+        hoverProgress += (targetHover - hoverProgress) * static_cast<float>(hoverEase);
+        if (std::abs(hoverProgress) < 0.001F)
+            hoverProgress = 0.0F;
+
+        const double hoverScale = 1.0 + static_cast<double>(hoverProgress) * 0.035;
+        if (hoverScale != 1.0) {
+            const double centerX = workspaceBox.x + workspaceBox.w * 0.5;
+            const double centerY = workspaceBox.y + workspaceBox.h * 0.5;
+            workspaceBox.w *= hoverScale;
+            workspaceBox.h *= hoverScale;
+            workspaceBox.x = centerX - workspaceBox.w * 0.5;
+            workspaceBox.y = centerY - workspaceBox.h * 0.5;
+        }
+
+        const double monitorScaleForPreview = previewScale * hoverScale * owner->m_scale;
 
         // Keep the backdrop uniform. Do not draw a per-workspace background under windows,
         // otherwise gaps between tiled windows look like the background is split into pieces.
