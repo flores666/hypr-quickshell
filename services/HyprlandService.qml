@@ -92,6 +92,27 @@ Item {
         workspacesProc.running = true;
     }
 
+
+    function specialWorkspaceNameFromEventData(data) {
+        var firstPart = String(data || "").split(",")[0].trim();
+        if (firstPart.length === 0 || firstPart === "special")
+            return "";
+        return firstPart.indexOf("special:") === 0 ? firstPart : "special:" + firstPart;
+    }
+
+    function handleActiveSpecialEvent(data) {
+        var specialName = specialWorkspaceNameFromEventData(data);
+        if (specialName.length > 0) {
+            // This event is emitted even when the special workspace is opened by
+            // an external Hyprland bind, for example mainMod + S. Close the live
+            // overview here instead of relying only on button actions.
+            Services.ShellActions.closeWorkspaceOverviewAll();
+            Services.ShellState.setActiveSpecialWorkspace(specialName);
+        } else {
+            Services.ShellState.setActiveSpecialWorkspace("");
+        }
+    }
+
     function hyprEventNeedsMonitorRefresh(eventName) {
         switch (eventName) {
         case "activespecial":
@@ -397,6 +418,9 @@ Item {
                     Services.ShellState.setWorkspaceOverviewOpen(false);
                 return;
             }
+
+            if (event.name === "activespecial")
+                service.handleActiveSpecialEvent(event.data);
 
             if ((event.name === "workspace" || event.name === "workspacev2")
                     && Services.ShellState.activeSpecialWorkspaceName.length > 0)

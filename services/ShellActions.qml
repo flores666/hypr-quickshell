@@ -37,12 +37,13 @@ QtObject {
         return Services.ShellState.nativeWorkspaceOverviewToggleDispatcher
     }
 
-    function nativeOverviewDispatch(action) {
+    function nativeOverviewDispatch(action, args) {
         var dispatcher = String(nativeOverviewDispatcher(action) || "").trim()
         if (dispatcher.length === 0)
             return false
 
-        Hyprland.dispatch(dispatcher)
+        var extraArgs = String(args || "").trim()
+        Hyprland.dispatch(extraArgs.length > 0 ? dispatcher + " " + extraArgs : dispatcher)
         return true
     }
 
@@ -59,6 +60,13 @@ QtObject {
     function closeWorkspaceOverview() {
         if (Services.ShellState.nativeWorkspaceOverviewEnabled)
             nativeOverviewDispatch("close")
+
+        Services.ShellState.setWorkspaceOverviewOpen(false)
+    }
+
+    function closeWorkspaceOverviewAll() {
+        if (Services.ShellState.nativeWorkspaceOverviewEnabled)
+            nativeOverviewDispatch("close", "all")
 
         Services.ShellState.setWorkspaceOverviewOpen(false)
     }
