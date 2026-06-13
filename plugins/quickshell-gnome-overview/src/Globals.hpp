@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <string>
 #include <tuple>
 #include <type_traits>
 
@@ -85,6 +86,13 @@ namespace Config {
     extern bool disableBlur;
     extern float overrideAnimSpeed;
     extern float dragAlpha;
+
+    // GNOME-like single-mainMod toggle. The plugin toggles overview only when
+    // the main modifier is pressed and released alone. If another key/mouse/touch
+    // event happens while the modifier is held, the release is ignored.
+    extern bool mainModToggle;
+    extern std::string mainModKey;
 }
+
 
 extern int numWorkspaces;

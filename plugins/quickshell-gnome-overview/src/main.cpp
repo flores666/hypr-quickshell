@@ -8,6 +8,7 @@
 #include <hyprland/src/desktop/view/Window.hpp>
 #include <hyprutils/memory/SharedPtr.hpp>
 #include <any>
+#include <chrono>
 #include "Overview.hpp"
 #include "Globals.hpp"
 
@@ -61,6 +62,9 @@ float Config::overrideAnimSpeed = 1.0;
 
 float Config::dragAlpha = 0.2;
 
+bool Config::mainModToggle = true;
+std::string Config::mainModKey = "Super_L";
+
 int numWorkspaces = -1; //hyprsplit/split-monitor-workspaces support
 
 // Event listener handles (auto-unregister when destroyed)
@@ -107,8 +111,51 @@ void refreshWidgets() {
 
 bool g_layoutNeedsRefresh = true;
 
-// for restroing dragged window's alpha value
+static bool g_mainModDown = false;
+static bool g_mainModCancelled = false;
+static xkb_keysym_t g_mainModKeysym = XKB_KEY_Super_L;
+static std::chrono::steady_clock::time_point g_mainModPressTime;
+
+// for restoring dragged window's alpha value
 float g_oAlpha = -1;
+
+
+static bool isAnyOverviewActive() {
+    for (auto& widget : g_overviewWidgets) {
+        if (widget && widget->isActive())
+            return true;
+    }
+    return false;
+}
+
+static void toggleOverviewForCurrentMonitor() {
+    const auto currentMonitor = g_pCompositor->getMonitorFromCursor();
+    const auto widget = getWidgetForMonitor(currentMonitor);
+    if (!widget)
+        return;
+
+    widget->isActive() ? widget->hide() : widget->show();
+}
+
+static void cancelMainModToggleGesture() {
+    if (g_mainModDown)
+        g_mainModCancelled = true;
+}
+
+static bool isConfiguredMainMod(xkb_keysym_t keysym) {
+    if (keysym == g_mainModKeysym)
+        return true;
+
+    // Keep the default robust across keyboards that report the right Super key
+    // or Meta instead of Super. This is only used when the config keeps the
+    // default Super_L mainMod key.
+    if (g_mainModKeysym == XKB_KEY_Super_L || g_mainModKeysym == XKB_KEY_Super_R) {
+        return keysym == XKB_KEY_Super_L || keysym == XKB_KEY_Super_R ||
+               keysym == XKB_KEY_Meta_L || keysym == XKB_KEY_Meta_R;
+    }
+
+    return false;
+}
 
 void onRender(eRenderStage renderStage) {
     if (renderStage == eRenderStage::RENDER_PRE) {
@@ -140,6 +187,7 @@ void onWorkspaceChange(PHLWORKSPACE pWorkspace) {
 
 // event hook for click and drag interaction
 void onMouseButton(const IPointer::SButtonEvent& event, SCallbackInfo& info) {
+    cancelMainModToggleGesture();
     const SP<IPointer> pointer = g_pSeatManager->m_mouse.lock();
     if (!pointer)
         return;
@@ -161,6 +209,7 @@ void onMouseButton(const IPointer::SButtonEvent& event, SCallbackInfo& info) {
 
 // event hook for scrolling through panel and workspaces
 void onMouseAxis(const IPointer::SAxisEvent& event, SCallbackInfo& info) {
+    cancelMainModToggleGesture();
 
     const auto pMonitor = g_pCompositor->getMonitorFromCursor();
     if (pMonitor) {
@@ -176,6 +225,7 @@ void onMouseAxis(const IPointer::SAxisEvent& event, SCallbackInfo& info) {
 
 // event hook for swipe
 void onSwipeBegin(const IPointer::SSwipeBeginEvent& event, SCallbackInfo& info) {
+    cancelMainModToggleGesture();
 
     if (Config::disableGestures) return;
 
@@ -213,7 +263,7 @@ void onSwipeEnd(const IPointer::SSwipeEndEvent& event, SCallbackInfo& info) {
         widget->endSwipe(event);
 }
 
-// Close overview with configurable key
+// Close overview with configurable key and implement safe GNOME-like mainMod toggle.
 void onKeyPress(const IKeyboard::SKeyEvent& event, SCallbackInfo& info) {
     const SP<IKeyboard> keyboard = g_pSeatManager->m_keyboard.lock();
     if (!keyboard || !keyboard->m_xkbSymState)
@@ -221,6 +271,43 @@ void onKeyPress(const IKeyboard::SKeyEvent& event, SCallbackInfo& info) {
 
     const auto keycode = event.keycode + 8; // Because to xkbcommon it's +8 from libinput
     const xkb_keysym_t keysym = xkb_state_key_get_one_sym(keyboard->m_xkbSymState, keycode);
+    const bool pressed = event.state == WL_KEYBOARD_KEY_STATE_PRESSED;
+    const bool released = event.state == WL_KEYBOARD_KEY_STATE_RELEASED;
+
+    // Main modifier handling must be done inside the plugin, not with Hyprland bindr.
+    // bindr on $mainMod fires even after combinations such as $mainMod+Space layout switch.
+    // Here we toggle only if the configured mainMod was pressed and released alone.
+    if (Config::mainModToggle && isConfiguredMainMod(keysym)) {
+        if (pressed) {
+            if (!g_mainModDown) {
+                g_mainModDown = true;
+                const uint32_t mods = keyboard->getModifiers();
+                const uint32_t unsafeOtherMods = mods & (HL_MODIFIER_SHIFT | HL_MODIFIER_CTRL | HL_MODIFIER_ALT | HL_MODIFIER_MOD2 | HL_MODIFIER_MOD3 | HL_MODIFIER_MOD5);
+                g_mainModCancelled = unsafeOtherMods != 0;
+                g_mainModPressTime = std::chrono::steady_clock::now();
+            }
+            return;
+        }
+
+        if (released && g_mainModDown) {
+            const auto heldMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - g_mainModPressTime).count();
+            const bool safeSinglePress = !g_mainModCancelled && heldMs >= 25;
+
+            g_mainModDown = false;
+            g_mainModCancelled = false;
+
+            if (safeSinglePress) {
+                toggleOverviewForCurrentMonitor();
+                info.cancelled = true;
+            }
+            return;
+        }
+    } else if (pressed && g_mainModDown) {
+        // Any other key while mainMod is held means it was a shortcut or layout switch.
+        // Do not open overview on mainMod release.
+        g_mainModCancelled = true;
+    }
 
     auto* pExitKeyCfg = HyprlandAPI::getConfigValue(pHandle, "plugin:overview:exitKey");
     if (!pExitKeyCfg)
@@ -232,8 +319,7 @@ void onKeyPress(const IKeyboard::SKeyEvent& event, SCallbackInfo& info) {
 
     const xkb_keysym_t cfgExitKeysym = xkb_keysym_from_name(cfgExitKey, XKB_KEYSYM_CASE_INSENSITIVE);
 
-    if (keysym == cfgExitKeysym) {
-        // close all panels
+    if (pressed && keysym == cfgExitKeysym) {
         bool overviewActive = false;
         for (auto& widget : g_overviewWidgets) {
             if (widget != nullptr && widget->isActive()) {
@@ -241,7 +327,6 @@ void onKeyPress(const IKeyboard::SKeyEvent& event, SCallbackInfo& info) {
                 overviewActive = true;
             }
         }
-        // Only cancel event if overview was active and closed
         if (overviewActive)
             info.cancelled = true;
     }
@@ -250,6 +335,7 @@ void onKeyPress(const IKeyboard::SKeyEvent& event, SCallbackInfo& info) {
 PHLMONITOR g_pTouchedMonitor;
 
 void onTouchDown(const ITouch::SDownEvent& event, SCallbackInfo& info) {
+    cancelMainModToggleGesture();
     if (!event.device)
         return;
 
@@ -428,6 +514,14 @@ void reloadConfig() {
     }
 
     Config::dragAlpha = getConfigValueOr<Hyprlang::FLOAT>("plugin:overview:dragAlpha", Config::dragAlpha);
+    Config::mainModToggle = getConfigValueOr<Hyprlang::INT>("plugin:overview:mainModToggle", Config::mainModToggle) != 0;
+    Config::mainModKey = getConfigValueOr<Hyprlang::STRING>("plugin:overview:mainModKey", Config::mainModKey.c_str());
+    g_mainModKeysym = xkb_keysym_from_name(Config::mainModKey.c_str(), XKB_KEYSYM_CASE_INSENSITIVE);
+    if (g_mainModKeysym == XKB_KEY_NoSymbol) {
+        Log::logger->log(Log::WARN, "Overview: invalid plugin:overview:mainModKey {}, fallback to Super_L", Config::mainModKey);
+        Config::mainModKey = "Super_L";
+        g_mainModKeysym = XKB_KEY_Super_L;
+    }
 
     // get number of workspaces from hyprsplit or split-monitor-workspaces plugin config
     Hyprlang::CConfigValue* numWorkspacesConfig = HyprlandAPI::getConfigValue(pHandle, "plugin:hyprsplit:num_workspaces");
@@ -495,6 +589,8 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE inHandle) {
     HyprlandAPI::addConfigValue(pHandle, "plugin:overview:overrideAnimSpeed", Hyprlang::FLOAT{1.0});
     HyprlandAPI::addConfigValue(pHandle, "plugin:overview:dragAlpha", Hyprlang::FLOAT{0.2});
     HyprlandAPI::addConfigValue(pHandle, "plugin:overview:exitKey", Hyprlang::STRING{"Escape"});
+    HyprlandAPI::addConfigValue(pHandle, "plugin:overview:mainModToggle", Hyprlang::INT{1});
+    HyprlandAPI::addConfigValue(pHandle, "plugin:overview:mainModKey", Hyprlang::STRING{"Super_L"});
 
     g_pConfigReloadHook = Event::bus()->m_events.config.reloaded.listen([]() { reloadConfig(); });
     g_pStartHook = Event::bus()->m_events.start.listen([]() {

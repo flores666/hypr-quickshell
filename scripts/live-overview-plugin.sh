@@ -63,7 +63,6 @@ write_snippet() {
 # It renders one fullscreen wallpaper blur/dim layer and a live workspace ribbon above it.
 
 exec-once = hyprctl plugin load $SO_PATH
-bindr = \$mainMod, Super_L, qs-gnome-overview:toggle
 
 plugin {
     overview {
@@ -93,6 +92,8 @@ plugin {
         exitOnClick = true
         exitOnSwitch = true
         exitKey = Escape
+        mainModToggle = true
+        mainModKey = Super_L
     }
 }
 EOF_SNIPPET
@@ -118,9 +119,13 @@ add_source_to_hypr_config() {
   remove_managed_block "$HYPR_CONFIG"
 
   # Avoid duplicate old manual source lines pointing to this same snippet.
+  # Also remove the old unsafe bindr line: it toggled overview after $mainMod+other-key
+  # combinations, e.g. while switching keyboard layout. The plugin now handles
+  # single-mainMod toggling safely from its keyboard event hook.
   local tmp
   tmp="$(mktemp)"
-  grep -vF "hyprland-live-overview.conf.snippet" "$HYPR_CONFIG" > "$tmp" || true
+  grep -vF "hyprland-live-overview.conf.snippet" "$HYPR_CONFIG" \
+    | grep -vF 'bindr = $mainMod, Super_L, qs-gnome-overview:toggle' > "$tmp" || true
   cat "$tmp" > "$HYPR_CONFIG"
   rm -f "$tmp"
 

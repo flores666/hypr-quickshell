@@ -31,3 +31,19 @@ cd ~/hypr-quickshell
 ```
 
 Do not unload/reload the plugin in a running Hyprland session. Rebuild, restart Hyprland, then load again.
+
+
+## Live overview mainMod behavior
+
+The overview plugin no longer uses a raw Hyprland `bindr` for `$mainMod`. The plugin handles the main modifier internally and toggles overview only when the modifier is pressed and released alone. If another key, mouse, touch, or scroll event happens while the modifier is held, the release is ignored. This prevents overview from opening during keyboard layout switching and other shortcuts.
+
+Config values are written by `scripts/live-overview-plugin.sh write-conf`:
+
+```ini
+plugin {
+    overview {
+        mainModToggle = true
+        mainModKey = Super_L
+    }
+}
+```

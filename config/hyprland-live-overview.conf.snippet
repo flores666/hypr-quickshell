@@ -3,7 +3,6 @@
 # It renders one fullscreen wallpaper blur/dim layer and a live workspace ribbon above it.
 
 exec-once = hyprctl plugin load /home/me/hypr-quickshell/plugins/quickshell-gnome-overview/quickshell-gnome-overview.so
-bindr = $mainMod, Super_L, qs-gnome-overview:toggle
 
 plugin {
     overview {
@@ -33,5 +32,7 @@ plugin {
         exitOnClick = true
         exitOnSwitch = true
         exitKey = Escape
+        mainModToggle = true
+        mainModKey = Super_L
     }
 }
