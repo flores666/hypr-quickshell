@@ -29,6 +29,7 @@ PanelWindow {
     property real dragStartX: 0
     property real dragStartOffset: 0
     property bool initializedForOpen: false
+    property bool changingWorkspaceInsideOverview: false
 
     anchors {
         top: true
@@ -184,16 +185,45 @@ PanelWindow {
         closingByInternalAction = false;
     }
 
+    function switchWorkspaceInsideOverview(workspaceId) {
+        var target = Math.max(1, Math.floor(Number(workspaceId || 0)));
+        if (isNaN(target) || target < 1)
+            return;
+
+        changingWorkspaceInsideOverview = true;
+        Services.ShellActions.selectWorkspaceInOverview(target);
+        workspaceChangeGuard.restart();
+    }
+
+    function scrollWorkspaceBy(direction) {
+        var current = normalizeWorkspaceId(activeWorkspace);
+        if (current <= 0)
+            current = 1;
+
+        var target = Math.max(1, current + (direction > 0 ? 1 : -1));
+        if (target === current) {
+            centerActiveWorkspace(false);
+            return;
+        }
+
+        switchWorkspaceInsideOverview(target);
+    }
+
     function scrollBy(delta) {
         scrollOffset = clamp(scrollOffset + delta, 0, maxScrollOffset);
         snapTimer.restart();
     }
 
     function snapToNearestWorkspace() {
-        if (thumbnailStep <= 0)
+        if (thumbnailStep <= 0 || overviewWorkspaces.length <= 0)
             return;
-        var index = Math.round(scrollOffset / thumbnailStep);
-        scrollOffset = clamp(index * thumbnailStep, 0, maxScrollOffset);
+        var index = clamp(Math.round(scrollOffset / thumbnailStep), 0, overviewWorkspaces.length - 1);
+        var workspace = overviewWorkspaces[index] || {};
+        var target = normalizeWorkspaceId(workspace.id);
+        if (target > 0 && target !== activeWorkspace)
+            switchWorkspaceInsideOverview(target);
+        else
+            centerActiveWorkspace(false);
     }
 
     function workspaceTitle(workspace) {
@@ -275,6 +305,13 @@ PanelWindow {
         onTriggered: root.snapToNearestWorkspace()
     }
 
+    Timer {
+        id: workspaceChangeGuard
+        interval: 260
+        repeat: false
+        onTriggered: root.changingWorkspaceInsideOverview = false
+    }
+
     Connections {
         target: Services.ShellState
         function onWorkspaceOverviewOpenChanged() {
@@ -285,9 +322,14 @@ PanelWindow {
         function onWorkspacesChanged() { root.refreshModel(); }
         function onOccupiedWorkspacesChanged() { root.refreshModel(); }
         function onActiveWorkspaceChanged() {
-            if (Services.ShellState.workspaceOverviewOpen && !root.closingByInternalAction)
+            if (Services.ShellState.workspaceOverviewOpen
+                    && !Services.ShellState.nativeWorkspaceOverviewEnabled
+                    && !root.closingByInternalAction
+                    && !root.changingWorkspaceInsideOverview)
                 Services.ShellActions.closeWorkspaceOverview();
             root.refreshModel();
+            if (Services.ShellState.workspaceOverviewOpen)
+                root.centerActiveWorkspace(false);
         }
     }
 
@@ -356,7 +398,10 @@ PanelWindow {
                 var raw = horizontal ? wheel.angleDelta.x : -wheel.angleDelta.y;
                 if (raw === 0)
                     return;
-                root.scrollBy(raw > 0 ? -root.thumbnailStep * 0.86 : root.thumbnailStep * 0.86);
+
+                // One wheel notch selects exactly one workspace. The active
+                // workspace is then re-centered by onActiveWorkspaceChanged().
+                root.scrollWorkspaceBy(raw < 0 ? 1 : -1);
                 wheel.accepted = true;
             }
         }

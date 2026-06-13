@@ -261,28 +261,19 @@ void CHyprspaceWidget::draw() {
 
     const double step = std::max<double>(1.0, workspaceBoxW + workspaceGap - workspaceOverlap);
     const double groupWidth = workspaceBoxW * workspaces.size() + (workspaceGap - workspaceOverlap) * std::max<int>(0, workspaces.size() - 1);
-    const double minStart = availableW - groupWidth - margin;
-    const double maxStart = margin;
 
-    // Compute the natural ribbon origin first and clamp that base position before
-    // applying user scroll. Previously, when activeIndex was 0, startX was first
-    // centered and only then clamped to the left edge. Small scroll deltas were
-    // swallowed by that clamp, so scrolling from workspace 1 felt delayed and very
-    // insensitive. Keeping scroll as a separate relative offset fixes that.
-    double baseStartX = (availableW * 0.5) - ((activeIndex + 0.5) * step);
-    if (groupWidth <= availableW - margin * 2.0)
-        baseStartX = (availableW - groupWidth) * 0.5;
-    else
-        baseStartX = std::clamp(baseStartX, minStart, maxStart);
+    // Always keep the active workspace in the horizontal center. Wheel/trackpad
+    // scrolling changes the active workspace by one, then this centered base is
+    // recalculated for the new active workspace. This intentionally allows empty
+    // space near the first/last workspace instead of clamping the strip to an edge.
+    const double baseStartX = (availableW * 0.5) - ((activeIndex + 0.5) * step);
+    workspaceScrollMin = 0.0;
+    workspaceScrollMax = 0.0;
 
-    workspaceScrollMin = groupWidth <= availableW - margin * 2.0 ? 0.0 : minStart - baseStartX;
-    workspaceScrollMax = groupWidth <= availableW - margin * 2.0 ? 0.0 : maxStart - baseStartX;
+    if (workspaceScrollOffset->value() != 0.0)
+        workspaceScrollOffset->setValueAndWarp(0.0);
 
-    const double clampedScroll = std::clamp<double>(workspaceScrollOffset->value(), workspaceScrollMin, workspaceScrollMax);
-    if (clampedScroll != workspaceScrollOffset->value())
-        workspaceScrollOffset->setValueAndWarp(clampedScroll);
-
-    const double startX = baseStartX + clampedScroll;
+    const double startX = baseStartX;
 
     // Keep previews above the AppDock area, with no bottom panel from the plugin itself.
     const double startY = std::max<double>(margin, ((availableH - workspaceBoxH) * 0.5));

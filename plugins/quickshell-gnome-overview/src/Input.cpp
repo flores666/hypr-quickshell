@@ -56,18 +56,31 @@ bool CHyprspaceWidget::axisEvent(double delta, wl_pointer_axis axis, Vector2D co
     if (!active)
         return true;
 
-    const double step = currentWorkspaceStep();
+    if (delta == 0.0)
+        return false;
+
     const double absDelta = std::abs(delta);
 
-    // Mouse wheel deltas are usually coarse. Move close to one workspace per
-    // notch, like GNOME, instead of creeping a few pixels at a time. Touchpad
-    // deltas stay smooth but use a higher multiplier than before.
-    const double amount = (absDelta >= 8.0 && step > 1.0)
-        ? (delta > 0.0 ? step * 0.82 : -step * 0.82)
-        : delta * (axis == WL_POINTER_AXIS_HORIZONTAL_SCROLL ? 10.0 : 8.5);
+    // A real mouse-wheel notch should move exactly one workspace. Do not use a
+    // pixel scroll offset here: changing the active workspace lets draw() keep
+    // that workspace centered, which matches the GNOME overview feeling better.
+    if (absDelta >= 8.0) {
+        switchOverviewWorkspaceBy(delta > 0.0 ? 1 : -1);
+        return false;
+    }
 
-    const double next = std::clamp<double>(workspaceScrollOffset->goal() - amount, workspaceScrollMin, workspaceScrollMax);
-    *workspaceScrollOffset = next;
+    // Touchpads send many small axis events. Accumulate them and emit one
+    // workspace switch only after a deliberate gesture threshold is crossed.
+    const double multiplier = axis == WL_POINTER_AXIS_HORIZONTAL_SCROLL ? 1.0 : 1.0;
+    workspaceScrollAccumulator += delta * multiplier;
+
+    constexpr double TOUCHPAD_WORKSPACE_STEP_THRESHOLD = 6.0;
+    if (std::abs(workspaceScrollAccumulator) >= TOUCHPAD_WORKSPACE_STEP_THRESHOLD) {
+        const int direction = workspaceScrollAccumulator > 0.0 ? 1 : -1;
+        workspaceScrollAccumulator = 0.0;
+        switchOverviewWorkspaceBy(direction);
+    }
+
     return false;
 }
 

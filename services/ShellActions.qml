@@ -197,6 +197,19 @@ QtObject {
         Hyprland.dispatch("workspace " + workspaceId)
     }
 
+    function selectWorkspaceInOverview(workspaceId) {
+        if (!workspaceId)
+            return
+
+        var target = Math.max(1, Math.floor(Number(workspaceId)))
+        if (isNaN(target))
+            return
+
+        closeActiveSpecialWorkspace()
+        Services.ShellState.activeWorkspace = target
+        Hyprland.dispatch("workspace " + target)
+    }
+
     function toggleSpecialWorkspace() {
         var name = specialWorkspaceDispatchName()
         Hyprland.dispatch(name.length > 0 ? "togglespecialworkspace " + name : "togglespecialworkspace")

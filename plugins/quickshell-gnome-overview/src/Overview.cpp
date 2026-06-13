@@ -24,6 +24,7 @@ CHyprspaceWidget::CHyprspaceWidget(uint64_t inOwnerID) {
     g_pAnimationManager->createAnimation(0.F, workspaceScrollOffset, curAnimationConfig.pValues.lock(), AVARDAMAGE_ENTIRE);
     curYOffset->setValueAndWarp(0);
     workspaceScrollOffset->setValueAndWarp(0);
+    workspaceScrollAccumulator = 0.0;
 }
 
 CHyprspaceWidget::~CHyprspaceWidget() {}
@@ -59,6 +60,30 @@ double CHyprspaceWidget::currentWorkspaceStep() const {
     return 300.0;
 }
 
+bool CHyprspaceWidget::switchOverviewWorkspaceBy(int direction) {
+    auto owner = getOwner();
+    if (!owner || direction == 0)
+        return false;
+
+    const int currentWorkspaceID = std::max(1, static_cast<int>(owner->activeWorkspaceID()));
+    const int targetWorkspaceID = std::max(1, currentWorkspaceID + (direction > 0 ? 1 : -1));
+    if (targetWorkspaceID == currentWorkspaceID)
+        return false;
+
+    closeOwnerSpecialWorkspace();
+
+    // The overview itself should stay open while the active workspace changes.
+    // The renderer always recenters around the current active workspace, so one
+    // wheel notch becomes exactly one centered workspace step.
+    workspaceScrollOffset->setValueAndWarp(0);
+    workspaceScrollAccumulator = 0.0;
+    owner->changeWorkspace(targetWorkspaceID);
+
+    g_pHyprRenderer->damageMonitor(owner);
+    g_pCompositor->scheduleFrameForMonitor(owner);
+    return true;
+}
+
 void CHyprspaceWidget::show() {
     const bool wasActive = active;
     auto owner = getOwner();
@@ -72,6 +97,7 @@ void CHyprspaceWidget::show() {
 
     active = true;
     workspaceScrollOffset->setValueAndWarp(0);
+    workspaceScrollAccumulator = 0.0;
     curYOffset->setValueAndWarp(0);
 
     lastWorkspaceHoverFrameValid = false;
@@ -96,6 +122,7 @@ void CHyprspaceWidget::hide() {
     active = false;
     workspaceBoxes.clear();
     workspaceScrollOffset->setValueAndWarp(0);
+    workspaceScrollAccumulator = 0.0;
     curYOffset->setValueAndWarp(0);
 
     workspaceHoverProgress.clear();
@@ -124,6 +151,7 @@ void CHyprspaceWidget::updateConfig() {
     g_pAnimationManager->createAnimation(0.F, workspaceScrollOffset, curAnimationConfig.pValues.lock(), AVARDAMAGE_ENTIRE);
     curYOffset->setValueAndWarp(0);
     workspaceScrollOffset->setValueAndWarp(0);
+    workspaceScrollAccumulator = 0.0;
 }
 
 bool CHyprspaceWidget::isActive() {

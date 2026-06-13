@@ -44,6 +44,10 @@ class CHyprspaceWidget {
     double workspaceScrollMin = 0.0;
     double workspaceScrollMax = 0.0;
 
+    // Smooth touchpad scrolling is accumulated and converted into exact one-workspace
+    // steps. Coarse mouse-wheel notches switch immediately by exactly one workspace.
+    double workspaceScrollAccumulator = 0.0;
+
     // Per-workspace hover progress for the small GNOME-like zoom on hover.
     std::unordered_map<int, float> workspaceHoverProgress;
     std::chrono::steady_clock::time_point lastWorkspaceHoverFrame;
@@ -52,6 +56,7 @@ class CHyprspaceWidget {
     double currentWorkspaceStep() const;
 
     void closeOwnerSpecialWorkspace();
+    bool switchOverviewWorkspaceBy(int direction);
 
 public:
 
