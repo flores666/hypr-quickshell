@@ -95,7 +95,7 @@ plugin {
         mainModToggle = true
         mainModKey = Super_L
         hotCorner = true
-        hotCornerSize = 8
+        hotCornerSize = 1
         hotCornerCooldown = 450
     }
 }

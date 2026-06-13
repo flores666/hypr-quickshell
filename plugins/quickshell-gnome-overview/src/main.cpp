@@ -65,7 +65,7 @@ float Config::dragAlpha = 0.2;
 bool Config::mainModToggle = true;
 std::string Config::mainModKey = "Super_L";
 bool Config::hotCorner = true;
-int Config::hotCornerSize = 8;
+int Config::hotCornerSize = 1;
 int Config::hotCornerCooldown = 450;
 
 int numWorkspaces = -1; //hyprsplit/split-monitor-workspaces support
@@ -120,6 +120,8 @@ static bool g_mainModCancelled = false;
 static xkb_keysym_t g_mainModKeysym = XKB_KEY_Super_L;
 static std::chrono::steady_clock::time_point g_mainModPressTime;
 static bool g_hotCornerInside = false;
+static bool g_hotCornerHasLastCoords = false;
+static Vector2D g_hotCornerLastCoords;
 static bool g_mouseButtonDown = false;
 static std::chrono::steady_clock::time_point g_hotCornerLastOpen = std::chrono::steady_clock::now() - std::chrono::seconds(10);
 
@@ -160,14 +162,11 @@ static bool isPointInHotCorner(PHLMONITORREF monitor, const Vector2D& coords) {
     const auto left = monitor->m_position.x;
     const auto top = monitor->m_position.y;
 
-    return coords.x >= left && coords.x <= left + size &&
-           coords.y >= top && coords.y <= top + size;
+    return coords.x >= left && coords.x < left + size &&
+           coords.y >= top && coords.y < top + size;
 }
 
 static void maybeOpenHotCorner() {
-    if (!Config::hotCorner || isAnyOverviewActive() || g_mouseButtonDown || g_mainModDown)
-        return;
-
     const auto monitor = g_pCompositor->getMonitorFromCursor();
     if (!monitor)
         return;
@@ -175,12 +174,32 @@ static void maybeOpenHotCorner() {
     const auto coords = g_pInputManager->getMouseCoordsInternal();
     const bool inside = isPointInHotCorner(monitor, coords);
 
+    if (!g_hotCornerHasLastCoords) {
+        g_hotCornerHasLastCoords = true;
+        g_hotCornerLastCoords = coords;
+        g_hotCornerInside = inside;
+        return;
+    }
+
+    const auto previous = g_hotCornerLastCoords;
+    const bool wasInside = isPointInHotCorner(monitor, previous);
+    g_hotCornerLastCoords = coords;
+
     if (!inside) {
         g_hotCornerInside = false;
         return;
     }
 
-    if (g_hotCornerInside)
+    // GNOME-like behavior: the overview opens only when the pointer is actively
+    // pushed into the top-left corner from outside. A pointer that is already
+    // resting in the corner must not open the overview on a passive hover.
+    const bool enteredCorner = !wasInside;
+    const bool movedTowardCorner = coords.x < previous.x || coords.y < previous.y;
+
+    if (!enteredCorner || !movedTowardCorner || g_hotCornerInside)
+        return;
+
+    if (!Config::hotCorner || isAnyOverviewActive() || g_mouseButtonDown || g_mainModDown)
         return;
 
     const auto now = std::chrono::steady_clock::now();
@@ -241,8 +260,8 @@ void onWorkspaceChange(PHLWORKSPACE pWorkspace) {
             widget->show();
 }
 
-// GNOME-like hot corner: entering the top-left corner opens overview.
-// It never toggles/close overview, so it is safe to use together with the dock button and mainMod toggle.
+// GNOME-like hot corner: pushing the pointer into the top-left pixel opens overview.
+// It never toggles/closes overview, so it is safe to use together with the dock button and mainMod toggle.
 void onMouseMove(const Vector2D&, SCallbackInfo&) {
     cancelMainModToggleGesture();
     maybeOpenHotCorner();
@@ -666,7 +685,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE inHandle) {
     HyprlandAPI::addConfigValue(pHandle, "plugin:overview:mainModToggle", Hyprlang::INT{1});
     HyprlandAPI::addConfigValue(pHandle, "plugin:overview:mainModKey", Hyprlang::STRING{"Super_L"});
     HyprlandAPI::addConfigValue(pHandle, "plugin:overview:hotCorner", Hyprlang::INT{1});
-    HyprlandAPI::addConfigValue(pHandle, "plugin:overview:hotCornerSize", Hyprlang::INT{8});
+    HyprlandAPI::addConfigValue(pHandle, "plugin:overview:hotCornerSize", Hyprlang::INT{1});
     HyprlandAPI::addConfigValue(pHandle, "plugin:overview:hotCornerCooldown", Hyprlang::INT{450});
 
     g_pConfigReloadHook = Event::bus()->m_events.config.reloaded.listen([]() { reloadConfig(); });
