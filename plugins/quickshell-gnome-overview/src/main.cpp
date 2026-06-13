@@ -302,8 +302,20 @@ void onWorkspaceChange(PHLWORKSPACE pWorkspace) {
 
 // GNOME-like hot corner: pushing the pointer into the top-left pixel opens overview.
 // It never toggles/closes overview, so it is safe to use together with the dock button and mainMod toggle.
-void onMouseMove(const Vector2D&, SCallbackInfo&) {
+void onMouseMove(const Vector2D&, SCallbackInfo& info) {
     cancelMainModToggleGesture();
+
+    const auto pMonitor = g_pCompositor->getMonitorFromCursor();
+    const auto widget = getWidgetForMonitor(pMonitor);
+    if (widget && widget->isActive()) {
+        // When overview is visible, pointer motion must not be forwarded to
+        // the real desktop below it. Otherwise clients on the original
+        // workspace can still receive drag motion and start selection boxes,
+        // which breaks the illusion that overview is an independent surface.
+        info.cancelled = true;
+        return;
+    }
+
     maybeOpenHotCorner();
 }
 
@@ -319,16 +331,17 @@ void onMouseButton(const IPointer::SButtonEvent& event, SCallbackInfo& info) {
     if (!pointer)
         return;
 
-    if (event.button != BTN_LEFT) return;
-
     const auto pressed = event.state == WL_POINTER_BUTTON_STATE_PRESSED;
     const auto pMonitor = g_pCompositor->getMonitorFromCursor();
     if (pMonitor) {
         const auto widget = getWidgetForMonitor(pMonitor);
-        if (widget) {
-            if (widget->isActive()) {
+        if (widget && widget->isActive()) {
+            if (event.button == BTN_LEFT)
                 info.cancelled = !widget->buttonEvent(pressed, g_pInputManager->getMouseCoordsInternal());
-            }
+            else
+                // Block non-left buttons too while overview is open, so
+                // right/middle clicks do not pass through to the desktop.
+                info.cancelled = true;
         }
     }
 
@@ -488,6 +501,7 @@ void onTouchMove(const ITouch::SMotionEvent& event, SCallbackInfo& info) {
 
     g_pCompositor->warpCursorTo(g_pTouchedMonitor->m_position + g_pTouchedMonitor->m_size * event.pos);
     g_pInputManager->simulateMouseMovement();
+    info.cancelled = true;
 }
 
 void onTouchUp(const ITouch::SUpEvent& event, SCallbackInfo& info) {
