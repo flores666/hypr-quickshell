@@ -63,7 +63,7 @@ write_snippet() {
 # It renders one fullscreen wallpaper blur/dim layer and a live workspace ribbon above it.
 
 exec-once = hyprctl plugin load $SO_PATH
-bind = SUPER, TAB, qs-gnome-overview:toggle
+bindr = \$mainMod, Super_L, qs-gnome-overview:toggle
 
 plugin {
     overview {

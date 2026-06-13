@@ -61,7 +61,7 @@ Item {
 
     signal popupOpened()
 
-    implicitWidth: overviewSectionWidth + appListViewportWidth
+    implicitWidth: appListViewportWidth + overviewSectionWidth
     implicitHeight: 62
     clip: true
 
@@ -1100,7 +1100,7 @@ Item {
 
     Item {
         id: overviewSlot
-        x: 0
+        x: root.appListViewportWidth
         anchors.verticalCenter: parent.verticalCenter
         width: root.overviewSectionWidth
         height: root.implicitHeight
@@ -1110,8 +1110,8 @@ Item {
         Rectangle {
             id: overviewButtonBackground
             anchors.verticalCenter: parent.verticalCenter
-            anchors.left: parent.left
-            anchors.leftMargin: 2
+            anchors.right: parent.right
+            anchors.rightMargin: 2
             width: root.overviewButtonVisualSize
             height: root.overviewButtonVisualSize
             radius: 16
@@ -1162,8 +1162,8 @@ Item {
         }
 
         Rectangle {
-            anchors.left: overviewButtonBackground.right
-            anchors.leftMargin: 8
+            anchors.right: overviewButtonBackground.left
+            anchors.rightMargin: 8
             anchors.verticalCenter: parent.verticalCenter
             width: 1
             height: 32
@@ -1175,7 +1175,7 @@ Item {
 
     ListView {
         id: appList
-        x: root.overviewSectionWidth
+        x: 0
         anchors.verticalCenter: parent.verticalCenter
         width: root.appListViewportWidth
         height: root.implicitHeight
