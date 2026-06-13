@@ -6,10 +6,12 @@
 #include <hyprland/src/debug/log/Logger.hpp>
 #include <hyprland/src/managers/SeatManager.hpp>
 #include <hyprland/src/desktop/view/Window.hpp>
+#include <hyprland/src/desktop/view/LayerSurface.hpp>
 #include <hyprutils/memory/SharedPtr.hpp>
 #include <any>
 #include <chrono>
 #include <cmath>
+#include <optional>
 #include "Overview.hpp"
 #include "Globals.hpp"
 
@@ -122,7 +124,6 @@ bool g_layoutNeedsRefresh = true;
 static bool g_mainModDown = false;
 static bool g_mainModCancelled = false;
 static xkb_keysym_t g_mainModKeysym = XKB_KEY_Super_L;
-static std::chrono::steady_clock::time_point g_mainModPressTime;
 static bool g_hotCornerInside = false;
 static bool g_hotCornerHasLastCoords = false;
 static Vector2D g_hotCornerLastCoords;
@@ -142,6 +143,77 @@ static bool isAnyOverviewActive() {
             return true;
     }
     return false;
+}
+
+static bool isFullscreenWorkspaceActive(PHLMONITORREF monitor) {
+    if (!monitor || !monitor->m_activeWorkspace)
+        return false;
+
+    const auto activeWorkspace = monitor->m_activeWorkspace;
+    for (auto& window : g_pCompositor->m_windows) {
+        if (!window)
+            continue;
+        if (!window->m_isMapped)
+            continue;
+        if (window->m_workspace != activeWorkspace)
+            continue;
+        if (window->isEffectiveInternalFSMode(FSMODE_FULLSCREEN))
+            return true;
+    }
+
+    return false;
+}
+
+static bool isQuickshellLayerNamespace(const std::string& ns) {
+    return ns.starts_with("quickshell") || ns.starts_with("quickshell:");
+}
+
+static bool boxContainsPoint(const std::optional<CBox>& box, const Vector2D& coords) {
+    return box.has_value() && box->containsPoint(coords);
+}
+
+static bool isCoordsOverInteractiveLayer(PHLMONITORREF monitor, const Vector2D& coords) {
+    if (!monitor)
+        return false;
+
+    const CBox monitorBox = {monitor->m_position, monitor->m_size};
+
+    // Let real layer surfaces such as the Quickshell topbar, AppDock and their
+    // PopupWindow/modal surfaces receive normal pointer events while overview is
+    // open. Background layers are skipped unless they are explicitly Quickshell
+    // surfaces, otherwise the desktop/wallpaper could receive input.
+    for (size_t layerIndex = 0; layerIndex < 4; ++layerIndex) {
+        for (auto& weakLayer : monitor->m_layerSurfaceLayers[layerIndex]) {
+            const auto layer = weakLayer.lock();
+            if (!layer)
+                continue;
+            if (!layer->m_mapped || layer->m_readyToDelete)
+                continue;
+
+            const bool quickshellLayer = isQuickshellLayerNamespace(layer->m_namespace);
+            if (layerIndex == 0 && !quickshellLayer)
+                continue;
+
+            const CBox realBox = {layer->m_realPosition->value(), layer->m_realSize->value()};
+            if (realBox.containsPoint(coords) || boxContainsPoint(layer->logicalBox(), coords) || boxContainsPoint(layer->surfaceLogicalBox(), coords))
+                return true;
+
+            // Qt/Wayland popups can extend outside the base layer-surface box.
+            // If a real popup tree is attached to a layer, give that layer input
+            // priority across the monitor. Quickshell's OutsideClickLayer then
+            // handles outside clicks, while hover/click inside large modal popup
+            // windows keeps working. Do not do this for every Quickshell panel,
+            // otherwise overview would stop blocking desktop clicks.
+            if (layer->popupsCount() > 0 && monitorBox.containsPoint(coords))
+                return true;
+        }
+    }
+
+    return false;
+}
+
+static bool shouldPassPointerToRealLayer(PHLMONITORREF monitor) {
+    return isCoordsOverInteractiveLayer(monitor, g_pInputManager->getMouseCoordsInternal());
 }
 
 static void toggleOverviewForCurrentMonitor() {
@@ -226,6 +298,11 @@ static void maybeOpenHotCorner() {
     if (!Config::hotCorner || isAnyOverviewActive() || g_mouseButtonDown || g_mainModDown)
         return;
 
+    // Match GNOME's safer hot-corner behavior: do not open overview over
+    // fullscreen video/game workspaces from an accidental corner hit.
+    if (isFullscreenWorkspaceActive(monitor))
+        return;
+
     if (!g_hotCornerApproachActive)
         return;
 
@@ -303,11 +380,16 @@ void onWorkspaceChange(PHLWORKSPACE pWorkspace) {
 // GNOME-like hot corner: pushing the pointer into the top-left pixel opens overview.
 // It never toggles/closes overview, so it is safe to use together with the dock button and mainMod toggle.
 void onMouseMove(const Vector2D&, SCallbackInfo& info) {
-    cancelMainModToggleGesture();
-
+    // Pointer motion alone should not cancel the mainMod gesture. Hyprland can
+    // emit synthetic motion during focus/cursor refresh, especially right after
+    // overview opens or closes. Cancelling on move made quick repeated Super
+    // presses feel delayed or ignored.
     const auto pMonitor = g_pCompositor->getMonitorFromCursor();
     const auto widget = getWidgetForMonitor(pMonitor);
     if (widget && widget->isActive()) {
+        if (shouldPassPointerToRealLayer(pMonitor))
+            return;
+
         // When overview is visible, pointer motion must not be forwarded to
         // the real desktop below it. Otherwise clients on the original
         // workspace can still receive drag motion and start selection boxes,
@@ -336,6 +418,9 @@ void onMouseButton(const IPointer::SButtonEvent& event, SCallbackInfo& info) {
     if (pMonitor) {
         const auto widget = getWidgetForMonitor(pMonitor);
         if (widget && widget->isActive()) {
+            if (shouldPassPointerToRealLayer(pMonitor))
+                return;
+
             if (event.button == BTN_LEFT)
                 info.cancelled = !widget->buttonEvent(pressed, g_pInputManager->getMouseCoordsInternal());
             else
@@ -356,6 +441,9 @@ void onMouseAxis(const IPointer::SAxisEvent& event, SCallbackInfo& info) {
         const auto widget = getWidgetForMonitor(pMonitor);
         if (widget) {
             if (widget->isActive()) {
+                if (shouldPassPointerToRealLayer(pMonitor))
+                    return;
+
                 info.cancelled = !widget->axisEvent(event.delta, event.axis, g_pInputManager->getMouseCoordsInternal());
             }
         }
@@ -424,15 +512,12 @@ void onKeyPress(const IKeyboard::SKeyEvent& event, SCallbackInfo& info) {
                 const uint32_t mods = keyboard->getModifiers();
                 const uint32_t unsafeOtherMods = mods & (HL_MODIFIER_SHIFT | HL_MODIFIER_CTRL | HL_MODIFIER_ALT | HL_MODIFIER_MOD2 | HL_MODIFIER_MOD3 | HL_MODIFIER_MOD5);
                 g_mainModCancelled = unsafeOtherMods != 0;
-                g_mainModPressTime = std::chrono::steady_clock::now();
             }
             return;
         }
 
         if (released && g_mainModDown) {
-            const auto heldMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::steady_clock::now() - g_mainModPressTime).count();
-            const bool safeSinglePress = !g_mainModCancelled && heldMs >= 25;
+            const bool safeSinglePress = !g_mainModCancelled;
 
             g_mainModDown = false;
             g_mainModCancelled = false;

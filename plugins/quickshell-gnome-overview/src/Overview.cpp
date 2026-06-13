@@ -43,6 +43,12 @@ void CHyprspaceWidget::show() {
     if (!wasActive)
         notifyQuickshellOverviewState("open");
 
+    // Force Hyprland to re-evaluate pointer focus/cursor state when entering
+    // the virtual overview area. Without this, the cursor shape can remain
+    // stuck as the shape from the previously hovered client.
+    g_pInputManager->refocus();
+    g_pInputManager->simulateMouseMovement();
+
     g_pHyprRenderer->damageMonitor(owner);
     g_pCompositor->scheduleFrameForMonitor(owner);
 }
@@ -60,6 +66,9 @@ void CHyprspaceWidget::hide() {
 
     if (wasActive)
         notifyQuickshellOverviewState("close");
+
+    g_pInputManager->refocus();
+    g_pInputManager->simulateMouseMovement();
 
     g_pHyprRenderer->damageMonitor(owner);
     g_pCompositor->scheduleFrameForMonitor(owner);
