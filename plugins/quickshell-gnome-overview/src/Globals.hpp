@@ -92,6 +92,9 @@ namespace Config {
     // event happens while the modifier is held, the release is ignored.
     extern bool mainModToggle;
     extern std::string mainModKey;
+    extern bool hotCorner;
+    extern int hotCornerSize;
+    extern int hotCornerCooldown;
 }
 
 

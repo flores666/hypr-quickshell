@@ -94,6 +94,9 @@ plugin {
         exitKey = Escape
         mainModToggle = true
         mainModKey = Super_L
+        hotCorner = true
+        hotCornerSize = 8
+        hotCornerCooldown = 450
     }
 }
 EOF_SNIPPET

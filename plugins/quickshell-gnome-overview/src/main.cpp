@@ -64,6 +64,9 @@ float Config::dragAlpha = 0.2;
 
 bool Config::mainModToggle = true;
 std::string Config::mainModKey = "Super_L";
+bool Config::hotCorner = true;
+int Config::hotCornerSize = 8;
+int Config::hotCornerCooldown = 450;
 
 int numWorkspaces = -1; //hyprsplit/split-monitor-workspaces support
 
@@ -72,6 +75,7 @@ CHyprSignalListener g_pRenderHook;
 CHyprSignalListener g_pConfigReloadHook;
 CHyprSignalListener g_pOpenLayerHook;
 CHyprSignalListener g_pCloseLayerHook;
+CHyprSignalListener g_pMouseMoveHook;
 CHyprSignalListener g_pMouseButtonHook;
 CHyprSignalListener g_pMouseAxisHook;
 CHyprSignalListener g_pTouchDownHook;
@@ -115,6 +119,9 @@ static bool g_mainModDown = false;
 static bool g_mainModCancelled = false;
 static xkb_keysym_t g_mainModKeysym = XKB_KEY_Super_L;
 static std::chrono::steady_clock::time_point g_mainModPressTime;
+static bool g_hotCornerInside = false;
+static bool g_mouseButtonDown = false;
+static std::chrono::steady_clock::time_point g_hotCornerLastOpen = std::chrono::steady_clock::now() - std::chrono::seconds(10);
 
 // for restoring dragged window's alpha value
 float g_oAlpha = -1;
@@ -135,6 +142,55 @@ static void toggleOverviewForCurrentMonitor() {
         return;
 
     widget->isActive() ? widget->hide() : widget->show();
+}
+
+static void openOverviewForMonitor(PHLMONITORREF monitor) {
+    const auto widget = getWidgetForMonitor(monitor);
+    if (!widget || widget->isActive())
+        return;
+
+    widget->show();
+}
+
+static bool isPointInHotCorner(PHLMONITORREF monitor, const Vector2D& coords) {
+    if (!monitor || Config::hotCornerSize <= 0)
+        return false;
+
+    const auto size = static_cast<double>(Config::hotCornerSize);
+    const auto left = monitor->m_position.x;
+    const auto top = monitor->m_position.y;
+
+    return coords.x >= left && coords.x <= left + size &&
+           coords.y >= top && coords.y <= top + size;
+}
+
+static void maybeOpenHotCorner() {
+    if (!Config::hotCorner || isAnyOverviewActive() || g_mouseButtonDown || g_mainModDown)
+        return;
+
+    const auto monitor = g_pCompositor->getMonitorFromCursor();
+    if (!monitor)
+        return;
+
+    const auto coords = g_pInputManager->getMouseCoordsInternal();
+    const bool inside = isPointInHotCorner(monitor, coords);
+
+    if (!inside) {
+        g_hotCornerInside = false;
+        return;
+    }
+
+    if (g_hotCornerInside)
+        return;
+
+    const auto now = std::chrono::steady_clock::now();
+    const auto cooldownMs = std::chrono::duration_cast<std::chrono::milliseconds>(now - g_hotCornerLastOpen).count();
+    if (cooldownMs < Config::hotCornerCooldown)
+        return;
+
+    g_hotCornerInside = true;
+    g_hotCornerLastOpen = now;
+    openOverviewForMonitor(monitor);
 }
 
 static void cancelMainModToggleGesture() {
@@ -185,9 +241,21 @@ void onWorkspaceChange(PHLWORKSPACE pWorkspace) {
             widget->show();
 }
 
+// GNOME-like hot corner: entering the top-left corner opens overview.
+// It never toggles/close overview, so it is safe to use together with the dock button and mainMod toggle.
+void onMouseMove(const Vector2D&, SCallbackInfo&) {
+    cancelMainModToggleGesture();
+    maybeOpenHotCorner();
+}
+
 // event hook for click and drag interaction
 void onMouseButton(const IPointer::SButtonEvent& event, SCallbackInfo& info) {
     cancelMainModToggleGesture();
+    if (event.state == WL_POINTER_BUTTON_STATE_PRESSED)
+        g_mouseButtonDown = true;
+    else if (event.state == WL_POINTER_BUTTON_STATE_RELEASED)
+        g_mouseButtonDown = false;
+
     const SP<IPointer> pointer = g_pSeatManager->m_mouse.lock();
     if (!pointer)
         return;
@@ -516,6 +584,12 @@ void reloadConfig() {
     Config::dragAlpha = getConfigValueOr<Hyprlang::FLOAT>("plugin:overview:dragAlpha", Config::dragAlpha);
     Config::mainModToggle = getConfigValueOr<Hyprlang::INT>("plugin:overview:mainModToggle", Config::mainModToggle) != 0;
     Config::mainModKey = getConfigValueOr<Hyprlang::STRING>("plugin:overview:mainModKey", Config::mainModKey.c_str());
+    Config::hotCorner = getConfigValueOr<Hyprlang::INT>("plugin:overview:hotCorner", Config::hotCorner) != 0;
+    Config::hotCornerSize = getConfigValueOr<Hyprlang::INT>("plugin:overview:hotCornerSize", Config::hotCornerSize);
+    Config::hotCornerCooldown = getConfigValueOr<Hyprlang::INT>("plugin:overview:hotCornerCooldown", Config::hotCornerCooldown);
+    if (Config::hotCornerSize < 1) Config::hotCornerSize = 1;
+    if (Config::hotCornerCooldown < 0) Config::hotCornerCooldown = 0;
+
     g_mainModKeysym = xkb_keysym_from_name(Config::mainModKey.c_str(), XKB_KEYSYM_CASE_INSENSITIVE);
     if (g_mainModKeysym == XKB_KEY_NoSymbol) {
         Log::logger->log(Log::WARN, "Overview: invalid plugin:overview:mainModKey {}, fallback to Super_L", Config::mainModKey);
@@ -591,6 +665,9 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE inHandle) {
     HyprlandAPI::addConfigValue(pHandle, "plugin:overview:exitKey", Hyprlang::STRING{"Escape"});
     HyprlandAPI::addConfigValue(pHandle, "plugin:overview:mainModToggle", Hyprlang::INT{1});
     HyprlandAPI::addConfigValue(pHandle, "plugin:overview:mainModKey", Hyprlang::STRING{"Super_L"});
+    HyprlandAPI::addConfigValue(pHandle, "plugin:overview:hotCorner", Hyprlang::INT{1});
+    HyprlandAPI::addConfigValue(pHandle, "plugin:overview:hotCornerSize", Hyprlang::INT{8});
+    HyprlandAPI::addConfigValue(pHandle, "plugin:overview:hotCornerCooldown", Hyprlang::INT{450});
 
     g_pConfigReloadHook = Event::bus()->m_events.config.reloaded.listen([]() { reloadConfig(); });
     g_pStartHook = Event::bus()->m_events.start.listen([]() {
@@ -613,6 +690,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE inHandle) {
     g_pCloseLayerHook = Event::bus()->m_events.layer.closed.listen([](PHLLS) { g_layoutNeedsRefresh = true; });
 
 
+    g_pMouseMoveHook = listenCancellable<Vector2D>(Event::bus()->m_events.input.mouse.move, onMouseMove);
     g_pMouseButtonHook = listenCancellable<IPointer::SButtonEvent>(Event::bus()->m_events.input.mouse.button, onMouseButton);
     g_pMouseAxisHook = listenCancellable<IPointer::SAxisEvent>(Event::bus()->m_events.input.mouse.axis, onMouseAxis);
 
@@ -643,6 +721,7 @@ APICALL EXPORT void PLUGIN_EXIT() {
     g_pConfigReloadHook.reset();
     g_pOpenLayerHook.reset();
     g_pCloseLayerHook.reset();
+    g_pMouseMoveHook.reset();
     g_pMouseButtonHook.reset();
     g_pMouseAxisHook.reset();
     g_pTouchDownHook.reset();

@@ -47,3 +47,7 @@ plugin {
     }
 }
 ```
+
+### Live overview hot corner
+
+The live overview plugin opens on a single `$mainMod` press and also when the pointer enters the top-left hot corner. The hot corner only opens overview; it never toggles it closed. Configure it with `plugin:overview:hotCorner`, `hotCornerSize`, and `hotCornerCooldown`.
