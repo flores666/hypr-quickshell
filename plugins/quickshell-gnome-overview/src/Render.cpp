@@ -263,11 +263,25 @@ void CHyprspaceWidget::draw() {
     const double minStart = availableW - groupWidth - margin;
     const double maxStart = margin;
 
-    double startX = (availableW * 0.5) - ((activeIndex + 0.5) * step) + workspaceScrollOffset->value();
+    // Compute the natural ribbon origin first and clamp that base position before
+    // applying user scroll. Previously, when activeIndex was 0, startX was first
+    // centered and only then clamped to the left edge. Small scroll deltas were
+    // swallowed by that clamp, so scrolling from workspace 1 felt delayed and very
+    // insensitive. Keeping scroll as a separate relative offset fixes that.
+    double baseStartX = (availableW * 0.5) - ((activeIndex + 0.5) * step);
     if (groupWidth <= availableW - margin * 2.0)
-        startX = (availableW - groupWidth) * 0.5 + workspaceScrollOffset->value();
+        baseStartX = (availableW - groupWidth) * 0.5;
     else
-        startX = std::clamp(startX, minStart, maxStart);
+        baseStartX = std::clamp(baseStartX, minStart, maxStart);
+
+    workspaceScrollMin = groupWidth <= availableW - margin * 2.0 ? 0.0 : minStart - baseStartX;
+    workspaceScrollMax = groupWidth <= availableW - margin * 2.0 ? 0.0 : maxStart - baseStartX;
+
+    const double clampedScroll = std::clamp<double>(workspaceScrollOffset->value(), workspaceScrollMin, workspaceScrollMax);
+    if (clampedScroll != workspaceScrollOffset->value())
+        workspaceScrollOffset->setValueAndWarp(clampedScroll);
+
+    const double startX = baseStartX + clampedScroll;
 
     // Keep previews above the AppDock area, with no bottom panel from the plugin itself.
     const double startY = std::max<double>(margin, ((availableH - workspaceBoxH) * 0.5));

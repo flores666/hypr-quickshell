@@ -36,6 +36,12 @@ class CHyprspaceWidget {
 
     PHLANIMVAR<float> workspaceScrollOffset;
 
+    // Scroll bounds are recalculated on every draw from the current workspace ribbon
+    // geometry. axisEvent clamps against them so scrolling from workspace 1 starts
+    // immediately instead of first fighting the final startX clamp in draw().
+    double workspaceScrollMin = 0.0;
+    double workspaceScrollMax = 0.0;
+
 public:
 
     // for slide-in animation and swiping

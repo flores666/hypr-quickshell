@@ -1,4 +1,5 @@
 #include <hyprland/src/desktop/view/Window.hpp>
+#include <algorithm>
 
 #include "Overview.hpp"
 #include "Globals.hpp"
@@ -47,7 +48,8 @@ bool CHyprspaceWidget::axisEvent(double delta, wl_pointer_axis axis, Vector2D co
         return true;
 
     const double speed = axis == WL_POINTER_AXIS_HORIZONTAL_SCROLL ? 2.0 : 1.5;
-    *workspaceScrollOffset = workspaceScrollOffset->goal() - delta * speed;
+    const double next = std::clamp<double>(workspaceScrollOffset->goal() - delta * speed, workspaceScrollMin, workspaceScrollMax);
+    *workspaceScrollOffset = next;
     return false;
 }
 
