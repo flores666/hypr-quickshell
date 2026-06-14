@@ -27,6 +27,7 @@ CHyprspaceWidget::CHyprspaceWidget(uint64_t inOwnerID) {
     workspaceScrollAccumulator = 0.0;
     workspaceSelectionAnimating = false;
     closeAfterWorkspaceSelectionAnimation = false;
+    closeNotifiedForWorkspaceSelection = false;
     workspaceSelectionFromID = 0;
     workspaceSelectionToID = 0;
 }
@@ -192,9 +193,13 @@ double CHyprspaceWidget::workspaceSelectionProgress() const {
     if (!workspaceSelectionAnimating)
         return 1.0;
 
-    constexpr double WORKSPACE_SELECTION_SECONDS = 0.22;
+    constexpr double WORKSPACE_SELECTION_SECONDS = 0.24;
     const double elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - workspaceSelectionAnimationStartedAt).count();
     return std::clamp(elapsed / WORKSPACE_SELECTION_SECONDS, 0.0, 1.0);
+}
+
+bool CHyprspaceWidget::workspaceSelectionCloseMorphActive() const {
+    return workspaceSelectionAnimating && closeAfterWorkspaceSelectionAnimation;
 }
 
 double CHyprspaceWidget::visualCenterWorkspaceIndex(const std::vector<int>& ids) const {
@@ -251,6 +256,9 @@ bool CHyprspaceWidget::startWorkspaceSelectionAnimation(int targetWorkspaceID, b
     workspaceSelectionFromID = currentWorkspaceID;
     workspaceSelectionToID = targetWorkspaceID;
     closeAfterWorkspaceSelectionAnimation = closeAfterAnimation;
+    closeNotifiedForWorkspaceSelection = closeAfterAnimation;
+    if (closeAfterAnimation)
+        notifyQuickshellOverviewState("close");
     workspaceSelectionAnimationStartedAt = std::chrono::steady_clock::now();
     workspaceSelectionAnimating = true;
     workspaceHoverProgress.clear();
@@ -271,6 +279,7 @@ void CHyprspaceWidget::finishWorkspaceSelectionAnimation() {
 
     workspaceSelectionAnimating = false;
     closeAfterWorkspaceSelectionAnimation = false;
+    closeNotifiedForWorkspaceSelection = false;
     workspaceSelectionFromID = 0;
     workspaceSelectionToID = 0;
     centeredWorkspaceID = targetWorkspaceID;
@@ -286,8 +295,16 @@ void CHyprspaceWidget::finishWorkspaceSelectionAnimation() {
         warpWorkspaceTransitionState(targetWorkspaceID);
     }
 
-    if (shouldClose)
-        hide();
+    if (shouldClose) {
+        // The preview has already swiped and morphed to fullscreen during the
+        // selection animation, so do not start a second exit morph. Switch to
+        // the real workspace at the final frame and immediately release the
+        // overlay.
+        finishHide();
+        if (owner)
+            g_pHyprRenderer->damageMonitor(owner);
+        return;
+    }
 
     if (owner) {
         g_pHyprRenderer->damageMonitor(owner);
@@ -339,6 +356,7 @@ void CHyprspaceWidget::show() {
     overviewClosing = false;
     workspaceSelectionAnimating = false;
     closeAfterWorkspaceSelectionAnimation = false;
+    closeNotifiedForWorkspaceSelection = false;
     workspaceSelectionFromID = 0;
     workspaceSelectionToID = 0;
     centeredWorkspaceID = std::max(1, static_cast<int>(owner->activeWorkspaceID()));
@@ -369,6 +387,7 @@ void CHyprspaceWidget::finishHide() {
     overviewClosing = false;
     workspaceSelectionAnimating = false;
     closeAfterWorkspaceSelectionAnimation = false;
+    closeNotifiedForWorkspaceSelection = false;
     workspaceSelectionFromID = 0;
     workspaceSelectionToID = 0;
     centeredWorkspaceID = 0;
@@ -401,6 +420,10 @@ void CHyprspaceWidget::hide() {
 
     if (workspaceSelectionAnimating) {
         closeAfterWorkspaceSelectionAnimation = true;
+        if (!closeNotifiedForWorkspaceSelection) {
+            closeNotifiedForWorkspaceSelection = true;
+            notifyQuickshellOverviewState("close");
+        }
         g_pHyprRenderer->damageMonitor(owner);
         g_pCompositor->scheduleFrameForMonitor(owner);
         return;
@@ -455,6 +478,7 @@ void CHyprspaceWidget::updateConfig() {
     workspaceScrollAccumulator = 0.0;
     workspaceSelectionAnimating = false;
     closeAfterWorkspaceSelectionAnimation = false;
+    closeNotifiedForWorkspaceSelection = false;
     workspaceSelectionFromID = 0;
     workspaceSelectionToID = 0;
     overviewClosing = false;

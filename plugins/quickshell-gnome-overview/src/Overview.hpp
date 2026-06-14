@@ -81,12 +81,14 @@ class CHyprspaceWidget {
     std::chrono::steady_clock::time_point workspaceSelectionAnimationStartedAt;
     bool workspaceSelectionAnimating = false;
     bool closeAfterWorkspaceSelectionAnimation = false;
+    bool closeNotifiedForWorkspaceSelection = false;
     int workspaceSelectionFromID = 0;
     int workspaceSelectionToID = 0;
 
     double currentWorkspaceStep() const;
     double overviewOpenProgress() const;
     double workspaceSelectionProgress() const;
+    bool workspaceSelectionCloseMorphActive() const;
     double visualCenterWorkspaceIndex(const std::vector<int>& ids) const;
     bool isClosing() const;
     bool isSelectingWorkspace() const;

@@ -267,19 +267,21 @@ void CHyprspaceWidget::draw() {
     const CBox monitorClip = {{0, 0}, owner->m_transformedSize};
     const CBox fullWorkspaceBox = CBox{0, 0, owner->m_transformedSize.x, owner->m_transformedSize.y};
     const auto time = Time::steadyNow();
-    const double rawOpenProgress = overviewOpenProgress();
+    const bool selectionAnimationRunning = isSelectingWorkspace();
+    const bool selectionCloseMorphRunning = workspaceSelectionCloseMorphActive();
+    const double selectionProgress = selectionAnimationRunning ? workspaceSelectionProgress() : 1.0;
+    const double rawOpenProgress = selectionCloseMorphRunning ? (1.0 - selectionProgress) : overviewOpenProgress();
     if (isClosing() && rawOpenProgress <= 0.001) {
         finishHide();
         g_pHyprRenderer->damageMonitor(owner);
         return;
     }
 
-    const bool closingAnimationRunning = isClosing();
+    const bool closingAnimationRunning = isClosing() || selectionCloseMorphRunning;
     const bool morphAnimationRunning = rawOpenProgress < 0.999 || closingAnimationRunning;
     const double openProgress = closingAnimationRunning
         ? overviewEaseInOutCubic(rawOpenProgress)
         : overviewEaseOutCubic(rawOpenProgress);
-    const bool selectionAnimationRunning = isSelectingWorkspace();
 
     g_pHyprRenderer->m_renderData.clipBox = monitorClip;
 
@@ -328,6 +330,15 @@ void CHyprspaceWidget::draw() {
     const double visualCenterIndex = visualCenterWorkspaceIndex(workspaces);
     const int visualCenterIndexRounded = std::clamp(static_cast<int>(std::round(visualCenterIndex)), 0, static_cast<int>(workspaces.size()) - 1);
     const int visualCenterWorkspaceID = workspaces[visualCenterIndexRounded];
+    const int morphTargetWorkspaceID = selectionCloseMorphRunning && workspaceSelectionToID > 0
+        ? workspaceSelectionToID
+        : visualCenterWorkspaceID;
+    int morphTargetIndex = visualCenterIndexRounded;
+    if (selectionCloseMorphRunning && workspaceSelectionToID > 0) {
+        auto targetIt = std::find(workspaces.begin(), workspaces.end(), workspaceSelectionToID);
+        if (targetIt != workspaces.end())
+            morphTargetIndex = static_cast<int>(std::distance(workspaces.begin(), targetIt));
+    }
 
     const double step = std::max<double>(1.0, workspaceBoxW + workspaceGap - workspaceOverlap);
     // Keep the selected workspace visually centered. During click selection this
@@ -403,18 +414,22 @@ void CHyprspaceWidget::draw() {
             workspaceBox.y = centerY - workspaceBox.h * 0.5;
         }
 
-        const int directionFromCenter = static_cast<int>(index) - visualCenterIndexRounded;
-        const bool isCenteredPreview = wsID == visualCenterWorkspaceID;
+        const int directionFromTarget = static_cast<int>(index) - morphTargetIndex;
+        const bool isMorphTargetPreview = wsID == morphTargetWorkspaceID;
         float previewOpacity = 1.0F;
 
         if (morphAnimationRunning) {
-            if (isCenteredPreview) {
+            if (isMorphTargetPreview) {
+                // For click selection, this runs while visualCenterIndex is still
+                // moving from the old workspace to the clicked one. The clicked
+                // preview therefore swipes toward the center and grows toward
+                // fullscreen in one combined GNOME-like motion.
                 workspaceBox = overviewLerpBox(fullWorkspaceBox, workspaceBox, openProgress);
             } else {
                 const double sideProgress = overviewEaseOutQuart((rawOpenProgress - 0.16) / 0.84);
                 const double slideDistance = owner->m_transformedSize.x * 0.10;
                 CBox sideStartBox = workspaceBox;
-                sideStartBox.x += (directionFromCenter < 0 ? -slideDistance : slideDistance);
+                sideStartBox.x += (directionFromTarget < 0 ? -slideDistance : slideDistance);
                 workspaceBox = overviewLerpBox(sideStartBox, workspaceBox, sideProgress);
                 previewOpacity = static_cast<float>(sideProgress);
             }
@@ -459,7 +474,7 @@ void CHyprspaceWidget::draw() {
         // Keep the backdrop uniform. Do not draw a per-workspace background under windows,
         // otherwise gaps between tiled windows look like the background is split into pieces.
         if (!preview.hasVisibleWindow && preview.opacity > 0.001F) {
-            CHyprColor emptyColor = preview.wsID == visualCenterWorkspaceID ? Config::workspaceActiveBackground : Config::workspaceInactiveBackground;
+            CHyprColor emptyColor = preview.wsID == morphTargetWorkspaceID ? Config::workspaceActiveBackground : Config::workspaceInactiveBackground;
             emptyColor.a *= preview.opacity;
             renderRect(workspaceBox, emptyColor);
         }
@@ -492,7 +507,7 @@ void CHyprspaceWidget::draw() {
     // neighbors. While the opening morph is running, keep the centered
     // workspace on top too, so the fullscreen desktop visually shrinks into
     // the overview instead of being covered by the side previews.
-    const int topPreviewIndex = hoveredPreviewIndex >= 0 ? hoveredPreviewIndex : ((morphAnimationRunning || selectionAnimationRunning) ? visualCenterIndexRounded : -1);
+    const int topPreviewIndex = hoveredPreviewIndex >= 0 ? hoveredPreviewIndex : ((morphAnimationRunning || selectionAnimationRunning) ? morphTargetIndex : -1);
     for (size_t index = 0; index < previews.size(); ++index) {
         if (static_cast<int>(index) == topPreviewIndex)
             continue;
