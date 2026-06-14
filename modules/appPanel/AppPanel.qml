@@ -27,7 +27,7 @@ Item {
     property var contextAllWindows: []
     property bool workspaceMenuOpen: false
     property bool workspaceMenuHovered: false
-    property int workspaceCount: 10
+    property int workspaceCount: Services.ShellState.overviewWorkspaceCount
     property var pendingContextItem: null
     property var pendingContextActions: []
     property real pendingContextAnchorX: 0

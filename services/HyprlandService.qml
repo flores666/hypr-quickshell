@@ -15,6 +15,7 @@ Item {
     property bool monitorRefreshPendingAfterRun: false
     property bool workspaceRefreshQueued: false
     property bool workspaceRefreshPendingAfterRun: false
+    property bool compactWorkspaceQueued: false
 
     function currentWorkspaceId() {
         if (Hyprland.focusedWorkspace && Hyprland.focusedWorkspace.id)
@@ -90,6 +91,94 @@ Item {
         }
 
         workspacesProc.running = true;
+    }
+
+    function queueCompactWorkspaces() {
+        if (compactWorkspaceQueued)
+            return;
+
+        compactWorkspaceQueued = true;
+        compactWorkspaceTimer.restart();
+    }
+
+    function regularWindowForCompaction(window) {
+        if (!window || !window.address)
+            return false;
+        if (window.hiddenByShell)
+            return false;
+        if (String(window.workspaceName || "").indexOf("special:") === 0)
+            return false;
+
+        var id = Number(window.workspace || 0);
+        return !isNaN(id) && Math.floor(id) > 0;
+    }
+
+    function listHasWorkspace(list, workspaceId) {
+        var id = Math.floor(Number(workspaceId || 0));
+        for (var i = 0; i < list.length; i++) {
+            if (Math.floor(Number(list[i] || 0)) === id)
+                return true;
+        }
+        return false;
+    }
+
+    function compactRegularWorkspaces() {
+        compactWorkspaceQueued = false;
+
+        var windows = Services.ShellState.windows || [];
+        var regularWindows = [];
+        var occupied = [];
+
+        for (var i = 0; i < windows.length; i++) {
+            var window = windows[i] || {};
+            if (!regularWindowForCompaction(window))
+                continue;
+
+            var workspaceId = Math.floor(Number(window.workspace || 0));
+            regularWindows.push({
+                "address": String(window.address || ""),
+                "workspace": workspaceId
+            });
+
+            if (!listHasWorkspace(occupied, workspaceId))
+                occupied.push(workspaceId);
+        }
+
+        occupied.sort(function(a, b) { return a - b; });
+
+        var targetByWorkspace = {};
+        for (var o = 0; o < occupied.length; o++)
+            targetByWorkspace[String(occupied[o])] = o + 1;
+
+        var dispatched = false;
+        for (var w = 0; w < regularWindows.length; w++) {
+            var item = regularWindows[w];
+            var target = Number(targetByWorkspace[String(item.workspace)] || 0);
+            if (target > 0 && target !== item.workspace) {
+                Hyprland.dispatch("movetoworkspacesilent " + target + ",address:" + item.address);
+                dispatched = true;
+            }
+        }
+
+        var active = Math.floor(Number(Services.ShellState.activeWorkspace || 1));
+        var activeTarget = Number(targetByWorkspace[String(active)] || 0);
+        var trailingEmpty = Math.max(1, occupied.length + 1);
+
+        if (activeTarget > 0 && activeTarget !== active) {
+            Services.ShellState.activeWorkspace = activeTarget;
+            Hyprland.dispatch("workspace " + activeTarget);
+            dispatched = true;
+        } else if (active > trailingEmpty) {
+            Services.ShellState.activeWorkspace = trailingEmpty;
+            Hyprland.dispatch("workspace " + trailingEmpty);
+            dispatched = true;
+        }
+
+        if (dispatched) {
+            queueRefreshClients();
+            queueRefreshWorkspaces();
+            queueRefreshMonitors();
+        }
     }
 
 
@@ -285,6 +374,8 @@ Item {
         Services.ShellState.setWindows(nextWindows);
         if (focusedAddress !== "")
             Services.ShellState.focusedAddress = focusedAddress;
+
+        queueCompactWorkspaces();
     }
 
 
@@ -340,6 +431,13 @@ Item {
         onTriggered: service.refreshWorkspacesNow()
     }
 
+    Timer {
+        id: compactWorkspaceTimer
+        interval: 125
+        repeat: false
+        onTriggered: service.compactRegularWorkspaces()
+    }
+
     // Rare events can miss a client refresh, so keep a lightweight fallback.
     Timer {
         interval: 12000
@@ -348,6 +446,7 @@ Item {
         onTriggered: {
             service.queueRefreshClients();
             service.queueRefreshWorkspaces();
+            service.queueCompactWorkspaces();
         }
     }
 
@@ -444,6 +543,7 @@ Item {
             service.queueRefreshClients();
             service.queueRefreshMonitors();
             service.queueRefreshWorkspaces();
+            service.queueCompactWorkspaces();
         }
     }
 }

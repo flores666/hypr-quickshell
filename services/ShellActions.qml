@@ -191,17 +191,18 @@ QtObject {
         if (!workspaceId)
             return
 
+        var target = Services.ShellState.clampWorkspaceForSwitch(workspaceId)
         closeWorkspaceOverview()
         closeActiveSpecialWorkspace()
-        Services.ShellState.activeWorkspace = workspaceId
-        Hyprland.dispatch("workspace " + workspaceId)
+        Services.ShellState.activeWorkspace = target
+        Hyprland.dispatch("workspace " + target)
     }
 
     function selectWorkspaceInOverview(workspaceId) {
         if (!workspaceId)
             return
 
-        var target = Math.max(1, Math.floor(Number(workspaceId)))
+        var target = Services.ShellState.clampWorkspaceForSwitch(workspaceId)
         if (isNaN(target))
             return
 
@@ -225,7 +226,7 @@ QtObject {
         if (!window || !window.address)
             return
 
-        var target = Number(workspaceId || 0)
+        var target = Services.ShellState.clampWorkspaceForMove(workspaceId)
         if (isNaN(target) || target <= 0)
             return
 

@@ -52,19 +52,7 @@ std::vector<int> CHyprspaceWidget::overviewWorkspaceIds() const {
     if (!owner)
         return result;
 
-    int maxWorkspaceID = std::max(1, static_cast<int>(owner->activeWorkspaceID()));
-
-    for (auto& ws : g_pCompositor->getWorkspaces()) {
-        if (!ws || !ws->m_monitor)
-            continue;
-        if (ws->m_monitor->m_id != ownerID)
-            continue;
-        if (ws->m_id < 1)
-            continue;
-
-        maxWorkspaceID = std::max(maxWorkspaceID, static_cast<int>(ws->m_id));
-    }
-
+    std::vector<int> occupiedWorkspaceIDs;
     for (auto& window : g_pCompositor->m_windows) {
         if (!window || !window->m_isMapped || !window->m_workspace || !window->m_workspace->m_monitor)
             continue;
@@ -73,16 +61,24 @@ std::vector<int> CHyprspaceWidget::overviewWorkspaceIds() const {
         if (window->m_workspace->m_id < 1)
             continue;
 
-        maxWorkspaceID = std::max(maxWorkspaceID, static_cast<int>(window->m_workspace->m_id));
+        const int id = static_cast<int>(window->m_workspace->m_id);
+        if (std::find(occupiedWorkspaceIDs.begin(), occupiedWorkspaceIDs.end(), id) == occupiedWorkspaceIDs.end())
+            occupiedWorkspaceIDs.push_back(id);
     }
 
-    // GNOME-like overview should be a continuous ribbon. If 1, 2 and 4 are
-    // occupied, workspace 3 is still part of the strip and can be reached with
-    // one wheel step. We do not add endless empty workspaces after the last
-    // real/occupied workspace unless the plugin config explicitly asks for a
-    // new empty workspace preview.
+    // GNOME-like dynamic workspaces: the overview only shows the compact
+    // occupied count plus one trailing empty workspace. Large stale Hyprland
+    // workspace ids are ignored here; Quickshell's HyprlandService compacts
+    // windows that land there from hotkeys or hyprctl commands.
+    int maxWorkspaceID = occupiedWorkspaceIDs.empty() ? 1 : static_cast<int>(occupiedWorkspaceIDs.size()) + 1;
+    const int activeWorkspaceID = std::max(1, static_cast<int>(owner->activeWorkspaceID()));
+    if (activeWorkspaceID <= maxWorkspaceID)
+        maxWorkspaceID = std::max(maxWorkspaceID, activeWorkspaceID);
+    if (centeredWorkspaceID > 0 && centeredWorkspaceID <= maxWorkspaceID)
+        maxWorkspaceID = std::max(maxWorkspaceID, centeredWorkspaceID);
+
     if (Config::showNewWorkspace)
-        maxWorkspaceID = std::max(maxWorkspaceID, static_cast<int>(owner->activeWorkspaceID()) + 1);
+        maxWorkspaceID = std::max(maxWorkspaceID, static_cast<int>(occupiedWorkspaceIDs.size()) + 1);
 
     for (int id = 1; id <= maxWorkspaceID; ++id)
         result.push_back(id);
@@ -115,7 +111,9 @@ bool CHyprspaceWidget::switchOverviewWorkspaceBy(int direction) {
     if (ids.empty())
         return false;
 
-    const int currentWorkspaceID = std::max(1, static_cast<int>(owner->activeWorkspaceID()));
+    const int currentWorkspaceID = centeredWorkspaceID > 0
+        ? centeredWorkspaceID
+        : std::max(1, static_cast<int>(owner->activeWorkspaceID()));
     auto currentIt = std::find(ids.begin(), ids.end(), currentWorkspaceID);
     if (currentIt == ids.end())
         currentIt = std::lower_bound(ids.begin(), ids.end(), currentWorkspaceID);
@@ -130,9 +128,14 @@ bool CHyprspaceWidget::switchOverviewWorkspaceBy(int direction) {
 
     closeOwnerSpecialWorkspace();
 
-    // The overview itself should stay open while the active workspace changes.
-    // The renderer always recenters around the current active workspace, so one
-    // wheel notch becomes exactly one centered workspace step.
+    // Move the overview selection first. This makes empty in-between
+    // workspaces scrollable even when Hyprland has not created an actual
+    // workspace object for that number yet. If Hyprland can switch to the
+    // workspace, the workspace-change hook will keep this value in sync with
+    // the real active workspace. If it cannot, the visual strip still advances
+    // by exactly one slot and the next wheel notch can continue to the next
+    // occupied workspace.
+    centeredWorkspaceID = targetWorkspaceID;
     workspaceScrollOffset->setValueAndWarp(0);
     workspaceScrollAccumulator = 0.0;
     owner->changeWorkspace(targetWorkspaceID);
@@ -154,6 +157,7 @@ void CHyprspaceWidget::show() {
     closeOwnerSpecialWorkspace();
 
     active = true;
+    centeredWorkspaceID = std::max(1, static_cast<int>(owner->activeWorkspaceID()));
     workspaceScrollOffset->setValueAndWarp(0);
     workspaceScrollAccumulator = 0.0;
     curYOffset->setValueAndWarp(0);
@@ -178,6 +182,7 @@ void CHyprspaceWidget::hide() {
         return;
 
     active = false;
+    centeredWorkspaceID = 0;
     workspaceBoxes.clear();
     workspaceScrollOffset->setValueAndWarp(0);
     workspaceScrollAccumulator = 0.0;

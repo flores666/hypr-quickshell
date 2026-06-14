@@ -272,9 +272,13 @@ void CHyprspaceWidget::draw() {
     if (!(workspaceBoxW > 0 && workspaceBoxH > 0))
         return;
 
+    const int overviewCenterWorkspaceID = centeredWorkspaceID > 0
+        ? centeredWorkspaceID
+        : std::max(1, static_cast<int>(owner->activeWorkspaceID()));
+
     int activeIndex = 0;
     for (size_t i = 0; i < workspaces.size(); ++i) {
-        if (workspaces[i] == owner->activeWorkspaceID()) {
+        if (workspaces[i] == overviewCenterWorkspaceID) {
             activeIndex = static_cast<int>(i);
             break;
         }
@@ -392,7 +396,7 @@ void CHyprspaceWidget::draw() {
         // Keep the backdrop uniform. Do not draw a per-workspace background under windows,
         // otherwise gaps between tiled windows look like the background is split into pieces.
         if (!preview.hasVisibleWindow)
-            renderRect(workspaceBox, ws == owner->m_activeWorkspace ? Config::workspaceActiveBackground : Config::workspaceInactiveBackground);
+            renderRect(workspaceBox, preview.wsID == overviewCenterWorkspaceID ? Config::workspaceActiveBackground : Config::workspaceInactiveBackground);
 
         if (ws) {
             for (auto& w : g_pCompositor->m_windows) {

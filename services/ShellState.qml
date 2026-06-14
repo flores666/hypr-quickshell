@@ -23,6 +23,13 @@ QtObject {
     property int workspaceOverviewNonce: 0
 
     property int activeWorkspace: 1
+    // Number of workspaces that should be shown in the top bar.
+    // It follows GNOME-like dynamic workspaces: no fixed 1..10 strip, only
+    // the compact occupied range and the currently selected trailing empty workspace.
+    property int visibleWorkspaceCount: 1
+    // Count used by menus/overview. It includes one trailing empty workspace
+    // after the last occupied workspace so the user can create the next one naturally.
+    property int overviewWorkspaceCount: 1
     property string activeSpecialWorkspaceName: ""
     property string focusedAddress: ""
     property int closeTopbarPopupsNonce: 0
@@ -60,6 +67,50 @@ QtObject {
         var normalized = normalizeSpecialWorkspaceName(name);
         if (activeSpecialWorkspaceName !== normalized)
             activeSpecialWorkspaceName = normalized;
+    }
+
+    onActiveWorkspaceChanged: recomputeWorkspaceCounts()
+
+    function occupiedWorkspaceCount() {
+        return Math.max(0, (occupiedWorkspaces || []).length);
+    }
+
+    function recomputeWorkspaceCounts() {
+        // The service compacts occupied workspaces to 1..N. While Hyprland is
+        // still reporting a stale high id, use the amount of occupied slots, not
+        // the largest id, so the UI does not expand back to 1..10 or 1..4.
+        var occupiedCount = occupiedWorkspaceCount();
+        var active = normalizeWorkspaceId(activeWorkspace);
+        var nextEmpty = occupiedCount > 0 ? occupiedCount + 1 : 1;
+
+        var nextVisible = Math.max(1, occupiedCount);
+        if (active > 0 && active <= nextEmpty)
+            nextVisible = Math.max(nextVisible, active);
+
+        var nextOverview = Math.max(1, nextEmpty);
+
+        if (visibleWorkspaceCount !== nextVisible)
+            visibleWorkspaceCount = nextVisible;
+        if (overviewWorkspaceCount !== nextOverview)
+            overviewWorkspaceCount = nextOverview;
+    }
+
+    function clampWorkspaceForSwitch(workspaceId) {
+        var target = normalizeWorkspaceId(workspaceId);
+        if (target <= 0)
+            return 1;
+
+        var maxAllowed = Math.max(1, overviewWorkspaceCount);
+        return Math.max(1, Math.min(target, maxAllowed));
+    }
+
+    function clampWorkspaceForMove(workspaceId) {
+        var target = normalizeWorkspaceId(workspaceId);
+        if (target <= 0)
+            return 1;
+
+        var maxAllowed = Math.max(1, overviewWorkspaceCount);
+        return Math.max(1, Math.min(target, maxAllowed));
     }
 
     function isSpecialWorkspaceActive(name) {
@@ -226,6 +277,8 @@ QtObject {
         result.sort(function(a, b) { return a - b; });
         if (!numberListsEqual(occupiedWorkspaces, result))
             occupiedWorkspaces = result;
+
+        recomputeWorkspaceCounts();
     }
 
     function rebuildOccupiedWorkspaces() {

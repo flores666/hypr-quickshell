@@ -51,6 +51,13 @@ class CHyprspaceWidget {
 
     // Per-workspace hover progress for the small GNOME-like zoom on hover.
     std::unordered_map<int, float> workspaceHoverProgress;
+
+    // Workspace preview currently centered in the overview strip. This is
+    // intentionally separate from Hyprland's active workspace: empty in-between
+    // workspaces often do not exist until switched to, so the overview must be
+    // able to scroll through their numeric slot even before Hyprland creates
+    // a real workspace object for it.
+    int centeredWorkspaceID = 0;
     std::chrono::steady_clock::time_point lastWorkspaceHoverFrame;
     bool lastWorkspaceHoverFrameValid = false;
 

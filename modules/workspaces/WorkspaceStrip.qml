@@ -7,7 +7,7 @@ import "../../components" as Components
 Item {
     id: root
 
-    property int workspaceCount: 10
+    property int workspaceCount: Services.ShellState.visibleWorkspaceCount
 
     // Размеры считаются от базового 96 DPI и слегка компенсируют разные экраны.
     // Это помогает сохранить одинаковый вид цифр, точки active и капсул на мониторе и ноутбуке.
@@ -94,6 +94,12 @@ Item {
     }
 
     onCellWidthChanged: {
+        if (ready && !activeDotMove.running)
+            activeDotCenterX = workspaceCenterX(visualActiveWorkspace);
+        repaintWorkspaces();
+    }
+
+    onWorkspaceCountChanged: {
         if (ready && !activeDotMove.running)
             activeDotCenterX = workspaceCenterX(visualActiveWorkspace);
         repaintWorkspaces();

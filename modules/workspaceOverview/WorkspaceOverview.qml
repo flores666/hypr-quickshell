@@ -30,6 +30,7 @@ PanelWindow {
     property real dragStartOffset: 0
     property bool initializedForOpen: false
     property bool changingWorkspaceInsideOverview: false
+    property int centeredWorkspace: 0
 
     anchors {
         top: true
@@ -82,7 +83,10 @@ PanelWindow {
     }
 
     function centerActiveWorkspace(immediate) {
-        var offset = centerOffsetForWorkspace(activeWorkspace);
+        var centerId = normalizeWorkspaceId(centeredWorkspace);
+        if (centerId <= 0)
+            centerId = activeWorkspace;
+        var offset = centerOffsetForWorkspace(centerId);
         if (immediate)
             scrollBehavior.enabled = false;
         scrollOffset = offset;
@@ -117,35 +121,30 @@ PanelWindow {
 
     function buildWorkspaces() {
         var result = [];
+        var maxCount = Math.max(1, normalizeWorkspaceId(Services.ShellState.overviewWorkspaceCount || 1));
         var known = Services.ShellState.workspaces || [];
         for (var i = 0; i < known.length; i++) {
             var ws = known[i] || {};
             var id = normalizeWorkspaceId(ws.id);
-            if (id > 0 && !workspaceHasId(result, id))
+            if (id > 0 && id <= maxCount && !workspaceHasId(result, id))
                 result.push({ id: id, name: ws.name || String(id) });
         }
 
         var occupied = Services.ShellState.occupiedWorkspaces || [];
         for (var o = 0; o < occupied.length; o++) {
             var occupiedId = normalizeWorkspaceId(occupied[o]);
-            if (occupiedId > 0 && !workspaceHasId(result, occupiedId))
+            if (occupiedId > 0 && occupiedId <= maxCount && !workspaceHasId(result, occupiedId))
                 result.push({ id: occupiedId, name: String(occupiedId) });
         }
 
         var activeId = normalizeWorkspaceId(activeWorkspace);
-        if (activeId <= 0)
-            activeId = 1;
-
-        if (!workspaceHasId(result, activeId))
+        if (activeId > 0 && activeId <= maxCount && !workspaceHasId(result, activeId))
             result.push({ id: activeId, name: String(activeId) });
 
-        var highestId = activeId;
-        for (var h = 0; h < result.length; h++)
-            highestId = Math.max(highestId, normalizeWorkspaceId(result[h].id));
-
-        // Build a continuous GNOME-like ribbon. If workspaces 1, 2 and 4 have
-        // windows, workspace 3 is still shown and reachable with one wheel step.
-        for (var id = 1; id <= highestId; id++) {
+        // GNOME-like dynamic workspaces: show only the compact sequence and one
+        // trailing empty workspace. Stale Hyprland workspaces with large ids are
+        // intentionally hidden here because HyprlandService will compact them.
+        for (var id = 1; id <= maxCount; id++) {
             if (!workspaceHasId(result, id))
                 result.push({ id: id, name: String(id) });
         }
@@ -168,6 +167,7 @@ PanelWindow {
 
     function openOverview() {
         initializedForOpen = false;
+        centeredWorkspace = Math.max(1, normalizeWorkspaceId(activeWorkspace));
         buildWorkspaces();
         centerActiveWorkspace(true);
         initializedForOpen = true;
@@ -194,17 +194,24 @@ PanelWindow {
         if (isNaN(target) || target < 1)
             return;
 
+        var maxTarget = Math.max(1, normalizeWorkspaceId(Services.ShellState.overviewWorkspaceCount || 1));
+        target = clamp(target, 1, maxTarget);
+        centeredWorkspace = target;
+        centerActiveWorkspace(false);
         changingWorkspaceInsideOverview = true;
         Services.ShellActions.selectWorkspaceInOverview(target);
         workspaceChangeGuard.restart();
     }
 
     function scrollWorkspaceBy(direction) {
-        var current = normalizeWorkspaceId(activeWorkspace);
+        var current = normalizeWorkspaceId(centeredWorkspace);
+        if (current <= 0)
+            current = normalizeWorkspaceId(activeWorkspace);
         if (current <= 0)
             current = 1;
 
-        var target = Math.max(1, current + (direction > 0 ? 1 : -1));
+        var maxTarget = Math.max(1, normalizeWorkspaceId(Services.ShellState.overviewWorkspaceCount || 1));
+        var target = clamp(current + (direction > 0 ? 1 : -1), 1, maxTarget);
         if (target === current) {
             centerActiveWorkspace(false);
             return;
@@ -332,8 +339,10 @@ PanelWindow {
                     && !root.changingWorkspaceInsideOverview)
                 Services.ShellActions.closeWorkspaceOverview();
             root.refreshModel();
-            if (Services.ShellState.workspaceOverviewOpen)
+            if (Services.ShellState.workspaceOverviewOpen) {
+                root.centeredWorkspace = Math.max(1, root.normalizeWorkspaceId(root.activeWorkspace));
                 root.centerActiveWorkspace(false);
+            }
         }
     }
 
@@ -443,7 +452,7 @@ PanelWindow {
                         required property int index
 
                         readonly property int workspaceId: root.normalizeWorkspaceId(modelData.id)
-                        readonly property bool activeWorkspace: workspaceId === root.activeWorkspace
+                        readonly property bool activeWorkspace: workspaceId === (root.centeredWorkspace > 0 ? root.centeredWorkspace : root.activeWorkspace)
                         readonly property bool workspaceHovered: !Services.ShellState.shellPopupOpen && workspaceMouse.containsMouse
 
                         x: index * root.thumbnailStep
