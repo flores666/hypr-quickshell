@@ -577,7 +577,7 @@ void onKeyPress(const IKeyboard::SKeyEvent& event, SCallbackInfo& info) {
         const int shortcutWorkspaceID = workspaceNumberFromKeysym(keysym);
         if (shortcutWorkspaceID > 0 && g_mainModDown) {
             const auto widget = getActiveWidgetForMonitor(g_pCompositor->getMonitorFromCursor());
-            if (widget && widget->selectWorkspaceInOverview(shortcutWorkspaceID)) {
+            if (widget && widget->activateWorkspaceInOverview(shortcutWorkspaceID)) {
                 g_mainModCancelled = true;
                 info.cancelled = true;
                 return;

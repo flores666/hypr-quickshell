@@ -82,6 +82,7 @@ class CHyprspaceWidget {
     bool workspaceSelectionAnimating = false;
     bool closeAfterWorkspaceSelectionAnimation = false;
     bool closeNotifiedForWorkspaceSelection = false;
+    bool applyingWorkspaceActivation = false;
     int workspaceSelectionFromID = 0;
     int workspaceSelectionToID = 0;
 
@@ -132,6 +133,7 @@ public:
     // Used by Quickshell topbar clicks/scroll and by intercepted mainMod+N
     // shortcuts while overview is open.
     bool selectWorkspaceInOverview(int targetWorkspaceID);
+    bool activateWorkspaceInOverview(int targetWorkspaceID);
     bool selectWorkspaceInOverviewBy(int direction);
     bool syncExternalWorkspaceSwitch(int targetWorkspaceID);
 

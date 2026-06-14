@@ -28,6 +28,7 @@ CHyprspaceWidget::CHyprspaceWidget(uint64_t inOwnerID) {
     workspaceSelectionAnimating = false;
     closeAfterWorkspaceSelectionAnimation = false;
     closeNotifiedForWorkspaceSelection = false;
+    applyingWorkspaceActivation = false;
     workspaceSelectionFromID = 0;
     workspaceSelectionToID = 0;
 }
@@ -94,7 +95,7 @@ void CHyprspaceWidget::warpWorkspaceTransitionState(int visibleWorkspaceID) {
         ? visibleWorkspaceID
         : std::max(1, static_cast<int>(owner->activeWorkspaceID()));
 
-    auto warpWorkspace = [&](int workspaceID, bool visible) {
+    auto warpWorkspace = [&](int workspaceID) {
         const auto workspace = g_pCompositor->getWorkspaceByID(workspaceID);
         if (!workspace || !workspace->m_monitor)
             return;
@@ -103,26 +104,22 @@ void CHyprspaceWidget::warpWorkspaceTransitionState(int visibleWorkspaceID) {
         if (workspace->m_isSpecialWorkspace)
             return;
 
-        // Hyprland may already have started its normal workspace slide animation
-        // before/around changeWorkspace(). The overview has its own GNOME-like
-        // morph, so leave the compositor in the final state immediately.
+        // Only reset the compositor's slide offset. Do not force alpha or
+        // m_forceRendering here: Hyprland owns workspace visibility. Forcing
+        // alpha on a non-active workspace is what could leave the desktop in a
+        // visually blocked/half-hidden state after the overview released input.
         if (workspace->m_renderOffset)
             workspace->m_renderOffset->setValueAndWarp(Vector2D{0, 0});
-
-        if (workspace->m_alpha)
-            workspace->m_alpha->setValueAndWarp(visible ? 1.F : 0.F);
-
-        workspace->m_forceRendering = visible;
     };
 
     // Do not access g_pCompositor->m_workspaces directly: it is private in
     // current Hyprland versions. Warp only the public workspace objects we know
     // about from the overview ribbon plus the active and target workspaces.
     for (const int id : overviewWorkspaceIds())
-        warpWorkspace(id, id == targetID);
+        warpWorkspace(id);
 
-    warpWorkspace(std::max(1, static_cast<int>(owner->activeWorkspaceID())), false);
-    warpWorkspace(targetID, true);
+    warpWorkspace(std::max(1, static_cast<int>(owner->activeWorkspaceID())));
+    warpWorkspace(targetID);
 }
 
 std::vector<int> CHyprspaceWidget::overviewWorkspaceIds() const {
@@ -246,13 +243,22 @@ bool CHyprspaceWidget::startWorkspaceSelectionAnimation(int targetWorkspaceID, b
     workspaceScrollAccumulator = 0.0;
     workspaceScrollOffset->setValueAndWarp(0);
 
-    if (targetWorkspaceID == currentWorkspaceID) {
+    if (targetWorkspaceID == currentWorkspaceID && !closeAfterAnimation) {
         centeredWorkspaceID = targetWorkspaceID;
-        if (closeAfterAnimation)
-            hide();
         return true;
     }
 
+    if (targetWorkspaceID == currentWorkspaceID && closeAfterAnimation && owner->activeWorkspaceID() == targetWorkspaceID) {
+        centeredWorkspaceID = targetWorkspaceID;
+        hide();
+        return true;
+    }
+
+    // Even when the target is already centered, it can still differ from the
+    // real active Hyprland workspace. This happens after the topbar moved the
+    // overview ribbon without switching the desktop. In that case we must still
+    // run a close/activation morph and call changeWorkspace() at the end instead
+    // of just hiding the overlay back to the old workspace.
     workspaceSelectionFromID = currentWorkspaceID;
     workspaceSelectionToID = targetWorkspaceID;
     closeAfterWorkspaceSelectionAnimation = closeAfterAnimation;
@@ -290,9 +296,25 @@ void CHyprspaceWidget::finishWorkspaceSelectionAnimation() {
 
     if (owner && targetWorkspaceID > 0 && shouldClose) {
         suppressWorkspaceTransitionAnimation();
+
+        // This workspace switch is owned by the overview close animation. Keep
+        // onWorkspaceChange from treating it as a new external switch, otherwise
+        // the strip can briefly sync back to the previous workspace and then to
+        // the target again.
+        applyingWorkspaceActivation = true;
+
+        // Put Hyprland workspace render vars into the final state before and
+        // after the actual change. The overlay covers this frame, but it prevents
+        // the compositor's own workspace swipe from leaking through after the
+        // GNOME-like morph has finished.
+        warpWorkspaceTransitionState(targetWorkspaceID);
         if (owner->activeWorkspaceID() != targetWorkspaceID)
             owner->changeWorkspace(targetWorkspaceID);
         warpWorkspaceTransitionState(targetWorkspaceID);
+
+        // Keep the guard enabled until finishHide() flips active to false. Some
+        // Hyprland workspace-change notifications can be delivered after
+        // changeWorkspace() returns but before the overview overlay is released.
     }
 
     if (shouldClose) {
@@ -346,6 +368,13 @@ bool CHyprspaceWidget::selectWorkspaceInOverview(int targetWorkspaceID) {
     return startWorkspaceSelectionAnimation(targetWorkspaceID, false);
 }
 
+bool CHyprspaceWidget::activateWorkspaceInOverview(int targetWorkspaceID) {
+    if (!active || isClosing() || isSelectingWorkspace() || targetWorkspaceID < 1)
+        return false;
+
+    return startWorkspaceSelectionAnimation(targetWorkspaceID, true);
+}
+
 bool CHyprspaceWidget::selectWorkspaceInOverviewBy(int direction) {
     if (!active || isClosing() || isSelectingWorkspace() || direction == 0)
         return false;
@@ -354,23 +383,45 @@ bool CHyprspaceWidget::selectWorkspaceInOverviewBy(int direction) {
 }
 
 bool CHyprspaceWidget::syncExternalWorkspaceSwitch(int targetWorkspaceID) {
-    if (!active || isClosing() || isSelectingWorkspace() || targetWorkspaceID < 1)
+    if (applyingWorkspaceActivation)
+        return false;
+
+    if (!active || isClosing() || targetWorkspaceID < 1)
         return false;
 
     const auto owner = getOwner();
     if (!owner)
         return false;
 
+    // If Hyprland has already switched while overview is open, the user has
+    // performed a real workspace switch outside the topbar ribbon command
+    // path, for example mainMod+N or a custom hyprctl bind. Do not keep the
+    // overlay open on top of that new workspace. Animate the overview to the
+    // same target and release it at the end. This also fixes the race where
+    // Hyprland's bind fires before our key hook can cancel it.
+    if (isSelectingWorkspace()) {
+        workspaceSelectionToID = targetWorkspaceID;
+        closeAfterWorkspaceSelectionAnimation = true;
+        if (!closeNotifiedForWorkspaceSelection) {
+            closeNotifiedForWorkspaceSelection = true;
+            notifyQuickshellOverviewState("close");
+        }
+        g_pHyprRenderer->damageMonitor(owner);
+        g_pCompositor->scheduleFrameForMonitor(owner);
+        return true;
+    }
+
     const int currentWorkspaceID = centeredWorkspaceID > 0
         ? centeredWorkspaceID
         : std::max(1, static_cast<int>(owner->activeWorkspaceID()));
-    if (currentWorkspaceID == targetWorkspaceID)
-        return false;
 
-    // Do not close overview here. The real workspace may already have changed
-    // because the switch came from an external Hyprland bind; the overview only
-    // catches up visually with its own smooth ribbon animation.
-    return startWorkspaceSelectionAnimation(targetWorkspaceID, false);
+    if (currentWorkspaceID == targetWorkspaceID) {
+        centeredWorkspaceID = targetWorkspaceID;
+        hide();
+        return true;
+    }
+
+    return startWorkspaceSelectionAnimation(targetWorkspaceID, true);
 }
 
 void CHyprspaceWidget::show() {
@@ -391,6 +442,7 @@ void CHyprspaceWidget::show() {
     workspaceSelectionAnimating = false;
     closeAfterWorkspaceSelectionAnimation = false;
     closeNotifiedForWorkspaceSelection = false;
+    applyingWorkspaceActivation = false;
     workspaceSelectionFromID = 0;
     workspaceSelectionToID = 0;
     centeredWorkspaceID = std::max(1, static_cast<int>(owner->activeWorkspaceID()));
@@ -422,6 +474,7 @@ void CHyprspaceWidget::finishHide() {
     workspaceSelectionAnimating = false;
     closeAfterWorkspaceSelectionAnimation = false;
     closeNotifiedForWorkspaceSelection = false;
+    applyingWorkspaceActivation = false;
     workspaceSelectionFromID = 0;
     workspaceSelectionToID = 0;
     centeredWorkspaceID = 0;
@@ -451,6 +504,18 @@ void CHyprspaceWidget::hide() {
 
     if (!wasActive)
         return;
+
+    if (!workspaceSelectionAnimating && !overviewClosing && centeredWorkspaceID > 0) {
+        const int activeWorkspaceID = std::max(1, static_cast<int>(owner->activeWorkspaceID()));
+        if (centeredWorkspaceID != activeWorkspaceID) {
+            // Closing after the user only browsed the ribbon should return to the
+            // real active workspace, not morph the centered preview fullscreen and
+            // then reveal a different desktop. Route it through the same selection
+            // animation to keep the visual state deterministic.
+            startWorkspaceSelectionAnimation(activeWorkspaceID, true);
+            return;
+        }
+    }
 
     if (workspaceSelectionAnimating) {
         closeAfterWorkspaceSelectionAnimation = true;
@@ -513,6 +578,7 @@ void CHyprspaceWidget::updateConfig() {
     workspaceSelectionAnimating = false;
     closeAfterWorkspaceSelectionAnimation = false;
     closeNotifiedForWorkspaceSelection = false;
+    applyingWorkspaceActivation = false;
     workspaceSelectionFromID = 0;
     workspaceSelectionToID = 0;
     overviewClosing = false;
