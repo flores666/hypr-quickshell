@@ -279,7 +279,7 @@ void CHyprspaceWidget::draw() {
     const double openProgress = closingAnimationRunning
         ? overviewEaseInOutCubic(rawOpenProgress)
         : overviewEaseOutCubic(rawOpenProgress);
-    const bool openingAnimationRunning = !closingAnimationRunning && rawOpenProgress < 0.999;
+    const bool selectionAnimationRunning = isSelectingWorkspace();
 
     g_pHyprRenderer->m_renderData.clipBox = monitorClip;
 
@@ -325,24 +325,15 @@ void CHyprspaceWidget::draw() {
     if (!(workspaceBoxW > 0 && workspaceBoxH > 0))
         return;
 
-    const int overviewCenterWorkspaceID = centeredWorkspaceID > 0
-        ? centeredWorkspaceID
-        : std::max(1, static_cast<int>(owner->activeWorkspaceID()));
-
-    int activeIndex = 0;
-    for (size_t i = 0; i < workspaces.size(); ++i) {
-        if (workspaces[i] == overviewCenterWorkspaceID) {
-            activeIndex = static_cast<int>(i);
-            break;
-        }
-    }
+    const double visualCenterIndex = visualCenterWorkspaceIndex(workspaces);
+    const int visualCenterIndexRounded = std::clamp(static_cast<int>(std::round(visualCenterIndex)), 0, static_cast<int>(workspaces.size()) - 1);
+    const int visualCenterWorkspaceID = workspaces[visualCenterIndexRounded];
 
     const double step = std::max<double>(1.0, workspaceBoxW + workspaceGap - workspaceOverlap);
-    // Always keep the active workspace in the horizontal center. Wheel/trackpad
-    // scrolling changes the active workspace by one, then this centered base is
-    // recalculated for the new active workspace. This intentionally allows empty
-    // space near the first/last workspace instead of clamping the strip to an edge.
-    const double baseStartX = (availableW * 0.5) - ((activeIndex + 0.5) * step);
+    // Keep the selected workspace visually centered. During click selection this
+    // center moves fractionally from the old workspace to the target one, which
+    // creates a GNOME-like plugin-owned swipe before the exit morph starts.
+    const double baseStartX = (availableW * 0.5) - ((visualCenterIndex + 0.5) * step);
     workspaceScrollMin = 0.0;
     workspaceScrollMax = 0.0;
 
@@ -392,7 +383,7 @@ void CHyprspaceWidget::draw() {
         baseInputBox.x += owner->m_position.x;
         baseInputBox.y += owner->m_position.y;
 
-        const bool pointerOverWorkspace = !closingAnimationRunning && rawOpenProgress > 0.92 && !hoverBlockedByPopup && baseInputBox.containsPoint(mouseCoords);
+        const bool pointerOverWorkspace = !closingAnimationRunning && !selectionAnimationRunning && rawOpenProgress > 0.92 && !hoverBlockedByPopup && baseInputBox.containsPoint(mouseCoords);
         if (pointerOverWorkspace)
             hoveredPreviewIndex = static_cast<int>(index);
 
@@ -412,8 +403,8 @@ void CHyprspaceWidget::draw() {
             workspaceBox.y = centerY - workspaceBox.h * 0.5;
         }
 
-        const int directionFromCenter = static_cast<int>(index) - activeIndex;
-        const bool isCenteredPreview = wsID == overviewCenterWorkspaceID;
+        const int directionFromCenter = static_cast<int>(index) - visualCenterIndexRounded;
+        const bool isCenteredPreview = wsID == visualCenterWorkspaceID;
         float previewOpacity = 1.0F;
 
         if (morphAnimationRunning) {
@@ -468,7 +459,7 @@ void CHyprspaceWidget::draw() {
         // Keep the backdrop uniform. Do not draw a per-workspace background under windows,
         // otherwise gaps between tiled windows look like the background is split into pieces.
         if (!preview.hasVisibleWindow && preview.opacity > 0.001F) {
-            CHyprColor emptyColor = preview.wsID == overviewCenterWorkspaceID ? Config::workspaceActiveBackground : Config::workspaceInactiveBackground;
+            CHyprColor emptyColor = preview.wsID == visualCenterWorkspaceID ? Config::workspaceActiveBackground : Config::workspaceInactiveBackground;
             emptyColor.a *= preview.opacity;
             renderRect(workspaceBox, emptyColor);
         }
@@ -501,7 +492,7 @@ void CHyprspaceWidget::draw() {
     // neighbors. While the opening morph is running, keep the centered
     // workspace on top too, so the fullscreen desktop visually shrinks into
     // the overview instead of being covered by the side previews.
-    const int topPreviewIndex = hoveredPreviewIndex >= 0 ? hoveredPreviewIndex : (morphAnimationRunning ? activeIndex : -1);
+    const int topPreviewIndex = hoveredPreviewIndex >= 0 ? hoveredPreviewIndex : ((morphAnimationRunning || selectionAnimationRunning) ? visualCenterIndexRounded : -1);
     for (size_t index = 0; index < previews.size(); ++index) {
         if (static_cast<int>(index) == topPreviewIndex)
             continue;
@@ -513,6 +504,12 @@ void CHyprspaceWidget::draw() {
 
     g_pHyprRenderer->m_renderData.clipBox = monitorClip;
     g_pHyprRenderer->damageMonitor(owner);
-    if (morphAnimationRunning)
+
+    if (selectionAnimationRunning && workspaceSelectionProgress() >= 0.999) {
+        finishWorkspaceSelectionAnimation();
+        return;
+    }
+
+    if (morphAnimationRunning || selectionAnimationRunning)
         g_pCompositor->scheduleFrameForMonitor(owner);
 }

@@ -25,6 +25,10 @@ CHyprspaceWidget::CHyprspaceWidget(uint64_t inOwnerID) {
     curYOffset->setValueAndWarp(0);
     workspaceScrollOffset->setValueAndWarp(0);
     workspaceScrollAccumulator = 0.0;
+    workspaceSelectionAnimating = false;
+    closeAfterWorkspaceSelectionAnimation = false;
+    workspaceSelectionFromID = 0;
+    workspaceSelectionToID = 0;
 }
 
 CHyprspaceWidget::~CHyprspaceWidget() {
@@ -177,6 +181,120 @@ double CHyprspaceWidget::currentWorkspaceStep() const {
     return 300.0;
 }
 
+static double overviewSelectionEase(double value) {
+    const double t = std::clamp(value, 0.0, 1.0);
+    return t < 0.5
+        ? 4.0 * t * t * t
+        : 1.0 - std::pow(-2.0 * t + 2.0, 3.0) / 2.0;
+}
+
+double CHyprspaceWidget::workspaceSelectionProgress() const {
+    if (!workspaceSelectionAnimating)
+        return 1.0;
+
+    constexpr double WORKSPACE_SELECTION_SECONDS = 0.22;
+    const double elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - workspaceSelectionAnimationStartedAt).count();
+    return std::clamp(elapsed / WORKSPACE_SELECTION_SECONDS, 0.0, 1.0);
+}
+
+double CHyprspaceWidget::visualCenterWorkspaceIndex(const std::vector<int>& ids) const {
+    if (ids.empty())
+        return 0.0;
+
+    auto indexOfWorkspace = [&](int workspaceID) -> double {
+        auto it = std::find(ids.begin(), ids.end(), workspaceID);
+        if (it == ids.end()) {
+            it = std::lower_bound(ids.begin(), ids.end(), workspaceID);
+            if (it == ids.end())
+                return static_cast<double>(ids.size() - 1);
+        }
+        return static_cast<double>(std::distance(ids.begin(), it));
+    };
+
+    if (workspaceSelectionAnimating) {
+        const double fromIndex = indexOfWorkspace(workspaceSelectionFromID);
+        const double toIndex = indexOfWorkspace(workspaceSelectionToID);
+        const double progress = overviewSelectionEase(workspaceSelectionProgress());
+        return fromIndex + (toIndex - fromIndex) * progress;
+    }
+
+    const int centerID = centeredWorkspaceID > 0
+        ? centeredWorkspaceID
+        : (getOwner() ? std::max(1, static_cast<int>(getOwner()->activeWorkspaceID())) : 1);
+    return indexOfWorkspace(centerID);
+}
+
+bool CHyprspaceWidget::isSelectingWorkspace() const {
+    return workspaceSelectionAnimating;
+}
+
+bool CHyprspaceWidget::startWorkspaceSelectionAnimation(int targetWorkspaceID, bool closeAfterAnimation) {
+    auto owner = getOwner();
+    if (!owner || targetWorkspaceID < 1)
+        return false;
+
+    const int currentWorkspaceID = centeredWorkspaceID > 0
+        ? centeredWorkspaceID
+        : std::max(1, static_cast<int>(owner->activeWorkspaceID()));
+
+    closeOwnerSpecialWorkspace();
+    workspaceScrollAccumulator = 0.0;
+    workspaceScrollOffset->setValueAndWarp(0);
+
+    if (targetWorkspaceID == currentWorkspaceID) {
+        centeredWorkspaceID = targetWorkspaceID;
+        if (closeAfterAnimation)
+            hide();
+        return true;
+    }
+
+    workspaceSelectionFromID = currentWorkspaceID;
+    workspaceSelectionToID = targetWorkspaceID;
+    closeAfterWorkspaceSelectionAnimation = closeAfterAnimation;
+    workspaceSelectionAnimationStartedAt = std::chrono::steady_clock::now();
+    workspaceSelectionAnimating = true;
+    workspaceHoverProgress.clear();
+    lastWorkspaceHoverFrameValid = false;
+
+    g_pHyprRenderer->damageMonitor(owner);
+    g_pCompositor->scheduleFrameForMonitor(owner);
+    return true;
+}
+
+void CHyprspaceWidget::finishWorkspaceSelectionAnimation() {
+    if (!workspaceSelectionAnimating)
+        return;
+
+    auto owner = getOwner();
+    const int targetWorkspaceID = workspaceSelectionToID > 0 ? workspaceSelectionToID : centeredWorkspaceID;
+    const bool shouldClose = closeAfterWorkspaceSelectionAnimation;
+
+    workspaceSelectionAnimating = false;
+    closeAfterWorkspaceSelectionAnimation = false;
+    workspaceSelectionFromID = 0;
+    workspaceSelectionToID = 0;
+    centeredWorkspaceID = targetWorkspaceID;
+    workspaceScrollOffset->setValueAndWarp(0);
+    workspaceScrollAccumulator = 0.0;
+    workspaceHoverProgress.clear();
+    lastWorkspaceHoverFrameValid = false;
+
+    if (owner && targetWorkspaceID > 0) {
+        suppressWorkspaceTransitionAnimation();
+        if (owner->activeWorkspaceID() != targetWorkspaceID)
+            owner->changeWorkspace(targetWorkspaceID);
+        warpWorkspaceTransitionState(targetWorkspaceID);
+    }
+
+    if (shouldClose)
+        hide();
+
+    if (owner) {
+        g_pHyprRenderer->damageMonitor(owner);
+        g_pCompositor->scheduleFrameForMonitor(owner);
+    }
+}
+
 bool CHyprspaceWidget::switchOverviewWorkspaceBy(int direction) {
     auto owner = getOwner();
     if (!owner || direction == 0)
@@ -201,26 +319,7 @@ bool CHyprspaceWidget::switchOverviewWorkspaceBy(int direction) {
     if (targetWorkspaceID == currentWorkspaceID)
         return false;
 
-    closeOwnerSpecialWorkspace();
-
-    // Move the overview selection first. This makes empty in-between
-    // workspaces scrollable even when Hyprland has not created an actual
-    // workspace object for that number yet. If Hyprland can switch to the
-    // workspace, the workspace-change hook will keep this value in sync with
-    // the real active workspace. If it cannot, the visual strip still advances
-    // by exactly one slot and the next wheel notch can continue to the next
-    // occupied workspace.
-    centeredWorkspaceID = targetWorkspaceID;
-    workspaceScrollOffset->setValueAndWarp(0);
-    workspaceScrollAccumulator = 0.0;
-
-    suppressWorkspaceTransitionAnimation();
-    owner->changeWorkspace(targetWorkspaceID);
-    warpWorkspaceTransitionState(targetWorkspaceID);
-
-    g_pHyprRenderer->damageMonitor(owner);
-    g_pCompositor->scheduleFrameForMonitor(owner);
-    return true;
+    return startWorkspaceSelectionAnimation(targetWorkspaceID, false);
 }
 
 void CHyprspaceWidget::show() {
@@ -238,6 +337,10 @@ void CHyprspaceWidget::show() {
 
     active = true;
     overviewClosing = false;
+    workspaceSelectionAnimating = false;
+    closeAfterWorkspaceSelectionAnimation = false;
+    workspaceSelectionFromID = 0;
+    workspaceSelectionToID = 0;
     centeredWorkspaceID = std::max(1, static_cast<int>(owner->activeWorkspaceID()));
     workspaceScrollOffset->setValueAndWarp(0);
     workspaceScrollAccumulator = 0.0;
@@ -261,8 +364,13 @@ void CHyprspaceWidget::show() {
 }
 
 void CHyprspaceWidget::finishHide() {
+    const int visibleWorkspaceID = centeredWorkspaceID;
     active = false;
     overviewClosing = false;
+    workspaceSelectionAnimating = false;
+    closeAfterWorkspaceSelectionAnimation = false;
+    workspaceSelectionFromID = 0;
+    workspaceSelectionToID = 0;
     centeredWorkspaceID = 0;
     workspaceBoxes.clear();
     workspaceScrollOffset->setValueAndWarp(0);
@@ -272,7 +380,7 @@ void CHyprspaceWidget::finishHide() {
     workspaceHoverProgress.clear();
     lastWorkspaceHoverFrameValid = false;
     overviewAnimationStarted = false;
-    warpWorkspaceTransitionState(centeredWorkspaceID);
+    warpWorkspaceTransitionState(visibleWorkspaceID);
     restoreWorkspaceTransitionAnimation();
 
     // After leaving overview, restore normal pointer focus/cursor state. Do it
@@ -290,6 +398,13 @@ void CHyprspaceWidget::hide() {
 
     if (!wasActive)
         return;
+
+    if (workspaceSelectionAnimating) {
+        closeAfterWorkspaceSelectionAnimation = true;
+        g_pHyprRenderer->damageMonitor(owner);
+        g_pCompositor->scheduleFrameForMonitor(owner);
+        return;
+    }
 
     if (!overviewClosing) {
         overviewClosing = true;
@@ -338,6 +453,10 @@ void CHyprspaceWidget::updateConfig() {
     curYOffset->setValueAndWarp(0);
     workspaceScrollOffset->setValueAndWarp(0);
     workspaceScrollAccumulator = 0.0;
+    workspaceSelectionAnimating = false;
+    closeAfterWorkspaceSelectionAnimation = false;
+    workspaceSelectionFromID = 0;
+    workspaceSelectionToID = 0;
     overviewClosing = false;
     overviewAnimationStarted = active;
     overviewAnimationStartedAt = std::chrono::steady_clock::now();

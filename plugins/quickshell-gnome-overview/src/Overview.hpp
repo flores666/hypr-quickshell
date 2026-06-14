@@ -74,9 +74,22 @@ class CHyprspaceWidget {
     std::chrono::steady_clock::time_point overviewClosingStartedAt;
     bool overviewClosing = false;
 
+    // When the user selects a side workspace in the overview, first animate the
+    // overview ribbon to that workspace and only then run the existing GNOME-like
+    // exit morph. This keeps the visual transition inside the plugin instead of
+    // letting Hyprland snap the selected preview to the center.
+    std::chrono::steady_clock::time_point workspaceSelectionAnimationStartedAt;
+    bool workspaceSelectionAnimating = false;
+    bool closeAfterWorkspaceSelectionAnimation = false;
+    int workspaceSelectionFromID = 0;
+    int workspaceSelectionToID = 0;
+
     double currentWorkspaceStep() const;
     double overviewOpenProgress() const;
+    double workspaceSelectionProgress() const;
+    double visualCenterWorkspaceIndex(const std::vector<int>& ids) const;
     bool isClosing() const;
+    bool isSelectingWorkspace() const;
     std::vector<int> overviewWorkspaceIds() const;
 
     void closeOwnerSpecialWorkspace();
@@ -85,6 +98,8 @@ class CHyprspaceWidget {
     void warpWorkspaceTransitionState(int visibleWorkspaceID);
     void finishHide();
     bool switchOverviewWorkspaceBy(int direction);
+    bool startWorkspaceSelectionAnimation(int targetWorkspaceID, bool closeAfterAnimation);
+    void finishWorkspaceSelectionAnimation();
 
 public:
 

@@ -9,7 +9,7 @@ bool CHyprspaceWidget::buttonEvent(bool pressed, Vector2D coords) {
     if (!active)
         return true;
 
-    if (isClosing())
+    if (isClosing() || isSelectingWorkspace())
         return false;
 
     if (pressed) {
@@ -40,19 +40,8 @@ bool CHyprspaceWidget::buttonEvent(bool pressed, Vector2D coords) {
         if (targetWorkspace && targetWorkspace->m_isSpecialWorkspace) {
             getOwner()->activeSpecialWorkspaceID() == targetWorkspaceID ? getOwner()->setSpecialWorkspace(nullptr) : getOwner()->setSpecialWorkspace(targetWorkspaceID);
         } else {
-            const auto owner = getOwner();
-            closeOwnerSpecialWorkspace();
-            centeredWorkspaceID = targetWorkspaceID;
-
-            // Empty in-between workspaces may not have a workspace object until
-            // we switch to them. Still allow selecting them from overview.
-            if (owner && owner->activeWorkspaceID() != targetWorkspaceID) {
-                suppressWorkspaceTransitionAnimation();
-                owner->changeWorkspace(targetWorkspaceID);
-                warpWorkspaceTransitionState(targetWorkspaceID);
-            }
+            startWorkspaceSelectionAnimation(targetWorkspaceID, true);
         }
-        hide();
         return false;
     }
 
@@ -66,7 +55,7 @@ bool CHyprspaceWidget::axisEvent(double delta, wl_pointer_axis axis, Vector2D co
     if (!active)
         return true;
 
-    if (isClosing())
+    if (isClosing() || isSelectingWorkspace())
         return false;
 
     if (delta == 0.0)
