@@ -46,8 +46,11 @@ bool CHyprspaceWidget::buttonEvent(bool pressed, Vector2D coords) {
 
             // Empty in-between workspaces may not have a workspace object until
             // we switch to them. Still allow selecting them from overview.
-            if (owner && owner->activeWorkspaceID() != targetWorkspaceID)
+            if (owner && owner->activeWorkspaceID() != targetWorkspaceID) {
+                suppressWorkspaceTransitionAnimation();
                 owner->changeWorkspace(targetWorkspaceID);
+                warpWorkspaceTransitionState(targetWorkspaceID);
+            }
         }
         hide();
         return false;

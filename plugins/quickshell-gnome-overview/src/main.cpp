@@ -216,6 +216,18 @@ static bool shouldPassPointerToRealLayer(PHLMONITORREF monitor) {
     return isCoordsOverInteractiveLayer(monitor, g_pInputManager->getMouseCoordsInternal());
 }
 
+static std::shared_ptr<CHyprspaceWidget> getActiveOverviewWidgetForCurrentMonitor() {
+    const auto monitor = g_pCompositor->getMonitorFromCursor();
+    if (!monitor)
+        return nullptr;
+
+    const auto widget = getWidgetForMonitor(monitor);
+    if (widget && widget->isActive())
+        return widget;
+
+    return nullptr;
+}
+
 static void toggleOverviewForCurrentMonitor() {
     const auto currentMonitor = g_pCompositor->getMonitorFromCursor();
     const auto widget = getWidgetForMonitor(currentMonitor);
@@ -455,15 +467,26 @@ void onMouseAxis(const IPointer::SAxisEvent& event, SCallbackInfo& info) {
 void onSwipeBegin(const IPointer::SSwipeBeginEvent& event, SCallbackInfo& info) {
     cancelMainModToggleGesture();
 
+    const auto widget = getActiveOverviewWidgetForCurrentMonitor();
+    if (widget) {
+        // While overview is visible, native Hyprland workspace-swipe gestures
+        // must not reach the compositor. The overview has its own wheel/touchpad
+        // navigation and its own morph animation, so the compositor swipe would
+        // appear as a second animation underneath it.
+        widget->beginSwipe(event);
+        info.cancelled = true;
+        return;
+    }
+
     if (Config::disableGestures) return;
 
-    const auto widget = getWidgetForMonitor(g_pCompositor->getMonitorFromCursor());
-    if (widget != nullptr)
-        widget->beginSwipe(event);
+    const auto inactiveWidget = getWidgetForMonitor(g_pCompositor->getMonitorFromCursor());
+    if (inactiveWidget != nullptr)
+        inactiveWidget->beginSwipe(event);
 
     // end other widget swipe
     for (auto& w : g_overviewWidgets) {
-        if (w != widget && w->isSwiping()) {
+        if (w != inactiveWidget && w->isSwiping()) {
             IPointer::SSwipeEndEvent dummy;
             dummy.cancelled = true;
             w->endSwipe(dummy);
@@ -473,22 +496,34 @@ void onSwipeBegin(const IPointer::SSwipeBeginEvent& event, SCallbackInfo& info) 
 
 // event hook for update swipe, most of the swiping mechanics are here
 void onSwipeUpdate(const IPointer::SSwipeUpdateEvent& event, SCallbackInfo& info) {
+    const auto widget = getActiveOverviewWidgetForCurrentMonitor();
+    if (widget) {
+        widget->updateSwipe(event);
+        info.cancelled = true;
+        return;
+    }
 
     if (Config::disableGestures) return;
 
-    const auto widget = getWidgetForMonitor(g_pCompositor->getMonitorFromCursor());
-    if (widget != nullptr)
-        info.cancelled = !widget->updateSwipe(event);
+    const auto inactiveWidget = getWidgetForMonitor(g_pCompositor->getMonitorFromCursor());
+    if (inactiveWidget != nullptr)
+        info.cancelled = !inactiveWidget->updateSwipe(event);
 }
 
 // event hook for end swipe
 void onSwipeEnd(const IPointer::SSwipeEndEvent& event, SCallbackInfo& info) {
+    const auto widget = getActiveOverviewWidgetForCurrentMonitor();
+    if (widget) {
+        widget->endSwipe(event);
+        info.cancelled = true;
+        return;
+    }
 
     if (Config::disableGestures) return;
 
-    const auto widget = getWidgetForMonitor(g_pCompositor->getMonitorFromCursor());
-    if (widget != nullptr)
-        widget->endSwipe(event);
+    const auto inactiveWidget = getWidgetForMonitor(g_pCompositor->getMonitorFromCursor());
+    if (inactiveWidget != nullptr)
+        inactiveWidget->endSwipe(event);
 }
 
 // Close overview with configurable key and implement safe GNOME-like mainMod toggle.

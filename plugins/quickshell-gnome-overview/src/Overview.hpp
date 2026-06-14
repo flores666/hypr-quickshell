@@ -15,6 +15,13 @@ class CHyprspaceWidget {
     Hyprutils::Animation::SAnimationPropertyConfig curAnimationConfig;
     Hyprutils::Animation::SAnimationPropertyConfig curAnimation;
 
+    // While the native overview is visible, Hyprland's own workspace
+    // transition animation must be suppressed. Otherwise selecting or scrolling
+    // workspaces inside the overview makes the real desktop perform its normal
+    // swipe/slide animation behind the custom GNOME-like morph.
+    Hyprutils::Animation::SAnimationPropertyConfig savedWorkspaceAnimation;
+    bool workspaceAnimationSuppressed = false;
+
     // for checking mouse hover for workspace drag and move
     // modified on draw call, accessed on mouse click and release
     std::vector<std::tuple<int, CBox>> workspaceBoxes;
@@ -73,6 +80,9 @@ class CHyprspaceWidget {
     std::vector<int> overviewWorkspaceIds() const;
 
     void closeOwnerSpecialWorkspace();
+    void suppressWorkspaceTransitionAnimation();
+    void restoreWorkspaceTransitionAnimation();
+    void warpWorkspaceTransitionState(int visibleWorkspaceID);
     void finishHide();
     bool switchOverviewWorkspaceBy(int direction);
 

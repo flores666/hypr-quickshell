@@ -27,7 +27,9 @@ CHyprspaceWidget::CHyprspaceWidget(uint64_t inOwnerID) {
     workspaceScrollAccumulator = 0.0;
 }
 
-CHyprspaceWidget::~CHyprspaceWidget() {}
+CHyprspaceWidget::~CHyprspaceWidget() {
+    restoreWorkspaceTransitionAnimation();
+}
 
 PHLMONITOR CHyprspaceWidget::getOwner() const {
     return g_pCompositor->getMonitorFromID(ownerID);
@@ -44,6 +46,79 @@ void CHyprspaceWidget::closeOwnerSpecialWorkspace() {
     owner->setSpecialWorkspace(nullptr);
 }
 
+void CHyprspaceWidget::suppressWorkspaceTransitionAnimation() {
+    auto workspaceAnimationConfig = Config::animationTree()->getAnimationPropertyConfig("workspaces");
+    if (!workspaceAnimationConfig)
+        return;
+
+    auto workspaceAnimationValues = workspaceAnimationConfig->pValues.lock();
+    if (!workspaceAnimationValues)
+        return;
+
+    if (!workspaceAnimationSuppressed) {
+        savedWorkspaceAnimation = *workspaceAnimationValues;
+        workspaceAnimationSuppressed = true;
+    }
+
+    workspaceAnimationValues->internalEnabled = 0;
+    workspaceAnimationValues->internalSpeed = 0.F;
+}
+
+void CHyprspaceWidget::restoreWorkspaceTransitionAnimation() {
+    if (!workspaceAnimationSuppressed)
+        return;
+
+    auto workspaceAnimationConfig = Config::animationTree()->getAnimationPropertyConfig("workspaces");
+    if (workspaceAnimationConfig) {
+        auto workspaceAnimationValues = workspaceAnimationConfig->pValues.lock();
+        if (workspaceAnimationValues)
+            *workspaceAnimationValues = savedWorkspaceAnimation;
+    }
+
+    workspaceAnimationSuppressed = false;
+}
+
+
+
+void CHyprspaceWidget::warpWorkspaceTransitionState(int visibleWorkspaceID) {
+    auto owner = getOwner();
+    if (!owner)
+        return;
+
+    const int targetID = visibleWorkspaceID > 0
+        ? visibleWorkspaceID
+        : std::max(1, static_cast<int>(owner->activeWorkspaceID()));
+
+    auto warpWorkspace = [&](int workspaceID, bool visible) {
+        const auto workspace = g_pCompositor->getWorkspaceByID(workspaceID);
+        if (!workspace || !workspace->m_monitor)
+            return;
+        if (workspace->m_monitor->m_id != ownerID)
+            return;
+        if (workspace->m_isSpecialWorkspace)
+            return;
+
+        // Hyprland may already have started its normal workspace slide animation
+        // before/around changeWorkspace(). The overview has its own GNOME-like
+        // morph, so leave the compositor in the final state immediately.
+        if (workspace->m_renderOffset)
+            workspace->m_renderOffset->setValueAndWarp(Vector2D{0, 0});
+
+        if (workspace->m_alpha)
+            workspace->m_alpha->setValueAndWarp(visible ? 1.F : 0.F);
+
+        workspace->m_forceRendering = visible;
+    };
+
+    // Do not access g_pCompositor->m_workspaces directly: it is private in
+    // current Hyprland versions. Warp only the public workspace objects we know
+    // about from the overview ribbon plus the active and target workspaces.
+    for (const int id : overviewWorkspaceIds())
+        warpWorkspace(id, id == targetID);
+
+    warpWorkspace(std::max(1, static_cast<int>(owner->activeWorkspaceID())), false);
+    warpWorkspace(targetID, true);
+}
 
 std::vector<int> CHyprspaceWidget::overviewWorkspaceIds() const {
     std::vector<int> result;
@@ -138,7 +213,10 @@ bool CHyprspaceWidget::switchOverviewWorkspaceBy(int direction) {
     centeredWorkspaceID = targetWorkspaceID;
     workspaceScrollOffset->setValueAndWarp(0);
     workspaceScrollAccumulator = 0.0;
+
+    suppressWorkspaceTransitionAnimation();
     owner->changeWorkspace(targetWorkspaceID);
+    warpWorkspaceTransitionState(targetWorkspaceID);
 
     g_pHyprRenderer->damageMonitor(owner);
     g_pCompositor->scheduleFrameForMonitor(owner);
@@ -156,6 +234,7 @@ void CHyprspaceWidget::show() {
     // workspace before overview becomes active, no matter whether overview was
     // opened from the dock button, the hot corner, or the single Super key.
     closeOwnerSpecialWorkspace();
+    suppressWorkspaceTransitionAnimation();
 
     active = true;
     overviewClosing = false;
@@ -193,6 +272,8 @@ void CHyprspaceWidget::finishHide() {
     workspaceHoverProgress.clear();
     lastWorkspaceHoverFrameValid = false;
     overviewAnimationStarted = false;
+    warpWorkspaceTransitionState(centeredWorkspaceID);
+    restoreWorkspaceTransitionAnimation();
 
     // After leaving overview, restore normal pointer focus/cursor state. Do it
     // only after the exit morph finishes, otherwise the real windows below the
