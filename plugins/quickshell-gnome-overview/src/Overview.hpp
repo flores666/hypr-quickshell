@@ -3,6 +3,7 @@
 #include <hyprutils/animation/AnimationConfig.hpp>
 #include <chrono>
 #include <unordered_map>
+#include <vector>
 
 class CHyprspaceWidget {
 
@@ -54,6 +55,7 @@ class CHyprspaceWidget {
     bool lastWorkspaceHoverFrameValid = false;
 
     double currentWorkspaceStep() const;
+    std::vector<int> overviewWorkspaceIds() const;
 
     void closeOwnerSpecialWorkspace();
     bool switchOverviewWorkspaceBy(int direction);
@@ -66,7 +68,7 @@ public:
     CHyprspaceWidget(uint64_t);
     ~CHyprspaceWidget();
 
-    PHLMONITOR getOwner();
+    PHLMONITOR getOwner() const;
     bool isActive();
 
     void show();

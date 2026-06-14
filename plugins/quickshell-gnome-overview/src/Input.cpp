@@ -18,29 +18,32 @@ bool CHyprspaceWidget::buttonEvent(bool pressed, Vector2D coords) {
         std::chrono::high_resolution_clock::now() - lastPressedTime).count() < 250;
 
     int targetWorkspaceID = SPECIAL_WORKSPACE_START - 1;
-    for (auto& w : workspaceBoxes) {
-        const auto id = std::get<0>(w);
-        const auto box = std::get<1>(w);
+    bool clickedWorkspacePreview = false;
+    // workspaceBoxes are stored in render order. Iterate from back to front so
+    // the hovered/zoomed workspace, which is drawn last, also wins clicks in
+    // the small overlap area.
+    for (auto it = workspaceBoxes.rbegin(); it != workspaceBoxes.rend(); ++it) {
+        const auto id = std::get<0>(*it);
+        const auto box = std::get<1>(*it);
         if (box.containsPoint(coords)) {
             targetWorkspaceID = id;
+            clickedWorkspacePreview = true;
             break;
         }
     }
 
     const auto targetWorkspace = g_pCompositor->getWorkspaceByID(targetWorkspaceID);
-    if (targetWorkspace) {
-        if (targetWorkspace->m_isSpecialWorkspace) {
+    if (clickedWorkspacePreview) {
+        if (targetWorkspace && targetWorkspace->m_isSpecialWorkspace) {
             getOwner()->activeSpecialWorkspaceID() == targetWorkspaceID ? getOwner()->setSpecialWorkspace(nullptr) : getOwner()->setSpecialWorkspace(targetWorkspaceID);
-        } else if (targetWorkspace->m_monitor) {
+        } else {
             const auto owner = getOwner();
             closeOwnerSpecialWorkspace();
 
-            // If this is the same regular workspace that was under the special
-            // workspace, only close the special/overview layers. Calling
-            // changeWorkspace on it again can race with Quickshell's stale
-            // activeSpecial state and reopen the special workspace.
-            if (!owner || owner->activeWorkspaceID() != targetWorkspace->m_id)
-                g_pCompositor->getMonitorFromID(targetWorkspace->m_monitor->m_id)->changeWorkspace(targetWorkspace->m_id);
+            // Empty in-between workspaces may not have a workspace object until
+            // we switch to them. Still allow selecting them from overview.
+            if (owner && owner->activeWorkspaceID() != targetWorkspaceID)
+                owner->changeWorkspace(targetWorkspaceID);
         }
         hide();
         return false;

@@ -14,6 +14,7 @@ PanelWindow {
     id: root
 
     property int panelSideInset: 5
+    readonly property bool popupsOpen: calendar.popupOpen || mediaPlayer.popupOpen || keyboardLayout.popupOpen || systemStatus.popupOpen
 
     anchors {
         top: true
@@ -31,8 +32,11 @@ PanelWindow {
     exclusiveZone: 37
 
     function anyPopupOpen() {
-        return calendar.popupOpen || mediaPlayer.popupOpen || keyboardLayout.popupOpen || systemStatus.popupOpen;
+        return popupsOpen;
     }
+
+    onPopupsOpenChanged: Services.ShellState.setTopbarPopupOpen(popupsOpen)
+    Component.onDestruction: Services.ShellState.setTopbarPopupOpen(false)
 
     function closePopups() {
         calendar.closePopup();
@@ -59,6 +63,7 @@ PanelWindow {
 
     Component.onCompleted: {
         Hyprland.rawEvent.connect(handleHyprlandRawEvent);
+        Services.ShellState.setTopbarPopupOpen(popupsOpen);
     }
 
     Connections {

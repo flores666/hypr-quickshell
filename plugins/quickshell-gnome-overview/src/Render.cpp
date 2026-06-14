@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <climits>
 #include <cmath>
+#include <optional>
 
 
 void renderRect(CBox box, CHyprColor color) {
@@ -174,6 +175,48 @@ bool renderFullscreenBackground(PHLMONITOR pMonitor, const CBox& monitorClip, co
     return rendered;
 }
 
+static bool isQuickshellLayerNamespaceForOverview(const std::string& ns) {
+    return ns.starts_with("quickshell") || ns.starts_with("quickshell:");
+}
+
+static bool boxContainsPointForOverview(const std::optional<CBox>& box, const Vector2D& coords) {
+    return box.has_value() && box->containsPoint(coords);
+}
+
+static bool isPointerOverInteractiveLayerForOverview(PHLMONITOR pMonitor, const Vector2D& coords) {
+    if (!pMonitor)
+        return false;
+
+    const CBox monitorBox = {pMonitor->m_position, pMonitor->m_size};
+
+    for (size_t layerIndex = 0; layerIndex < 4; ++layerIndex) {
+        for (auto& weakLayer : pMonitor->m_layerSurfaceLayers[layerIndex]) {
+            const auto layer = weakLayer.lock();
+            if (!layer)
+                continue;
+            if (!layer->m_mapped || layer->m_readyToDelete)
+                continue;
+
+            const bool quickshellLayer = isQuickshellLayerNamespaceForOverview(layer->m_namespace);
+            if (layerIndex == 0 && !quickshellLayer)
+                continue;
+
+            const CBox realBox = {layer->m_realPosition->value(), layer->m_realSize->value()};
+            if (realBox.containsPoint(coords) || boxContainsPointForOverview(layer->logicalBox(), coords) || boxContainsPointForOverview(layer->surfaceLogicalBox(), coords))
+                return true;
+
+            // When a Quickshell popup tree is open, disable workspace hover for
+            // the whole monitor. Otherwise the workspace under a calendar,
+            // system popup or AppDock menu still grows even though the popup is
+            // visually above the overview.
+            if (quickshellLayer && layer->popupsCount() > 0 && monitorBox.containsPoint(coords))
+                return true;
+        }
+    }
+
+    return false;
+}
+
 // Minimal overview renderer: fullscreen wallpaper dim + one continuous workspace strip with live windows only.
 void CHyprspaceWidget::draw() {
     workspaceBoxes.clear();
@@ -208,29 +251,7 @@ void CHyprspaceWidget::draw() {
     else
         renderRect(fullscreenDim, CHyprColor(0.02, 0.025, 0.032, 0.42));
 
-    std::vector<int> workspaces;
-    int highestID = std::max(1, static_cast<int>(owner->activeWorkspaceID()));
-
-    for (auto& ws : g_pCompositor->getWorkspaces()) {
-        if (!ws || !ws->m_monitor)
-            continue;
-        if (ws->m_monitor->m_id != ownerID)
-            continue;
-        if (ws->m_id < 1)
-            continue;
-
-        workspaces.push_back(ws->m_id);
-        highestID = std::max(highestID, static_cast<int>(ws->m_id));
-    }
-
-    if (Config::showEmptyWorkspace) {
-        for (int id = 1; id <= highestID; ++id)
-            workspaces.push_back(id);
-    }
-
-    std::sort(workspaces.begin(), workspaces.end());
-    workspaces.erase(std::unique(workspaces.begin(), workspaces.end()), workspaces.end());
-
+    const auto workspaces = overviewWorkspaceIds();
     if (workspaces.empty())
         return;
 
@@ -260,8 +281,6 @@ void CHyprspaceWidget::draw() {
     }
 
     const double step = std::max<double>(1.0, workspaceBoxW + workspaceGap - workspaceOverlap);
-    const double groupWidth = workspaceBoxW * workspaces.size() + (workspaceGap - workspaceOverlap) * std::max<int>(0, workspaces.size() - 1);
-
     // Always keep the active workspace in the horizontal center. Wheel/trackpad
     // scrolling changes the active workspace by one, then this centered base is
     // recalculated for the new active workspace. This intentionally allows empty
@@ -289,6 +308,21 @@ void CHyprspaceWidget::draw() {
     lastWorkspaceHoverFrameValid = true;
     const double hoverEase = std::clamp<double>(frameDt / 0.075, 0.0, 1.0);
     const auto mouseCoords = g_pInputManager->getMouseCoordsInternal();
+    const bool hoverBlockedByPopup = isPointerOverInteractiveLayerForOverview(owner, mouseCoords);
+
+    struct SWorkspacePreview {
+        int wsID = 0;
+        PHLWORKSPACE ws;
+        CBox box;
+        CBox inputBox;
+        double monitorScaleForPreview = 1.0;
+        bool hovered = false;
+        bool hasVisibleWindow = false;
+    };
+
+    std::vector<SWorkspacePreview> previews;
+    previews.reserve(workspaces.size());
+    int hoveredPreviewIndex = -1;
 
     for (size_t index = 0; index < workspaces.size(); ++index) {
         const int wsID = workspaces[index];
@@ -300,9 +334,12 @@ void CHyprspaceWidget::draw() {
         baseInputBox.x += owner->m_position.x;
         baseInputBox.y += owner->m_position.y;
 
-        const bool hoveredWorkspace = baseInputBox.containsPoint(mouseCoords);
+        const bool pointerOverWorkspace = !hoverBlockedByPopup && baseInputBox.containsPoint(mouseCoords);
+        if (pointerOverWorkspace)
+            hoveredPreviewIndex = static_cast<int>(index);
+
         float& hoverProgress = workspaceHoverProgress[wsID];
-        const float targetHover = hoveredWorkspace ? 1.0F : 0.0F;
+        const float targetHover = pointerOverWorkspace ? 1.0F : 0.0F;
         hoverProgress += (targetHover - hoverProgress) * static_cast<float>(hoverEase);
         if (std::abs(hoverProgress) < 0.001F)
             hoverProgress = 0.0F;
@@ -317,11 +354,19 @@ void CHyprspaceWidget::draw() {
             workspaceBox.y = centerY - workspaceBox.h * 0.5;
         }
 
-        const double monitorScaleForPreview = previewScale * hoverScale * owner->m_scale;
+        SWorkspacePreview preview;
+        preview.wsID = wsID;
+        preview.ws = ws;
+        preview.box = workspaceBox;
+        preview.monitorScaleForPreview = previewScale * hoverScale * owner->m_scale;
+        preview.hovered = pointerOverWorkspace;
 
-        // Keep the backdrop uniform. Do not draw a per-workspace background under windows,
-        // otherwise gaps between tiled windows look like the background is split into pieces.
-        bool hasVisibleWindow = false;
+        CBox inputBox = workspaceBox;
+        inputBox.scale(1 / owner->m_scale);
+        inputBox.x += owner->m_position.x;
+        inputBox.y += owner->m_position.y;
+        preview.inputBox = inputBox;
+
         if (ws) {
             for (auto& w : g_pCompositor->m_windows) {
                 if (!w)
@@ -331,12 +376,22 @@ void CHyprspaceWidget::draw() {
                 if (!w->m_isMapped)
                     continue;
 
-                hasVisibleWindow = true;
+                preview.hasVisibleWindow = true;
                 break;
             }
         }
 
-        if (!hasVisibleWindow)
+        previews.push_back(preview);
+    }
+
+    auto renderPreview = [&](const SWorkspacePreview& preview) {
+        const auto ws = preview.ws;
+        const CBox workspaceBox = preview.box;
+        const double monitorScaleForPreview = preview.monitorScaleForPreview;
+
+        // Keep the backdrop uniform. Do not draw a per-workspace background under windows,
+        // otherwise gaps between tiled windows look like the background is split into pieces.
+        if (!preview.hasVisibleWindow)
             renderRect(workspaceBox, ws == owner->m_activeWorkspace ? Config::workspaceActiveBackground : Config::workspaceInactiveBackground);
 
         if (ws) {
@@ -360,13 +415,19 @@ void CHyprspaceWidget::draw() {
             }
         }
 
-        // Input boxes are absolute logical coordinates.
-        CBox inputBox = workspaceBox;
-        inputBox.scale(1 / owner->m_scale);
-        inputBox.x += owner->m_position.x;
-        inputBox.y += owner->m_position.y;
-        workspaceBoxes.emplace_back(std::make_tuple(wsID, inputBox));
+        workspaceBoxes.emplace_back(std::make_tuple(preview.wsID, preview.inputBox));
+    };
+
+    // Draw the hovered preview last so its quick zoom appears above its
+    // neighbors instead of being clipped/covered by the next workspace.
+    for (size_t index = 0; index < previews.size(); ++index) {
+        if (static_cast<int>(index) == hoveredPreviewIndex)
+            continue;
+        renderPreview(previews[index]);
     }
+
+    if (hoveredPreviewIndex >= 0 && hoveredPreviewIndex < static_cast<int>(previews.size()))
+        renderPreview(previews[hoveredPreviewIndex]);
 
     g_pHyprRenderer->m_renderData.clipBox = monitorClip;
     g_pHyprRenderer->damageMonitor(owner);

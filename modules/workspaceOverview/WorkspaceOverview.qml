@@ -136,15 +136,19 @@ PanelWindow {
         if (activeId <= 0)
             activeId = 1;
 
-        var start = Math.max(1, activeId - 1);
-        var end = Math.max(activeId + 1, Math.min(4, activeId + 1));
-        for (var id = start; id <= end; id++) {
+        if (!workspaceHasId(result, activeId))
+            result.push({ id: activeId, name: String(activeId) });
+
+        var highestId = activeId;
+        for (var h = 0; h < result.length; h++)
+            highestId = Math.max(highestId, normalizeWorkspaceId(result[h].id));
+
+        // Build a continuous GNOME-like ribbon. If workspaces 1, 2 and 4 have
+        // windows, workspace 3 is still shown and reachable with one wheel step.
+        for (var id = 1; id <= highestId; id++) {
             if (!workspaceHasId(result, id))
                 result.push({ id: id, name: String(id) });
         }
-
-        if (!workspaceHasId(result, activeId))
-            result.push({ id: activeId, name: String(activeId) });
 
         result.sort(function(a, b) { return normalizeWorkspaceId(a.id) - normalizeWorkspaceId(b.id); });
 
@@ -440,7 +444,7 @@ PanelWindow {
 
                         readonly property int workspaceId: root.normalizeWorkspaceId(modelData.id)
                         readonly property bool activeWorkspace: workspaceId === root.activeWorkspace
-                        readonly property bool workspaceHovered: workspaceMouse.containsMouse
+                        readonly property bool workspaceHovered: !Services.ShellState.shellPopupOpen && workspaceMouse.containsMouse
 
                         x: index * root.thumbnailStep
                         width: root.thumbnailWidth
@@ -449,6 +453,7 @@ PanelWindow {
                         scale: activeWorkspace ? (workspaceHovered ? 1.04 : 1.025) : (workspaceHovered ? 1.035 : 1.0)
                         transformOrigin: Item.Center
                         opacity: 0.9 + overviewState.reveal * 0.1
+                        z: workspaceHovered ? 20 : (activeWorkspace ? 10 : 0)
 
                         Behavior on scale { NumberAnimation { duration: 105; easing.type: Easing.OutCubic } }
                         Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
@@ -491,7 +496,7 @@ PanelWindow {
                             MouseArea {
                                 id: workspaceMouse
                                 anchors.fill: parent
-                                hoverEnabled: true
+                                hoverEnabled: !Services.ShellState.shellPopupOpen
                                 acceptedButtons: Qt.LeftButton
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: function(mouse) {
@@ -511,7 +516,7 @@ PanelWindow {
                                     readonly property real cardWidth: root.safeWindowWidth(modelData)
                                     readonly property real cardHeight: root.safeWindowHeight(modelData)
                                     readonly property bool focusedWindow: root.windowIsFocused(modelData)
-                                    readonly property bool hoveredWindow: windowMouse.containsMouse
+                                    readonly property bool hoveredWindow: !Services.ShellState.shellPopupOpen && windowMouse.containsMouse
 
                                     x: root.safeWindowX(modelData, cardWidth)
                                     y: root.safeWindowY(modelData, cardHeight)
@@ -594,7 +599,7 @@ PanelWindow {
                                     MouseArea {
                                         id: windowMouse
                                         anchors.fill: parent
-                                        hoverEnabled: true
+                                        hoverEnabled: !Services.ShellState.shellPopupOpen
                                         acceptedButtons: Qt.LeftButton
                                         cursorShape: Qt.PointingHandCursor
                                         onClicked: function(mouse) {

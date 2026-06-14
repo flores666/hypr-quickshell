@@ -29,7 +29,7 @@ CHyprspaceWidget::CHyprspaceWidget(uint64_t inOwnerID) {
 
 CHyprspaceWidget::~CHyprspaceWidget() {}
 
-PHLMONITOR CHyprspaceWidget::getOwner() {
+PHLMONITOR CHyprspaceWidget::getOwner() const {
     return g_pCompositor->getMonitorFromID(ownerID);
 }
 
@@ -42,6 +42,52 @@ void CHyprspaceWidget::closeOwnerSpecialWorkspace() {
     // special overlay is left attached, selecting the underlying workspace can
     // make Hyprland/Quickshell toggle the same special workspace back on.
     owner->setSpecialWorkspace(nullptr);
+}
+
+
+std::vector<int> CHyprspaceWidget::overviewWorkspaceIds() const {
+    std::vector<int> result;
+
+    const auto owner = getOwner();
+    if (!owner)
+        return result;
+
+    int maxWorkspaceID = std::max(1, static_cast<int>(owner->activeWorkspaceID()));
+
+    for (auto& ws : g_pCompositor->getWorkspaces()) {
+        if (!ws || !ws->m_monitor)
+            continue;
+        if (ws->m_monitor->m_id != ownerID)
+            continue;
+        if (ws->m_id < 1)
+            continue;
+
+        maxWorkspaceID = std::max(maxWorkspaceID, static_cast<int>(ws->m_id));
+    }
+
+    for (auto& window : g_pCompositor->m_windows) {
+        if (!window || !window->m_isMapped || !window->m_workspace || !window->m_workspace->m_monitor)
+            continue;
+        if (window->m_workspace->m_monitor->m_id != ownerID)
+            continue;
+        if (window->m_workspace->m_id < 1)
+            continue;
+
+        maxWorkspaceID = std::max(maxWorkspaceID, static_cast<int>(window->m_workspace->m_id));
+    }
+
+    // GNOME-like overview should be a continuous ribbon. If 1, 2 and 4 are
+    // occupied, workspace 3 is still part of the strip and can be reached with
+    // one wheel step. We do not add endless empty workspaces after the last
+    // real/occupied workspace unless the plugin config explicitly asks for a
+    // new empty workspace preview.
+    if (Config::showNewWorkspace)
+        maxWorkspaceID = std::max(maxWorkspaceID, static_cast<int>(owner->activeWorkspaceID()) + 1);
+
+    for (int id = 1; id <= maxWorkspaceID; ++id)
+        result.push_back(id);
+
+    return result;
 }
 
 double CHyprspaceWidget::currentWorkspaceStep() const {
@@ -65,8 +111,20 @@ bool CHyprspaceWidget::switchOverviewWorkspaceBy(int direction) {
     if (!owner || direction == 0)
         return false;
 
+    const auto ids = overviewWorkspaceIds();
+    if (ids.empty())
+        return false;
+
     const int currentWorkspaceID = std::max(1, static_cast<int>(owner->activeWorkspaceID()));
-    const int targetWorkspaceID = std::max(1, currentWorkspaceID + (direction > 0 ? 1 : -1));
+    auto currentIt = std::find(ids.begin(), ids.end(), currentWorkspaceID);
+    if (currentIt == ids.end())
+        currentIt = std::lower_bound(ids.begin(), ids.end(), currentWorkspaceID);
+    if (currentIt == ids.end())
+        currentIt = ids.end() - 1;
+
+    const int currentIndex = static_cast<int>(std::distance(ids.begin(), currentIt));
+    const int targetIndex = std::clamp(currentIndex + (direction > 0 ? 1 : -1), 0, static_cast<int>(ids.size()) - 1);
+    const int targetWorkspaceID = ids[targetIndex];
     if (targetWorkspaceID == currentWorkspaceID)
         return false;
 

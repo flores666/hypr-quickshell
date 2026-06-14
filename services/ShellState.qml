@@ -26,10 +26,25 @@ QtObject {
     property string activeSpecialWorkspaceName: ""
     property string focusedAddress: ""
     property int closeTopbarPopupsNonce: 0
+    property bool topbarPopupOpen: false
+    property bool appDockPopupOpen: false
+    readonly property bool shellPopupOpen: topbarPopupOpen || appDockPopupOpen
 
 
     function requestCloseTopbarPopups() {
         closeTopbarPopupsNonce += 1;
+    }
+
+    function setTopbarPopupOpen(value) {
+        var next = !!value;
+        if (topbarPopupOpen !== next)
+            topbarPopupOpen = next;
+    }
+
+    function setAppDockPopupOpen(value) {
+        var next = !!value;
+        if (appDockPopupOpen !== next)
+            appDockPopupOpen = next;
     }
 
     function normalizeSpecialWorkspaceName(value) {
