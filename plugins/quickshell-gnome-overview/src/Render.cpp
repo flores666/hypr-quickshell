@@ -39,7 +39,7 @@ void renderBorder(CBox box, const Config::CGradientValueData& gradient, int size
     g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(data));
 }
 
-void renderWindowStub(PHLWINDOW pWindow, PHLMONITOR pMonitor, PHLWORKSPACE pWorkspaceOverride, CBox rectOverride, CBox clipBox, const Time::steady_tp& time) {
+void renderWindowStub(PHLWINDOW pWindow, PHLMONITOR pMonitor, PHLWORKSPACE pWorkspaceOverride, CBox rectOverride, CBox clipBox, const Time::steady_tp& time, float alpha = 1.F) {
     if (!pWindow || !pMonitor || !pWorkspaceOverride) return;
     if (!pWindow->m_isMapped || !pWindow->wlSurface() || !pWindow->wlSurface()->resource()) return;
 
@@ -72,8 +72,8 @@ void renderWindowStub(PHLWINDOW pWindow, PHLMONITOR pMonitor, PHLWORKSPACE pWork
     renderdata.h                    = std::max(oSize.y, 5.0);
     renderdata.surface              = pWindow->wlSurface()->resource();
     renderdata.dontRound            = pWindow->isEffectiveInternalFSMode(FSMODE_FULLSCREEN);
-    renderdata.fadeAlpha            = 1.F;
-    renderdata.alpha                = 1.F;
+    renderdata.fadeAlpha            = std::clamp(alpha, 0.F, 1.F);
+    renderdata.alpha                = std::clamp(alpha, 0.F, 1.F);
     renderdata.decorate             = false;
     renderdata.rounding             = renderdata.dontRound ? 0 : pWindow->rounding() * scaleMod * pMonitor->m_scale;
     renderdata.roundingPower        = renderdata.dontRound ? 2.0F : pWindow->roundingPower();
@@ -183,6 +183,33 @@ static bool boxContainsPointForOverview(const std::optional<CBox>& box, const Ve
     return box.has_value() && box->containsPoint(coords);
 }
 
+static double overviewClamp01(double value) {
+    return std::clamp(value, 0.0, 1.0);
+}
+
+static double overviewEaseOutCubic(double value) {
+    const double t = overviewClamp01(value);
+    const double inv = 1.0 - t;
+    return 1.0 - inv * inv * inv;
+}
+
+static double overviewEaseOutQuart(double value) {
+    const double t = overviewClamp01(value);
+    const double inv = 1.0 - t;
+    return 1.0 - inv * inv * inv * inv;
+}
+
+static double overviewLerp(double from, double to, double progress) {
+    return from + (to - from) * progress;
+}
+
+static CBox overviewLerpBox(const CBox& from, const CBox& to, double progress) {
+    return CBox{overviewLerp(from.x, to.x, progress),
+                overviewLerp(from.y, to.y, progress),
+                overviewLerp(from.w, to.w, progress),
+                overviewLerp(from.h, to.h, progress)};
+}
+
 static bool isPointerOverInteractiveLayerForOverview(PHLMONITOR pMonitor, const Vector2D& coords) {
     if (!pMonitor)
         return false;
@@ -229,7 +256,11 @@ void CHyprspaceWidget::draw() {
         return;
 
     const CBox monitorClip = {{0, 0}, owner->m_transformedSize};
+    const CBox fullWorkspaceBox = CBox{0, 0, owner->m_transformedSize.x, owner->m_transformedSize.y};
     const auto time = Time::steadyNow();
+    const double rawOpenProgress = overviewOpenProgress();
+    const double openProgress = overviewEaseOutCubic(rawOpenProgress);
+    const bool openingAnimationRunning = rawOpenProgress < 0.999;
 
     g_pHyprRenderer->m_renderData.clipBox = monitorClip;
 
@@ -246,10 +277,13 @@ void CHyprspaceWidget::draw() {
     // Do not draw any additional wallpaper/dim layer inside the strip itself, otherwise
     // the image looks like three separate layers instead of one unified GNOME-like canvas.
     const CBox fullscreenDim = CBox{0, 0, owner->m_transformedSize.x, owner->m_transformedSize.y};
-    if (!Config::disableBlur)
-        renderRectWithBlur(fullscreenDim, CHyprColor(0.02, 0.025, 0.032, 0.36));
-    else
-        renderRect(fullscreenDim, CHyprColor(0.02, 0.025, 0.032, 0.42));
+    const double dimAlpha = overviewLerp(0.0, Config::disableBlur ? 0.42 : 0.36, openProgress);
+    if (dimAlpha > 0.001) {
+        if (!Config::disableBlur)
+            renderRectWithBlur(fullscreenDim, CHyprColor(0.02, 0.025, 0.032, dimAlpha));
+        else
+            renderRect(fullscreenDim, CHyprColor(0.02, 0.025, 0.032, dimAlpha));
+    }
 
     const auto workspaces = overviewWorkspaceIds();
     if (workspaces.empty())
@@ -320,6 +354,7 @@ void CHyprspaceWidget::draw() {
         CBox box;
         CBox inputBox;
         double monitorScaleForPreview = 1.0;
+        float opacity = 1.0F;
         bool hovered = false;
         bool hasVisibleWindow = false;
     };
@@ -338,7 +373,7 @@ void CHyprspaceWidget::draw() {
         baseInputBox.x += owner->m_position.x;
         baseInputBox.y += owner->m_position.y;
 
-        const bool pointerOverWorkspace = !hoverBlockedByPopup && baseInputBox.containsPoint(mouseCoords);
+        const bool pointerOverWorkspace = rawOpenProgress > 0.92 && !hoverBlockedByPopup && baseInputBox.containsPoint(mouseCoords);
         if (pointerOverWorkspace)
             hoveredPreviewIndex = static_cast<int>(index);
 
@@ -358,11 +393,29 @@ void CHyprspaceWidget::draw() {
             workspaceBox.y = centerY - workspaceBox.h * 0.5;
         }
 
+        const int directionFromCenter = static_cast<int>(index) - activeIndex;
+        const bool isCenteredPreview = wsID == overviewCenterWorkspaceID;
+        float previewOpacity = 1.0F;
+
+        if (openingAnimationRunning) {
+            if (isCenteredPreview) {
+                workspaceBox = overviewLerpBox(fullWorkspaceBox, workspaceBox, openProgress);
+            } else {
+                const double sideProgress = overviewEaseOutQuart((rawOpenProgress - 0.16) / 0.84);
+                const double slideDistance = owner->m_transformedSize.x * 0.10;
+                CBox sideStartBox = workspaceBox;
+                sideStartBox.x += (directionFromCenter < 0 ? -slideDistance : slideDistance);
+                workspaceBox = overviewLerpBox(sideStartBox, workspaceBox, sideProgress);
+                previewOpacity = static_cast<float>(sideProgress);
+            }
+        }
+
         SWorkspacePreview preview;
         preview.wsID = wsID;
         preview.ws = ws;
         preview.box = workspaceBox;
-        preview.monitorScaleForPreview = previewScale * hoverScale * owner->m_scale;
+        preview.monitorScaleForPreview = (workspaceBox.w / std::max<double>(owner->m_transformedSize.x, 1.0)) * owner->m_scale;
+        preview.opacity = previewOpacity;
         preview.hovered = pointerOverWorkspace;
 
         CBox inputBox = workspaceBox;
@@ -371,7 +424,7 @@ void CHyprspaceWidget::draw() {
         inputBox.y += owner->m_position.y;
         preview.inputBox = inputBox;
 
-        if (ws) {
+        if (ws && preview.opacity > 0.001F) {
             for (auto& w : g_pCompositor->m_windows) {
                 if (!w)
                     continue;
@@ -395,10 +448,13 @@ void CHyprspaceWidget::draw() {
 
         // Keep the backdrop uniform. Do not draw a per-workspace background under windows,
         // otherwise gaps between tiled windows look like the background is split into pieces.
-        if (!preview.hasVisibleWindow)
-            renderRect(workspaceBox, preview.wsID == overviewCenterWorkspaceID ? Config::workspaceActiveBackground : Config::workspaceInactiveBackground);
+        if (!preview.hasVisibleWindow && preview.opacity > 0.001F) {
+            CHyprColor emptyColor = preview.wsID == overviewCenterWorkspaceID ? Config::workspaceActiveBackground : Config::workspaceInactiveBackground;
+            emptyColor.a *= preview.opacity;
+            renderRect(workspaceBox, emptyColor);
+        }
 
-        if (ws) {
+        if (ws && preview.opacity > 0.001F) {
             for (auto& w : g_pCompositor->m_windows) {
                 if (!w)
                     continue;
@@ -415,7 +471,7 @@ void CHyprspaceWidget::draw() {
                 if (!(wW > 1 && wH > 1))
                     continue;
 
-                renderWindowStub(w, owner, ws, CBox{wX, wY, wW, wH}, workspaceBox, time);
+                renderWindowStub(w, owner, ws, CBox{wX, wY, wW, wH}, workspaceBox, time, preview.opacity);
             }
         }
 
@@ -423,16 +479,21 @@ void CHyprspaceWidget::draw() {
     };
 
     // Draw the hovered preview last so its quick zoom appears above its
-    // neighbors instead of being clipped/covered by the next workspace.
+    // neighbors. While the opening morph is running, keep the centered
+    // workspace on top too, so the fullscreen desktop visually shrinks into
+    // the overview instead of being covered by the side previews.
+    const int topPreviewIndex = hoveredPreviewIndex >= 0 ? hoveredPreviewIndex : (openingAnimationRunning ? activeIndex : -1);
     for (size_t index = 0; index < previews.size(); ++index) {
-        if (static_cast<int>(index) == hoveredPreviewIndex)
+        if (static_cast<int>(index) == topPreviewIndex)
             continue;
         renderPreview(previews[index]);
     }
 
-    if (hoveredPreviewIndex >= 0 && hoveredPreviewIndex < static_cast<int>(previews.size()))
-        renderPreview(previews[hoveredPreviewIndex]);
+    if (topPreviewIndex >= 0 && topPreviewIndex < static_cast<int>(previews.size()))
+        renderPreview(previews[topPreviewIndex]);
 
     g_pHyprRenderer->m_renderData.clipBox = monitorClip;
     g_pHyprRenderer->damageMonitor(owner);
+    if (openingAnimationRunning)
+        g_pCompositor->scheduleFrameForMonitor(owner);
 }

@@ -164,8 +164,12 @@ void CHyprspaceWidget::show() {
 
     lastWorkspaceHoverFrameValid = false;
 
-    if (!wasActive)
+    if (!wasActive) {
+        overviewAnimationStarted = true;
+        overviewAnimationStartedAt = std::chrono::steady_clock::now();
+        workspaceHoverProgress.clear();
         notifyQuickshellOverviewState("open");
+    }
 
     // Do not synthesize pointer motion while entering overview. Sending motion
     // to the real client below the cursor made buttons/links under the preview
@@ -190,6 +194,7 @@ void CHyprspaceWidget::hide() {
 
     workspaceHoverProgress.clear();
     lastWorkspaceHoverFrameValid = false;
+    overviewAnimationStarted = false;
 
     if (wasActive)
         notifyQuickshellOverviewState("close");
@@ -200,6 +205,15 @@ void CHyprspaceWidget::hide() {
 
     g_pHyprRenderer->damageMonitor(owner);
     g_pCompositor->scheduleFrameForMonitor(owner);
+}
+
+double CHyprspaceWidget::overviewOpenProgress() const {
+    if (!overviewAnimationStarted)
+        return 1.0;
+
+    constexpr double OVERVIEW_OPEN_ANIMATION_SECONDS = 0.24;
+    const double elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - overviewAnimationStartedAt).count();
+    return std::clamp(elapsed / OVERVIEW_OPEN_ANIMATION_SECONDS, 0.0, 1.0);
 }
 
 void CHyprspaceWidget::updateConfig() {
@@ -215,6 +229,8 @@ void CHyprspaceWidget::updateConfig() {
     curYOffset->setValueAndWarp(0);
     workspaceScrollOffset->setValueAndWarp(0);
     workspaceScrollAccumulator = 0.0;
+    overviewAnimationStarted = active;
+    overviewAnimationStartedAt = std::chrono::steady_clock::now();
 }
 
 bool CHyprspaceWidget::isActive() {
