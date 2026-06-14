@@ -64,11 +64,16 @@ class CHyprspaceWidget {
     std::chrono::steady_clock::time_point overviewAnimationStartedAt;
     bool overviewAnimationStarted = false;
 
+    std::chrono::steady_clock::time_point overviewClosingStartedAt;
+    bool overviewClosing = false;
+
     double currentWorkspaceStep() const;
     double overviewOpenProgress() const;
+    bool isClosing() const;
     std::vector<int> overviewWorkspaceIds() const;
 
     void closeOwnerSpecialWorkspace();
+    void finishHide();
     bool switchOverviewWorkspaceBy(int direction);
 
 public:

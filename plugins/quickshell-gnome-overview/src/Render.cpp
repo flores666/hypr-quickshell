@@ -199,6 +199,15 @@ static double overviewEaseOutQuart(double value) {
     return 1.0 - inv * inv * inv * inv;
 }
 
+static double overviewEaseInOutCubic(double value) {
+    const double t = overviewClamp01(value);
+    if (t < 0.5)
+        return 4.0 * t * t * t;
+
+    const double inv = -2.0 * t + 2.0;
+    return 1.0 - (inv * inv * inv) / 2.0;
+}
+
 static double overviewLerp(double from, double to, double progress) {
     return from + (to - from) * progress;
 }
@@ -259,8 +268,18 @@ void CHyprspaceWidget::draw() {
     const CBox fullWorkspaceBox = CBox{0, 0, owner->m_transformedSize.x, owner->m_transformedSize.y};
     const auto time = Time::steadyNow();
     const double rawOpenProgress = overviewOpenProgress();
-    const double openProgress = overviewEaseOutCubic(rawOpenProgress);
-    const bool openingAnimationRunning = rawOpenProgress < 0.999;
+    if (isClosing() && rawOpenProgress <= 0.001) {
+        finishHide();
+        g_pHyprRenderer->damageMonitor(owner);
+        return;
+    }
+
+    const bool closingAnimationRunning = isClosing();
+    const bool morphAnimationRunning = rawOpenProgress < 0.999 || closingAnimationRunning;
+    const double openProgress = closingAnimationRunning
+        ? overviewEaseInOutCubic(rawOpenProgress)
+        : overviewEaseOutCubic(rawOpenProgress);
+    const bool openingAnimationRunning = !closingAnimationRunning && rawOpenProgress < 0.999;
 
     g_pHyprRenderer->m_renderData.clipBox = monitorClip;
 
@@ -373,7 +392,7 @@ void CHyprspaceWidget::draw() {
         baseInputBox.x += owner->m_position.x;
         baseInputBox.y += owner->m_position.y;
 
-        const bool pointerOverWorkspace = rawOpenProgress > 0.92 && !hoverBlockedByPopup && baseInputBox.containsPoint(mouseCoords);
+        const bool pointerOverWorkspace = !closingAnimationRunning && rawOpenProgress > 0.92 && !hoverBlockedByPopup && baseInputBox.containsPoint(mouseCoords);
         if (pointerOverWorkspace)
             hoveredPreviewIndex = static_cast<int>(index);
 
@@ -397,7 +416,7 @@ void CHyprspaceWidget::draw() {
         const bool isCenteredPreview = wsID == overviewCenterWorkspaceID;
         float previewOpacity = 1.0F;
 
-        if (openingAnimationRunning) {
+        if (morphAnimationRunning) {
             if (isCenteredPreview) {
                 workspaceBox = overviewLerpBox(fullWorkspaceBox, workspaceBox, openProgress);
             } else {
@@ -482,7 +501,7 @@ void CHyprspaceWidget::draw() {
     // neighbors. While the opening morph is running, keep the centered
     // workspace on top too, so the fullscreen desktop visually shrinks into
     // the overview instead of being covered by the side previews.
-    const int topPreviewIndex = hoveredPreviewIndex >= 0 ? hoveredPreviewIndex : (openingAnimationRunning ? activeIndex : -1);
+    const int topPreviewIndex = hoveredPreviewIndex >= 0 ? hoveredPreviewIndex : (morphAnimationRunning ? activeIndex : -1);
     for (size_t index = 0; index < previews.size(); ++index) {
         if (static_cast<int>(index) == topPreviewIndex)
             continue;
@@ -494,6 +513,6 @@ void CHyprspaceWidget::draw() {
 
     g_pHyprRenderer->m_renderData.clipBox = monitorClip;
     g_pHyprRenderer->damageMonitor(owner);
-    if (openingAnimationRunning)
+    if (morphAnimationRunning)
         g_pCompositor->scheduleFrameForMonitor(owner);
 }

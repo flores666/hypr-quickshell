@@ -9,6 +9,9 @@ bool CHyprspaceWidget::buttonEvent(bool pressed, Vector2D coords) {
     if (!active)
         return true;
 
+    if (isClosing())
+        return false;
+
     if (pressed) {
         lastPressedTime = std::chrono::high_resolution_clock::now();
         return false;
@@ -39,6 +42,7 @@ bool CHyprspaceWidget::buttonEvent(bool pressed, Vector2D coords) {
         } else {
             const auto owner = getOwner();
             closeOwnerSpecialWorkspace();
+            centeredWorkspaceID = targetWorkspaceID;
 
             // Empty in-between workspaces may not have a workspace object until
             // we switch to them. Still allow selecting them from overview.
@@ -58,6 +62,9 @@ bool CHyprspaceWidget::buttonEvent(bool pressed, Vector2D coords) {
 bool CHyprspaceWidget::axisEvent(double delta, wl_pointer_axis axis, Vector2D coords) {
     if (!active)
         return true;
+
+    if (isClosing())
+        return false;
 
     if (delta == 0.0)
         return false;

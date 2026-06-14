@@ -147,6 +147,7 @@ bool CHyprspaceWidget::switchOverviewWorkspaceBy(int direction) {
 
 void CHyprspaceWidget::show() {
     const bool wasActive = active;
+    const bool wasClosing = overviewClosing;
     auto owner = getOwner();
     if (!owner)
         return;
@@ -157,6 +158,7 @@ void CHyprspaceWidget::show() {
     closeOwnerSpecialWorkspace();
 
     active = true;
+    overviewClosing = false;
     centeredWorkspaceID = std::max(1, static_cast<int>(owner->activeWorkspaceID()));
     workspaceScrollOffset->setValueAndWarp(0);
     workspaceScrollAccumulator = 0.0;
@@ -164,7 +166,7 @@ void CHyprspaceWidget::show() {
 
     lastWorkspaceHoverFrameValid = false;
 
-    if (!wasActive) {
+    if (!wasActive || wasClosing) {
         overviewAnimationStarted = true;
         overviewAnimationStartedAt = std::chrono::steady_clock::now();
         workspaceHoverProgress.clear();
@@ -179,13 +181,9 @@ void CHyprspaceWidget::show() {
     g_pCompositor->scheduleFrameForMonitor(owner);
 }
 
-void CHyprspaceWidget::hide() {
-    const bool wasActive = active;
-    auto owner = getOwner();
-    if (!owner)
-        return;
-
+void CHyprspaceWidget::finishHide() {
     active = false;
+    overviewClosing = false;
     centeredWorkspaceID = 0;
     workspaceBoxes.clear();
     workspaceScrollOffset->setValueAndWarp(0);
@@ -196,24 +194,54 @@ void CHyprspaceWidget::hide() {
     lastWorkspaceHoverFrameValid = false;
     overviewAnimationStarted = false;
 
-    if (wasActive)
-        notifyQuickshellOverviewState("close");
-
-    // After leaving overview, restore normal pointer focus/cursor state.
+    // After leaving overview, restore normal pointer focus/cursor state. Do it
+    // only after the exit morph finishes, otherwise the real windows below the
+    // shrinking preview can receive hover/focus while the overview is visible.
     g_pInputManager->refocus();
     g_pInputManager->simulateMouseMovement();
+}
+
+void CHyprspaceWidget::hide() {
+    const bool wasActive = active;
+    auto owner = getOwner();
+    if (!owner)
+        return;
+
+    if (!wasActive)
+        return;
+
+    if (!overviewClosing) {
+        overviewClosing = true;
+        overviewClosingStartedAt = std::chrono::steady_clock::now();
+        overviewAnimationStarted = false;
+        workspaceHoverProgress.clear();
+        lastWorkspaceHoverFrameValid = false;
+        workspaceScrollAccumulator = 0.0;
+        notifyQuickshellOverviewState("close");
+    }
 
     g_pHyprRenderer->damageMonitor(owner);
     g_pCompositor->scheduleFrameForMonitor(owner);
 }
 
 double CHyprspaceWidget::overviewOpenProgress() const {
+    constexpr double OVERVIEW_OPEN_ANIMATION_SECONDS = 0.24;
+    constexpr double OVERVIEW_CLOSE_ANIMATION_SECONDS = 0.22;
+
+    if (overviewClosing) {
+        const double elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - overviewClosingStartedAt).count();
+        return 1.0 - std::clamp(elapsed / OVERVIEW_CLOSE_ANIMATION_SECONDS, 0.0, 1.0);
+    }
+
     if (!overviewAnimationStarted)
         return 1.0;
 
-    constexpr double OVERVIEW_OPEN_ANIMATION_SECONDS = 0.24;
     const double elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - overviewAnimationStartedAt).count();
     return std::clamp(elapsed / OVERVIEW_OPEN_ANIMATION_SECONDS, 0.0, 1.0);
+}
+
+bool CHyprspaceWidget::isClosing() const {
+    return overviewClosing;
 }
 
 void CHyprspaceWidget::updateConfig() {
@@ -229,6 +257,7 @@ void CHyprspaceWidget::updateConfig() {
     curYOffset->setValueAndWarp(0);
     workspaceScrollOffset->setValueAndWarp(0);
     workspaceScrollAccumulator = 0.0;
+    overviewClosing = false;
     overviewAnimationStarted = active;
     overviewAnimationStartedAt = std::chrono::steady_clock::now();
 }
