@@ -6,7 +6,6 @@ import "./modules/tray" as Tray
 import "./modules/launcher" as Launcher
 import "./modules/roundedCorners" as RoundedCorners
 import "./modules/appPanel" as AppPanel
-import "./modules/workspaceOverview" as WorkspaceOverview
 
 Scope {
     id: root
@@ -17,7 +16,6 @@ Scope {
 
     Bar.Bar {}
 
-    WorkspaceOverview.WorkspaceOverview {}
 
     AppPanel.AppDock {}
 

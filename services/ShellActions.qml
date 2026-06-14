@@ -50,44 +50,29 @@ QtObject {
     function openWorkspaceOverview() {
         closeActiveSpecialWorkspace()
 
-        if (Services.ShellState.nativeWorkspaceOverviewEnabled) {
-            if (nativeOverviewDispatch("open"))
-                Services.ShellState.setWorkspaceOverviewOpen(true)
-            return
-        }
-
-        Services.ShellState.setWorkspaceOverviewOpen(true)
+        if (nativeOverviewDispatch("open"))
+            Services.ShellState.setWorkspaceOverviewOpen(true)
     }
 
     function closeWorkspaceOverview() {
-        if (Services.ShellState.nativeWorkspaceOverviewEnabled)
-            nativeOverviewDispatch("close")
-
+        nativeOverviewDispatch("close")
         Services.ShellState.setWorkspaceOverviewOpen(false)
     }
 
     function closeWorkspaceOverviewAll() {
-        if (Services.ShellState.nativeWorkspaceOverviewEnabled)
-            nativeOverviewDispatch("close", "all")
-
+        nativeOverviewDispatch("close", "all")
         Services.ShellState.setWorkspaceOverviewOpen(false)
     }
 
     function toggleWorkspaceOverview() {
-        if (Services.ShellState.nativeWorkspaceOverviewEnabled) {
-            if (Services.ShellState.workspaceOverviewOpen) {
-                closeWorkspaceOverview()
-            } else {
-                closeActiveSpecialWorkspace()
-                if (nativeOverviewDispatch("open"))
-                    Services.ShellState.setWorkspaceOverviewOpen(true)
-            }
+        if (Services.ShellState.workspaceOverviewOpen) {
+            closeWorkspaceOverview()
             return
         }
 
-        if (!Services.ShellState.workspaceOverviewOpen)
-            closeActiveSpecialWorkspace()
-        Services.ShellState.toggleWorkspaceOverview()
+        closeActiveSpecialWorkspace()
+        if (nativeOverviewDispatch("open"))
+            Services.ShellState.setWorkspaceOverviewOpen(true)
     }
 
     function focusWindowFromOverview(window) {

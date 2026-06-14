@@ -13,14 +13,11 @@ QtObject {
     property var workspaces: []
 
     property bool workspaceOverviewOpen: false
-    // True = the dock button controls the local Hyprland live-preview plugin.
-    // The plugin is based on Hyprspace and exposes both qs-gnome-overview:* and overview:* aliases.
-    // Set to false to use the QML fallback overview with window cards.
-    property bool nativeWorkspaceOverviewEnabled: true
+    // The dock button controls the native Hyprland live overview plugin.
+    // Quickshell fallback overview was removed, so these dispatchers are always used.
     property string nativeWorkspaceOverviewOpenDispatcher: "qs-gnome-overview:open"
     property string nativeWorkspaceOverviewCloseDispatcher: "qs-gnome-overview:close"
     property string nativeWorkspaceOverviewToggleDispatcher: "qs-gnome-overview:toggle"
-    property int workspaceOverviewNonce: 0
 
     property int activeWorkspace: 1
     // Number of workspaces that should be shown in the top bar.
@@ -259,12 +256,8 @@ QtObject {
         if (workspaceOverviewOpen === next)
             return;
         workspaceOverviewOpen = next;
-        workspaceOverviewNonce += 1;
     }
 
-    function toggleWorkspaceOverview() {
-        setWorkspaceOverviewOpen(!workspaceOverviewOpen);
-    }
 
     function setOccupiedWorkspaces(nextOccupied) {
         var result = [];
