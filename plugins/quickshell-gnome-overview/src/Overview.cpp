@@ -288,7 +288,7 @@ void CHyprspaceWidget::finishWorkspaceSelectionAnimation() {
     workspaceHoverProgress.clear();
     lastWorkspaceHoverFrameValid = false;
 
-    if (owner && targetWorkspaceID > 0) {
+    if (owner && targetWorkspaceID > 0 && shouldClose) {
         suppressWorkspaceTransitionAnimation();
         if (owner->activeWorkspaceID() != targetWorkspaceID)
             owner->changeWorkspace(targetWorkspaceID);
@@ -336,6 +336,40 @@ bool CHyprspaceWidget::switchOverviewWorkspaceBy(int direction) {
     if (targetWorkspaceID == currentWorkspaceID)
         return false;
 
+    return startWorkspaceSelectionAnimation(targetWorkspaceID, false);
+}
+
+bool CHyprspaceWidget::selectWorkspaceInOverview(int targetWorkspaceID) {
+    if (!active || isClosing() || isSelectingWorkspace() || targetWorkspaceID < 1)
+        return false;
+
+    return startWorkspaceSelectionAnimation(targetWorkspaceID, false);
+}
+
+bool CHyprspaceWidget::selectWorkspaceInOverviewBy(int direction) {
+    if (!active || isClosing() || isSelectingWorkspace() || direction == 0)
+        return false;
+
+    return switchOverviewWorkspaceBy(direction);
+}
+
+bool CHyprspaceWidget::syncExternalWorkspaceSwitch(int targetWorkspaceID) {
+    if (!active || isClosing() || isSelectingWorkspace() || targetWorkspaceID < 1)
+        return false;
+
+    const auto owner = getOwner();
+    if (!owner)
+        return false;
+
+    const int currentWorkspaceID = centeredWorkspaceID > 0
+        ? centeredWorkspaceID
+        : std::max(1, static_cast<int>(owner->activeWorkspaceID()));
+    if (currentWorkspaceID == targetWorkspaceID)
+        return false;
+
+    // Do not close overview here. The real workspace may already have changed
+    // because the switch came from an external Hyprland bind; the overview only
+    // catches up visually with its own smooth ribbon animation.
     return startWorkspaceSelectionAnimation(targetWorkspaceID, false);
 }
 

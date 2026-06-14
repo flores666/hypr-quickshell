@@ -165,6 +165,11 @@ Item {
         lastWheelSwitchAt = now;
         var direction = deltaY > 0 ? -1 : 1;
         root.workspaceScrolled();
+        if (Services.ShellState.workspaceOverviewOpen) {
+            Services.ShellActions.swipeWorkspaceInOverview(direction);
+            return;
+        }
+
         Services.ShellActions.switchWorkspace(clampWorkspace(activeWorkspace + direction));
     }
 

@@ -34,6 +34,12 @@ QtObject {
             return Services.ShellState.nativeWorkspaceOverviewOpenDispatcher
         if (action === "close")
             return Services.ShellState.nativeWorkspaceOverviewCloseDispatcher
+        if (action === "select")
+            return "qs-gnome-overview:select"
+        if (action === "next")
+            return "qs-gnome-overview:next"
+        if (action === "prev")
+            return "qs-gnome-overview:prev"
         return Services.ShellState.nativeWorkspaceOverviewToggleDispatcher
     }
 
@@ -177,6 +183,11 @@ QtObject {
             return
 
         var target = Services.ShellState.clampWorkspaceForSwitch(workspaceId)
+        if (Services.ShellState.workspaceOverviewOpen) {
+            selectWorkspaceInOverview(target)
+            return
+        }
+
         closeWorkspaceOverview()
         closeActiveSpecialWorkspace()
         Services.ShellState.activeWorkspace = target
@@ -192,8 +203,27 @@ QtObject {
             return
 
         closeActiveSpecialWorkspace()
+        if (Services.ShellState.workspaceOverviewOpen) {
+            nativeOverviewDispatch("select", String(Math.floor(target)))
+            return
+        }
+
         Services.ShellState.activeWorkspace = target
         Hyprland.dispatch("workspace " + target)
+    }
+
+    function swipeWorkspaceInOverview(direction) {
+        var step = Number(direction || 0)
+        if (isNaN(step) || step === 0)
+            return
+
+        if (!Services.ShellState.workspaceOverviewOpen) {
+            switchWorkspace(Number(Services.ShellState.activeWorkspace || 1) + (step > 0 ? 1 : -1))
+            return
+        }
+
+        closeActiveSpecialWorkspace()
+        nativeOverviewDispatch(step > 0 ? "next" : "prev")
     }
 
     function toggleSpecialWorkspace() {

@@ -145,6 +145,38 @@ static bool isAnyOverviewActive() {
     return false;
 }
 
+static std::shared_ptr<CHyprspaceWidget> getActiveWidgetForMonitor(PHLMONITORREF monitor) {
+    const auto widget = getWidgetForMonitor(monitor);
+    if (widget && widget->isActive())
+        return widget;
+    return nullptr;
+}
+
+static int workspaceNumberFromKeysym(xkb_keysym_t keysym) {
+    if (keysym >= XKB_KEY_1 && keysym <= XKB_KEY_9)
+        return static_cast<int>(keysym - XKB_KEY_0);
+    if (keysym == XKB_KEY_0)
+        return 10;
+
+    if (keysym >= XKB_KEY_KP_1 && keysym <= XKB_KEY_KP_9)
+        return static_cast<int>(keysym - XKB_KEY_KP_0);
+    if (keysym == XKB_KEY_KP_0)
+        return 10;
+
+    return 0;
+}
+
+static int parseWorkspaceIDArg(const std::string& arg) {
+    try {
+        size_t idx = 0;
+        const int value = std::stoi(arg, &idx);
+        if (value > 0)
+            return value;
+    } catch (...) {
+    }
+    return 0;
+}
+
 static bool isFullscreenWorkspaceActive(PHLMONITORREF monitor) {
     if (!monitor || !monitor->m_activeWorkspace)
         return false;
@@ -384,9 +416,13 @@ void onWorkspaceChange(PHLWORKSPACE pWorkspace) {
     if (!pWorkspace) return;
 
     auto widget = getWidgetForMonitor(g_pCompositor->getMonitorFromID(pWorkspace->m_monitor->m_id));
-    if (widget != nullptr)
-        if (widget->isActive())
-            widget->show();
+    if (widget != nullptr && widget->isActive()) {
+        // If a workspace switch comes from outside the overview while it is
+        // open (for example a Hyprland bind that was not cancelled), do not
+        // hard-reset the strip. Animate the overview ribbon to the new target
+        // instead, so every workspace change has the same GNOME-like motion.
+        widget->syncExternalWorkspaceSwitch(static_cast<int>(pWorkspace->m_id));
+    }
 }
 
 // GNOME-like hot corner: pushing the pointer into the top-left pixel opens overview.
@@ -537,6 +573,18 @@ void onKeyPress(const IKeyboard::SKeyEvent& event, SCallbackInfo& info) {
     const bool pressed = event.state == WL_KEYBOARD_KEY_STATE_PRESSED;
     const bool released = event.state == WL_KEYBOARD_KEY_STATE_RELEASED;
 
+    if (pressed) {
+        const int shortcutWorkspaceID = workspaceNumberFromKeysym(keysym);
+        if (shortcutWorkspaceID > 0 && g_mainModDown) {
+            const auto widget = getActiveWidgetForMonitor(g_pCompositor->getMonitorFromCursor());
+            if (widget && widget->selectWorkspaceInOverview(shortcutWorkspaceID)) {
+                g_mainModCancelled = true;
+                info.cancelled = true;
+                return;
+            }
+        }
+    }
+
     // Main modifier handling must be done inside the plugin, not with Hyprland bindr.
     // bindr on $mainMod fires even after combinations such as $mainMod+Space layout switch.
     // Here we toggle only if the configured mainMod was pressed and released alone.
@@ -686,6 +734,37 @@ static SDispatchResult dispatchCloseOverview(std::string arg) {
         if (widget)
             if (widget->isActive()) widget->hide();
     }
+    return SDispatchResult{};
+}
+
+static SDispatchResult dispatchSelectOverview(std::string arg) {
+    const int workspaceID = parseWorkspaceIDArg(arg);
+    if (workspaceID <= 0)
+        return SDispatchResult{};
+
+    auto currentMonitor = g_pCompositor->getMonitorFromCursor();
+    auto widget = getWidgetForMonitor(currentMonitor);
+    if (widget && widget->isActive())
+        widget->selectWorkspaceInOverview(workspaceID);
+
+    return SDispatchResult{};
+}
+
+static SDispatchResult dispatchNextOverview(std::string) {
+    auto currentMonitor = g_pCompositor->getMonitorFromCursor();
+    auto widget = getWidgetForMonitor(currentMonitor);
+    if (widget && widget->isActive())
+        widget->selectWorkspaceInOverviewBy(1);
+
+    return SDispatchResult{};
+}
+
+static SDispatchResult dispatchPrevOverview(std::string) {
+    auto currentMonitor = g_pCompositor->getMonitorFromCursor();
+    auto widget = getWidgetForMonitor(currentMonitor);
+    if (widget && widget->isActive())
+        widget->selectWorkspaceInOverviewBy(-1);
+
     return SDispatchResult{};
 }
 
@@ -881,9 +960,15 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE inHandle) {
     HyprlandAPI::addDispatcherV2(pHandle, "overview:toggle", ::dispatchToggleOverview);
     HyprlandAPI::addDispatcherV2(pHandle, "overview:open", ::dispatchOpenOverview);
     HyprlandAPI::addDispatcherV2(pHandle, "overview:close", ::dispatchCloseOverview);
+    HyprlandAPI::addDispatcherV2(pHandle, "overview:select", ::dispatchSelectOverview);
+    HyprlandAPI::addDispatcherV2(pHandle, "overview:next", ::dispatchNextOverview);
+    HyprlandAPI::addDispatcherV2(pHandle, "overview:prev", ::dispatchPrevOverview);
     HyprlandAPI::addDispatcherV2(pHandle, "qs-gnome-overview:toggle", ::dispatchToggleOverview);
     HyprlandAPI::addDispatcherV2(pHandle, "qs-gnome-overview:open", ::dispatchOpenOverview);
     HyprlandAPI::addDispatcherV2(pHandle, "qs-gnome-overview:close", ::dispatchCloseOverview);
+    HyprlandAPI::addDispatcherV2(pHandle, "qs-gnome-overview:select", ::dispatchSelectOverview);
+    HyprlandAPI::addDispatcherV2(pHandle, "qs-gnome-overview:next", ::dispatchNextOverview);
+    HyprlandAPI::addDispatcherV2(pHandle, "qs-gnome-overview:prev", ::dispatchPrevOverview);
 
     g_pRenderHook = Event::bus()->m_events.render.stage.listen([](eRenderStage stage) { onRender(stage); });
 

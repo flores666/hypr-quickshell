@@ -128,6 +128,13 @@ public:
     bool buttonEvent(bool, Vector2D coords);
     bool axisEvent(double, wl_pointer_axis axis, Vector2D coords);
 
+    // Animate the overview ribbon without switching the real Hyprland workspace.
+    // Used by Quickshell topbar clicks/scroll and by intercepted mainMod+N
+    // shortcuts while overview is open.
+    bool selectWorkspaceInOverview(int targetWorkspaceID);
+    bool selectWorkspaceInOverviewBy(int direction);
+    bool syncExternalWorkspaceSwitch(int targetWorkspaceID);
+
     bool isSwiping();
 
     bool beginSwipe(IPointer::SSwipeBeginEvent);
