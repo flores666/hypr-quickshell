@@ -15,6 +15,7 @@ Item {
     property real popupTopY: y
     property real panelHeight: 70
     property bool bottomDock: false
+    property bool interactiveEnabled: true
     readonly property real popupGap: 2
     readonly property bool popupOpen: contextOpen || workspaceMenuOpen || contextSwitchPending || contextRenderVisible
     property bool contextOpen: false
@@ -67,8 +68,17 @@ Item {
 
     Components.AnimationTokens { id: motion }
 
+    onInteractiveEnabledChanged: {
+        if (!interactiveEnabled) {
+            closePopup();
+            hideTooltip();
+            cancelItemDrag();
+        }
+    }
+
     HoverHandler {
         id: rootHover
+        enabled: root.interactiveEnabled
     }
 
     Behavior on implicitWidth {
@@ -313,6 +323,9 @@ Item {
     }
 
     function beginItemDrag(item, contentX) {
+        if (!interactiveEnabled)
+            return;
+
         if (!canDragItem(item))
             return;
 
@@ -790,6 +803,9 @@ Item {
     }
 
     function activateItemWindow(item, window) {
+        if (!interactiveEnabled)
+            return;
+
         Services.ShellActions.closeWorkspaceOverview();
         hideTooltip();
         if (!item)
@@ -802,6 +818,9 @@ Item {
     }
 
     function activateItem(item) {
+        if (!interactiveEnabled)
+            return;
+
         Services.ShellActions.closeWorkspaceOverview();
         hideTooltip();
         if (!item)
@@ -816,6 +835,9 @@ Item {
     }
 
     function launchNew(item) {
+        if (!interactiveEnabled)
+            return;
+
         Services.ShellActions.closeWorkspaceOverview();
         if (item && item.hasDesktop && item.desktopId)
             Services.AppPanelService.launch(item.desktopId);
@@ -907,6 +929,9 @@ Item {
     }
 
     function openContextMenu(item, localCenterX) {
+        if (!interactiveEnabled)
+            return;
+
         hideTooltip();
         workspaceMenuOpen = false;
         workspaceMenuHovered = false;
@@ -1036,6 +1061,9 @@ Item {
     }
 
     function runMenuAction(action) {
+        if (!interactiveEnabled)
+            return;
+
         if (action === "move-workspace")
             return;
 
@@ -1070,6 +1098,9 @@ Item {
     }
 
     function moveContextWindowToWorkspace(workspace) {
+        if (!interactiveEnabled)
+            return;
+
         var item = contextItem;
         var targetWindow = contextTargetWindow(item);
         closePopup();
@@ -1148,9 +1179,10 @@ Item {
             MouseArea {
                 id: overviewButtonMouse
                 anchors.fill: parent
+                enabled: root.interactiveEnabled
                 hoverEnabled: true
                 acceptedButtons: Qt.LeftButton
-                cursorShape: Qt.PointingHandCursor
+                cursorShape: root.interactiveEnabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                 onEntered: root.hideTooltip()
                 onClicked: function(mouse) {
                     root.closePopup();
@@ -1188,6 +1220,7 @@ Item {
 
         HoverHandler {
             id: listHover
+            enabled: root.interactiveEnabled
         }
 
         add: Transition {
@@ -1332,9 +1365,10 @@ Item {
             MouseArea {
                 id: appMouse
                 anchors.fill: parent
+                enabled: root.interactiveEnabled
                 hoverEnabled: true
                 acceptedButtons: Qt.LeftButton | Qt.RightButton
-                cursorShape: Qt.PointingHandCursor
+                cursorShape: root.interactiveEnabled ? Qt.PointingHandCursor : Qt.ArrowCursor
 
                 onEntered: {
                     hoverDelayTimer.restart();
@@ -1525,9 +1559,10 @@ Item {
                         MouseArea {
                             id: actionMouse
                             anchors.fill: parent
+                            enabled: root.interactiveEnabled
                             hoverEnabled: true
                             acceptedButtons: Qt.LeftButton
-                            cursorShape: Qt.PointingHandCursor
+                            cursorShape: root.interactiveEnabled ? Qt.PointingHandCursor : Qt.ArrowCursor
 
                             onEntered: {
                                 if (modelData.submenu === "workspaces") {
@@ -1580,6 +1615,7 @@ Item {
 
             MouseArea {
                 anchors.fill: parent
+                enabled: root.interactiveEnabled
                 hoverEnabled: true
                 acceptedButtons: Qt.NoButton
                 onEntered: {
@@ -1631,9 +1667,10 @@ Item {
                         MouseArea {
                             id: workspaceMouse
                             anchors.fill: parent
+                            enabled: root.interactiveEnabled
                             hoverEnabled: true
                             acceptedButtons: Qt.LeftButton
-                            cursorShape: Qt.PointingHandCursor
+                            cursorShape: root.interactiveEnabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                             onEntered: {
                                 root.workspaceMenuHovered = true;
                                 workspaceMenuCloseTimer.stop();

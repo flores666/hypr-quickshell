@@ -11,6 +11,9 @@ QtObject {
     property var trayedWindows: []
     property var occupiedWorkspaces: []
     property var workspaces: []
+    property var monitors: []
+    property string activeMonitorName: ""
+    property int activeMonitorId: -1
 
     property bool workspaceOverviewOpen: false
     // The dock button controls the native Hyprland live overview plugin.
@@ -33,6 +36,99 @@ QtObject {
     property bool topbarPopupOpen: false
     property bool appDockPopupOpen: false
     readonly property bool shellPopupOpen: topbarPopupOpen || appDockPopupOpen
+
+    function normalizeMonitorName(value) {
+        return String(value || "").trim();
+    }
+
+    function isMonitorActive(value) {
+        var name = normalizeMonitorName(value);
+        if (name.length === 0)
+            return monitors.length <= 1 || activeMonitorName.length === 0;
+        if (activeMonitorName.length === 0)
+            return monitors.length <= 1;
+        return name === activeMonitorName;
+    }
+
+    function monitorKey(monitor) {
+        return [
+            normalizeMonitorName(monitor.name),
+            Number(monitor.id || -1),
+            monitor.description || "",
+            Number(monitor.x || 0),
+            Number(monitor.y || 0),
+            Number(monitor.width || 0),
+            Number(monitor.height || 0),
+            Number(monitor.scale || 1),
+            monitor.focused ? "1" : "0",
+            Number(monitor.activeWorkspace || 0),
+            monitor.activeWorkspaceName || ""
+        ].join("|");
+    }
+
+    function monitorsEqual(a, b) {
+        if (!a || !b || a.length !== b.length)
+            return false;
+
+        for (var i = 0; i < a.length; i++) {
+            if (monitorKey(a[i]) !== monitorKey(b[i]))
+                return false;
+        }
+
+        return true;
+    }
+
+    function setMonitors(nextMonitors) {
+        var result = [];
+        var focusedName = "";
+        var focusedId = -1;
+
+        for (var i = 0; i < (nextMonitors || []).length; i++) {
+            var item = nextMonitors[i] || {};
+            var name = normalizeMonitorName(item.name);
+            if (name.length === 0)
+                continue;
+
+            var focused = !!item.focused;
+            var monitor = {
+                "id": Number(item.id || -1),
+                "name": name,
+                "description": String(item.description || ""),
+                "x": Number(item.x || 0),
+                "y": Number(item.y || 0),
+                "width": Number(item.width || 0),
+                "height": Number(item.height || 0),
+                "scale": Number(item.scale || 1),
+                "focused": focused,
+                "activeWorkspace": normalizeWorkspaceId(item.activeWorkspace),
+                "activeWorkspaceName": String(item.activeWorkspaceName || "")
+            };
+
+            if (focused) {
+                focusedName = name;
+                focusedId = monitor.id;
+            }
+
+            result.push(monitor);
+        }
+
+        result.sort(function(a, b) { return Number(a.id || 0) - Number(b.id || 0); });
+
+        if (!monitorsEqual(monitors, result))
+            monitors = result;
+
+        if (focusedName.length === 0 && result.length > 0) {
+            focusedName = result[0].name;
+            focusedId = Number(result[0].id || -1);
+        }
+
+        if (activeMonitorName !== focusedName)
+            activeMonitorName = focusedName;
+        if (activeMonitorId !== focusedId)
+            activeMonitorId = focusedId;
+
+        recomputeWorkspaceCounts();
+    }
 
 
     function requestCloseTopbarPopups() {
@@ -78,11 +174,18 @@ QtObject {
         // the largest id, so the UI does not expand back to 1..10 or 1..4.
         var occupiedCount = occupiedWorkspaceCount();
         var active = normalizeWorkspaceId(activeWorkspace);
-        var nextEmpty = occupiedCount > 0 ? occupiedCount + 1 : 1;
+        var activeMax = active;
+
+        for (var i = 0; i < monitors.length; i++)
+            activeMax = Math.max(activeMax, normalizeWorkspaceId(monitors[i].activeWorkspace));
+
+        var nextEmpty = Math.max(occupiedCount > 0 ? occupiedCount + 1 : 1, activeMax);
 
         var nextVisible = Math.max(1, occupiedCount);
         if (active > 0 && active <= nextEmpty)
             nextVisible = Math.max(nextVisible, active);
+        if (activeMax > 0)
+            nextVisible = Math.max(nextVisible, activeMax);
 
         var nextOverview = Math.max(1, nextEmpty);
 
@@ -131,6 +234,7 @@ QtObject {
             "focused": !!w.focused,
             "hiddenByShell": !!w.hiddenByShell,
             "hiddenReason": w.hiddenReason || "",
+            "monitor": w.monitor || "",
             "x": Number(w.x || 0),
             "y": Number(w.y || 0),
             "width": Number(w.width || 0),
@@ -187,7 +291,8 @@ QtObject {
             w.floating ? "1" : "0",
             w.fullscreen ? "1" : "0",
             w.hiddenByShell ? "1" : "0",
-            w.hiddenReason || ""
+            w.hiddenReason || "",
+            w.monitor || ""
         ].join("|");
     }
 

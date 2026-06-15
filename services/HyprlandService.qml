@@ -16,6 +16,8 @@ Item {
     property bool workspaceRefreshQueued: false
     property bool workspaceRefreshPendingAfterRun: false
     property bool compactWorkspaceQueued: false
+    property bool monitorsInitialized: false
+    property var knownMonitorNames: []
 
     function currentWorkspaceId() {
         if (Hyprland.focusedWorkspace && Hyprland.focusedWorkspace.id)
@@ -125,6 +127,13 @@ Item {
     function compactRegularWorkspaces() {
         compactWorkspaceQueued = false;
 
+        // Global workspace compaction is safe for the single-monitor GNOME-like
+        // flow, but on multiple monitors it can collapse the empty workspace
+        // that Hyprland keeps visible on another output or move windows between
+        // monitor-owned workspaces. Leave multi-monitor layouts stable.
+        if ((Services.ShellState.monitors || []).length > 1)
+            return;
+
         var windows = Services.ShellState.windows || [];
         var regularWindows = [];
         var occupied = [];
@@ -204,6 +213,8 @@ Item {
 
     function hyprEventNeedsMonitorRefresh(eventName) {
         switch (eventName) {
+        case "monitoradded":
+        case "monitorremoved":
         case "activespecial":
         case "workspace":
         case "workspacev2":
@@ -362,6 +373,7 @@ Item {
                 "focused": focused,
                 "hiddenByShell": false,
                 "hiddenReason": "",
+                "monitor": String(client.monitor || ""),
                 "x": client.at && client.at.length > 0 ? Number(client.at[0] || 0) : 0,
                 "y": client.at && client.at.length > 1 ? Number(client.at[1] || 0) : 0,
                 "width": client.size && client.size.length > 0 ? Number(client.size[0] || 0) : 0,
@@ -388,8 +400,37 @@ Item {
         }
 
         var activeSpecial = "";
+        var nextMonitors = [];
+        var nextNames = [];
+        var previousFocusedMonitor = "";
         for (var i = 0; i < monitors.length; i++) {
             var monitor = monitors[i] || {};
+            var monitorName = String(monitor.name || "").trim();
+            var activeWorkspace = monitor.activeWorkspace || {};
+            var workspaceId = Number(activeWorkspace.id || 0);
+            var workspaceName = String(activeWorkspace.name || "");
+            var focused = !!monitor.focused;
+
+            if (monitorName.length > 0) {
+                nextNames.push(monitorName);
+                nextMonitors.push({
+                    "id": Number(monitor.id || i),
+                    "name": monitorName,
+                    "description": String(monitor.description || ""),
+                    "x": Number(monitor.x || 0),
+                    "y": Number(monitor.y || 0),
+                    "width": Number(monitor.width || 0),
+                    "height": Number(monitor.height || 0),
+                    "scale": Number(monitor.scale || 1),
+                    "focused": focused,
+                    "activeWorkspace": workspaceId,
+                    "activeWorkspaceName": workspaceName
+                });
+            }
+
+            if (focused && monitorName.length > 0)
+                previousFocusedMonitor = monitorName;
+
             var special = monitor.specialWorkspace || {};
             var name = String(special.name || "").trim();
             var id = Number(special.id || 0);
@@ -399,7 +440,95 @@ Item {
             }
         }
 
+        Services.ShellState.setMonitors(nextMonitors);
         Services.ShellState.setActiveSpecialWorkspace(activeSpecial);
+
+        if (monitorsInitialized)
+            ensureWorkspaceForNewMonitors(nextMonitors, previousFocusedMonitor);
+        else
+            monitorsInitialized = true;
+
+        knownMonitorNames = nextNames;
+    }
+
+    function monitorNameKnown(name) {
+        var lookup = String(name || "");
+        for (var i = 0; i < knownMonitorNames.length; i++) {
+            if (String(knownMonitorNames[i] || "") === lookup)
+                return true;
+        }
+        return false;
+    }
+
+    function usedWorkspaceIdsFrom(monitors) {
+        var used = [];
+
+        for (var i = 0; i < (Services.ShellState.workspaces || []).length; i++) {
+            var workspace = Services.ShellState.workspaces[i] || {};
+            var workspaceId = Services.ShellState.normalizeWorkspaceId(workspace.id);
+            if (workspaceId > 0 && !Services.ShellState.hasNumber(used, workspaceId))
+                used.push(workspaceId);
+        }
+
+        for (var m = 0; m < (monitors || []).length; m++) {
+            var monitor = monitors[m] || {};
+            var monitorWorkspace = Services.ShellState.normalizeWorkspaceId(monitor.activeWorkspace);
+            if (monitorWorkspace > 0 && !Services.ShellState.hasNumber(used, monitorWorkspace))
+                used.push(monitorWorkspace);
+        }
+
+        for (var w = 0; w < (Services.ShellState.windows || []).length; w++) {
+            var window = Services.ShellState.windows[w] || {};
+            var windowWorkspace = Services.ShellState.normalizeWorkspaceId(window.workspace);
+            if (windowWorkspace > 0 && !window.hiddenByShell && !Services.ShellState.hasNumber(used, windowWorkspace))
+                used.push(windowWorkspace);
+        }
+
+        used.sort(function(a, b) { return a - b; });
+        return used;
+    }
+
+    function nextFreeWorkspaceId(monitors) {
+        var used = usedWorkspaceIdsFrom(monitors);
+        var candidate = 1;
+        for (var i = 0; i < used.length; i++) {
+            if (used[i] === candidate)
+                candidate += 1;
+            else if (used[i] > candidate)
+                break;
+        }
+        return Math.max(1, candidate);
+    }
+
+    function ensureWorkspaceForNewMonitors(monitors, previousFocusedMonitor) {
+        var focused = String(previousFocusedMonitor || Services.ShellState.activeMonitorName || "").trim();
+        var used = usedWorkspaceIdsFrom(monitors);
+        var changed = false;
+
+        for (var i = 0; i < (monitors || []).length; i++) {
+            var monitor = monitors[i] || {};
+            var name = String(monitor.name || "").trim();
+            if (name.length === 0 || monitorNameKnown(name))
+                continue;
+
+            var target = nextFreeWorkspaceId(monitors);
+            while (Services.ShellState.hasNumber(used, target))
+                target += 1;
+
+            used.push(target);
+            Hyprland.dispatch("focusmonitor " + name);
+            Hyprland.dispatch("workspace " + target);
+            changed = true;
+        }
+
+        if (changed) {
+            if (focused.length > 0)
+                Hyprland.dispatch("focusmonitor " + focused);
+
+            queueRefreshClients();
+            queueRefreshWorkspaces();
+            queueRefreshMonitors();
+        }
     }
 
     Component.onCompleted: {

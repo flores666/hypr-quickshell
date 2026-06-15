@@ -14,6 +14,8 @@ PanelWindow {
     id: root
 
     property int panelSideInset: 5
+    readonly property string screenName: screen && screen.name ? String(screen.name) : ""
+    readonly property bool activeScreen: Services.ShellState.isMonitorActive(screenName)
     readonly property bool popupsOpen: calendar.popupOpen || mediaPlayer.popupOpen || keyboardLayout.popupOpen || systemStatus.popupOpen
 
     anchors {
@@ -37,6 +39,11 @@ PanelWindow {
 
     onPopupsOpenChanged: Services.ShellState.setTopbarPopupOpen(popupsOpen)
     Component.onDestruction: Services.ShellState.setTopbarPopupOpen(false)
+
+    onActiveScreenChanged: {
+        if (!activeScreen)
+            closePopups();
+    }
 
     function closePopups() {
         calendar.closePopup();
@@ -108,6 +115,7 @@ PanelWindow {
 
         MouseArea {
             anchors.fill: parent
+            enabled: root.activeScreen
             acceptedButtons: Qt.LeftButton
             cursorShape: Qt.ArrowCursor
             onClicked: root.closePopups()
@@ -118,6 +126,7 @@ PanelWindow {
             z: 1
             width: implicitWidth
             height: implicitHeight
+            interactiveEnabled: root.activeScreen
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
             onToggled: {
@@ -131,6 +140,7 @@ PanelWindow {
             z: 1
             width: implicitWidth
             height: implicitHeight
+            interactiveEnabled: root.activeScreen
             anchors.left: specialWorkspaceButton.right
             anchors.leftMargin: 2
             anchors.verticalCenter: parent.verticalCenter
@@ -149,6 +159,7 @@ PanelWindow {
             hostWidth: root.width
             panelHeight: root.implicitHeight
             popupBaseX: barContent.x + x
+            enabled: root.activeScreen
             onPopupOpened: {
                 mediaPlayer.closePopup();
                         keyboardLayout.closePopup();
@@ -168,6 +179,7 @@ PanelWindow {
             hostWidth: root.width
             panelHeight: root.implicitHeight
             popupBaseX: barContent.x + x
+            enabled: root.activeScreen
             onPopupOpened: {
                 calendar.closePopup();
                         keyboardLayout.closePopup();
@@ -187,6 +199,7 @@ PanelWindow {
             hostWidth: root.width
             panelHeight: root.implicitHeight
             popupBaseX: barContent.x + x
+            enabled: root.activeScreen
             onPopupOpened: {
                 calendar.closePopup();
                 mediaPlayer.closePopup();
@@ -205,6 +218,7 @@ PanelWindow {
             hostWidth: root.width
             panelHeight: root.implicitHeight
             popupBaseX: barContent.x + x
+            enabled: root.activeScreen
             onPopupOpened: {
                 calendar.closePopup();
                 mediaPlayer.closePopup();

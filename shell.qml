@@ -14,12 +14,32 @@ Scope {
     Services.HyprlandService {}
     Services.TrayBridge {}
 
-    Bar.Bar {}
+    Variants {
+        model: Quickshell.screens
 
+        Bar.Bar {
+            property var modelData
+            screen: modelData
+        }
+    }
 
-    AppPanel.AppDock {}
+    Variants {
+        model: Quickshell.screens
 
-    RoundedCorners.ScreenCorners {}
+        AppPanel.AppDock {
+            property var modelData
+            screen: modelData
+        }
+    }
+
+    Variants {
+        model: Quickshell.screens
+
+        RoundedCorners.ScreenCorners {
+            property var modelData
+            cornerScreen: modelData
+        }
+    }
 
     // Hidden utility panels. They can be opened later through hotkeys or IPC.
     Tray.TrayPanel {

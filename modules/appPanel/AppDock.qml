@@ -15,10 +15,12 @@ PanelWindow {
     readonly property real dockHiddenOffset: 108
     readonly property int dockKeepAliveHorizontalMargin: 10
     readonly property int dockKeepAliveTopMargin: 4
+    readonly property string screenName: screen && screen.name ? String(screen.name) : ""
+    readonly property bool activeScreen: Services.ShellState.isMonitorActive(screenName)
 
     property bool dockShown: false
     property bool popupGraceActive: false
-    readonly property bool dockAreaHovered: Services.ShellState.workspaceOverviewOpen || hotZoneMouse.containsMouse || dockKeepAliveMouse.containsMouse || appPanel.panelHovered || popupGraceActive
+    readonly property bool dockAreaHovered: Services.ShellState.workspaceOverviewOpen || (activeScreen && (hotZoneMouse.containsMouse || dockKeepAliveMouse.containsMouse || appPanel.panelHovered || popupGraceActive))
     property real dockReveal: dockShown ? 1.0 : 0.0
 
     anchors {
@@ -58,6 +60,9 @@ PanelWindow {
     }
 
     function showDock() {
+        if (!activeScreen && !Services.ShellState.workspaceOverviewOpen)
+            return;
+
         Services.ShellState.requestCloseTopbarPopups();
         hideTimer.stop();
         dockShown = true;
@@ -116,6 +121,16 @@ PanelWindow {
         }
     }
 
+    onActiveScreenChanged: {
+        if (!activeScreen) {
+            appPanel.closePopup();
+            popupGraceActive = false;
+            popupGraceTimer.stop();
+            if (!Services.ShellState.workspaceOverviewOpen)
+                dockShown = false;
+        }
+    }
+
     Timer {
         id: hideWatchdogTimer
         interval: 260
@@ -139,6 +154,7 @@ PanelWindow {
         MouseArea {
             id: hotZoneMouse
             anchors.fill: parent
+            enabled: root.activeScreen
             hoverEnabled: true
             acceptedButtons: Qt.NoButton
             onEntered: root.showDock()
@@ -169,6 +185,7 @@ PanelWindow {
             MouseArea {
                 id: dockKeepAliveMouse
                 anchors.fill: parent
+                enabled: root.activeScreen
                 hoverEnabled: true
                 acceptedButtons: Qt.NoButton
                 onEntered: root.showDock()
@@ -198,6 +215,7 @@ PanelWindow {
             popupBaseX: Math.round((root.width - appPanel.width) / 2)
             popupTopY: dockBackground.y
             bottomDock: true
+            interactiveEnabled: root.activeScreen
             itemSize: 58
             itemSpacing: 9
             maxVisibleItems: 11

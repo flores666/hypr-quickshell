@@ -8,6 +8,7 @@ Item {
     id: root
 
     property int workspaceCount: Services.ShellState.visibleWorkspaceCount
+    property bool interactiveEnabled: true
 
     // Размеры считаются от базового 96 DPI и слегка компенсируют разные экраны.
     // Это помогает сохранить одинаковый вид цифр, точки active и капсул на мониторе и ноутбуке.
@@ -155,6 +156,9 @@ Item {
 
 
     function scrollWorkspace(deltaY) {
+        if (!interactiveEnabled)
+            return;
+
         if (deltaY === 0)
             return;
 
@@ -366,8 +370,9 @@ Item {
 
                 MouseArea {
                     anchors.fill: parent
+                    enabled: root.interactiveEnabled
                     hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
+                    cursorShape: root.interactiveEnabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                     onClicked: Services.ShellActions.switchWorkspace(cell.workspaceId)
                     onWheel: function(wheel) {
                         var deltaY = wheel.angleDelta.y;

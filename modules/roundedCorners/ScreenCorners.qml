@@ -5,11 +5,13 @@ import QtQuick
 Scope {
     id: root
 
+    property var cornerScreen: null
     property int cornerSize: 28
     property color maskColor: "#000807"
 
     PanelWindow {
         id: topLeftCorner
+        screen: root.cornerScreen
 
         anchors {
             top: true
@@ -58,6 +60,7 @@ Scope {
 
     PanelWindow {
         id: topRightCorner
+        screen: root.cornerScreen
 
         anchors {
             top: true
@@ -106,6 +109,7 @@ Scope {
 
     PanelWindow {
         id: bottomLeftCorner
+        screen: root.cornerScreen
 
         anchors {
             bottom: true
@@ -154,6 +158,7 @@ Scope {
 
     PanelWindow {
         id: bottomRightCorner
+        screen: root.cornerScreen
 
         anchors {
             bottom: true

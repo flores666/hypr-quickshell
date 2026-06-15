@@ -6,6 +6,7 @@ Rectangle {
     id: root
 
     property bool pointerReady: false
+    property bool interactiveEnabled: true
     readonly property bool active: Services.ShellState.isSpecialWorkspaceActive(Services.ShellActions.minimizedWorkspace)
 
     signal toggled()
@@ -66,9 +67,10 @@ Rectangle {
     MouseArea {
         id: buttonMouse
         anchors.fill: parent
+        enabled: root.interactiveEnabled
         hoverEnabled: true
         acceptedButtons: Qt.LeftButton
-        cursorShape: root.pointerReady ? Qt.PointingHandCursor : Qt.ArrowCursor
+        cursorShape: root.interactiveEnabled && root.pointerReady ? Qt.PointingHandCursor : Qt.ArrowCursor
 
         onEntered: {
             root.pointerReady = false;
