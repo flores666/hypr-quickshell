@@ -46,6 +46,7 @@ Item {
     property string tooltipTargetId: ""
     property real tooltipAnchorX: 0
     property var panelItems: []
+    property int desktopEntryRetryCount: 0
     property int maxVisibleItems: 11
     property real itemSize: 54
     property real itemSpacing: 8
@@ -88,6 +89,135 @@ Item {
         return text.replace(/[^a-z0-9]+/g, "");
     }
 
+    function addUniqueToken(list, value) {
+        var key = normalizeToken(value);
+        var ignored = {
+            "app": true,
+            "apps": true,
+            "application": true,
+            "desktop": true,
+            "electron": true,
+            "gtk": true,
+            "io": true,
+            "net": true,
+            "org": true,
+            "com": true,
+            "qt": true,
+            "wayland": true,
+            "x11": true
+        };
+        if (ignored[key])
+            return;
+        if (key.length > 0 && list.indexOf(key) < 0)
+            list.push(key);
+    }
+
+    function addIdentityVariants(list, value) {
+        var raw = String(value || "").trim();
+        if (!raw)
+            return;
+
+        addUniqueToken(list, raw);
+        addUniqueToken(list, appSubstitution(raw));
+        addUniqueToken(list, reverseDomainNameAppName(raw));
+        addUniqueToken(list, kebabNormalizedAppName(raw));
+
+        var stem = raw.lastIndexOf(".desktop") === raw.length - 8 ? raw.substring(0, raw.length - 8) : raw;
+        var parts = stem.split(/[.\-_]+/);
+        for (var i = 0; i < parts.length; i++)
+            addUniqueToken(list, parts[i]);
+    }
+
+    function appIdentityKeys(app, extraValue) {
+        var keys = [];
+        if (app) {
+            addIdentityVariants(keys, app.desktopId || "");
+            addIdentityVariants(keys, app.name || "");
+            addIdentityVariants(keys, app.displayName || "");
+            addIdentityVariants(keys, app.iconName || "");
+            addIdentityVariants(keys, app.icon || "");
+            addIdentityVariants(keys, app.executable || "");
+            addIdentityVariants(keys, app.startupWmClass || "");
+
+            var matchKeys = app.matchKeys || [];
+            for (var i = 0; i < matchKeys.length; i++)
+                addUniqueToken(keys, matchKeys[i]);
+        }
+        addIdentityVariants(keys, extraValue || "");
+        return keys;
+    }
+
+    function listsShareIdentity(a, b) {
+        for (var i = 0; i < a.length; i++) {
+            if (b.indexOf(a[i]) >= 0)
+                return true;
+        }
+        return false;
+    }
+
+    function appsCompatible(appA, appB, extraA, extraB) {
+        if (!appA || !appB)
+            return false;
+        var idA = String(appA.desktopId || "");
+        var idB = String(appB.desktopId || "");
+        if (idA && idB && idA === idB)
+            return true;
+        return listsShareIdentity(appIdentityKeys(appA, extraA), appIdentityKeys(appB, extraB));
+    }
+
+    function appMatchesKeys(app, keys) {
+        if (!app)
+            return false;
+        return listsShareIdentity(appIdentityKeys(app, ""), keys || []);
+    }
+
+    function appPinnedBonus(app) {
+        if (!app)
+            return 0;
+        var desktopId = String(app.desktopId || "");
+        if (Services.AppPanelService.isPinned(desktopId))
+            return 24;
+
+        var pins = Services.AppPanelService.pinnedIds || [];
+        var keys = appIdentityKeys(app, "");
+        for (var i = 0; i < pins.length; i++) {
+            var pinId = String(pins[i] || "");
+            if (!pinId)
+                continue;
+            if (keys.indexOf(normalizeToken(pinId)) >= 0)
+                return 18;
+            var pinApp = Services.AppPanelService.appById(pinId);
+            if (pinApp && appsCompatible(app, pinApp))
+                return 18;
+        }
+        return 0;
+    }
+
+    function appOrderBonus(app) {
+        if (!app)
+            return 0;
+        var desktopId = String(app.desktopId || "");
+        if ((Services.AppPanelService.orderIds || []).indexOf(desktopId) >= 0)
+            return 6;
+        return 0;
+    }
+
+    function appLaunchBonus(app) {
+        if (!app)
+            return 0;
+        var desktopId = String(app.desktopId || "");
+        return Services.AppPanelService.launchingIds[desktopId] ? 18 : 0;
+    }
+
+    function appPreferenceBonus(app) {
+        if (!app)
+            return 0;
+        return appPinnedBonus(app)
+                + appOrderBonus(app)
+                + appLaunchBonus(app)
+                - (app.noDisplay ? 6 : 0);
+    }
+
     function appFirstLetter(item) {
         var text = String(item && (item.displayName || item.name || item.appId || item.desktopId) || "A").trim();
         return text.length > 0 ? text.charAt(0).toUpperCase() : "A";
@@ -104,6 +234,182 @@ Item {
                 return true;
         }
         return false;
+    }
+
+    function iconExists(iconName) {
+        var name = String(iconName || "").trim();
+        return name.length > 0
+                && Quickshell.iconPath(name, true).length > 0
+                && name.indexOf("image-missing") < 0;
+    }
+
+    function appSubstitution(value) {
+        var key = String(value || "").trim();
+        var lower = key.toLowerCase();
+        var substitutions = {
+            "code-url-handler": "visual-studio-code",
+            "code": "visual-studio-code",
+            "firefox": "firefox",
+            "navigator": "firefox",
+            "obsidian": "obsidian",
+            "md.obsidian": "obsidian",
+            "footclient": "foot",
+            "pavucontrol-qt": "pavucontrol"
+        };
+        return substitutions[key] || substitutions[lower] || key;
+    }
+
+    function reverseDomainNameAppName(value) {
+        var parts = String(value || "").split(".");
+        return parts.length > 0 ? parts[parts.length - 1] : "";
+    }
+
+    function kebabNormalizedAppName(value) {
+        return String(value || "").toLowerCase().replace(/\s+/g, "-").replace(/_/g, "-");
+    }
+
+    function desktopEntryByIdLike(value) {
+        var raw = String(value || "").trim();
+        if (!raw)
+            return null;
+
+        var substituted = appSubstitution(raw);
+        var lower = substituted.toLowerCase();
+        var reverse = reverseDomainNameAppName(substituted);
+        var candidates = [
+            raw,
+            substituted,
+            lower,
+            reverse,
+            reverse.toLowerCase(),
+            kebabNormalizedAppName(substituted)
+        ];
+
+        for (var i = 0; i < candidates.length; i++) {
+            var candidate = String(candidates[i] || "").trim();
+            if (!candidate)
+                continue;
+
+            var ids = candidate.lastIndexOf(".desktop") === candidate.length - 8
+                    ? [candidate]
+                    : [candidate, candidate + ".desktop"];
+            for (var j = 0; j < ids.length; j++) {
+                var entry = DesktopEntries.byId(ids[j]);
+                if (entry)
+                    return entry;
+            }
+        }
+
+        var heuristic = DesktopEntries.heuristicLookup(substituted);
+        if (heuristic)
+            return heuristic;
+        return DesktopEntries.heuristicLookup(raw);
+    }
+
+    function guessIconName(value) {
+        var raw = String(value || "").trim();
+        if (!raw)
+            return "";
+
+        var entry = desktopEntryByIdLike(raw);
+        if (entry && entry.icon)
+            return entry.icon;
+
+        var substituted = appSubstitution(raw);
+        if (iconExists(substituted))
+            return substituted;
+
+        var lower = substituted.toLowerCase();
+        if (iconExists(lower))
+            return lower;
+
+        var reverse = reverseDomainNameAppName(substituted);
+        if (iconExists(reverse))
+            return reverse;
+        if (iconExists(reverse.toLowerCase()))
+            return reverse.toLowerCase();
+
+        var kebab = kebabNormalizedAppName(substituted);
+        if (iconExists(kebab))
+            return kebab;
+
+        return "";
+    }
+
+    function guessIconForWindow(window) {
+        var fields = [window && window.appId, window && window.rawClass, window && window.initialClass];
+        for (var i = 0; i < fields.length; i++) {
+            var icon = guessIconName(fields[i]);
+            if (icon)
+                return icon;
+        }
+        return window && window.icon ? window.icon : "application-x-executable";
+    }
+
+    function desktopEntryForWindow(window) {
+        var fields = [window && window.appId, window && window.rawClass, window && window.initialClass];
+        for (var i = 0; i < fields.length; i++) {
+            var entry = desktopEntryByIdLike(fields[i]);
+            if (entry)
+                return entry;
+        }
+        return null;
+    }
+
+    function appByDesktopEntry(entry) {
+        if (!entry)
+            return null;
+        var entryKeys = [];
+        addIdentityVariants(entryKeys, entry.id || "");
+        addIdentityVariants(entryKeys, entry.name || "");
+        addIdentityVariants(entryKeys, entry.icon || "");
+
+        var bestApp = null;
+        var bestRank = 0;
+        var apps = Services.AppPanelService.apps || [];
+        for (var i = 0; i < apps.length; i++) {
+            var app = apps[i];
+            var appId = String(app.desktopId || "");
+            var rank = 0;
+            if (appId && appId === String(entry.id || ""))
+                rank = 120;
+            else if (appMatchesKeys(app, entryKeys))
+                rank = 100;
+            else
+                continue;
+
+            rank += appPreferenceBonus(app);
+            if (rank > bestRank) {
+                bestRank = rank;
+                bestApp = app;
+            }
+        }
+        return bestApp;
+    }
+
+    function fallbackAppFromDesktopEntry(entry, window) {
+        if (!entry)
+            return null;
+        var id = String(entry.id || "").trim();
+        if (!id)
+            id = String(window && (window.appId || window.rawClass || window.initialClass) || "").trim();
+        if (!id)
+            return null;
+
+        return {
+            desktopId: id,
+            name: entry.name || id,
+            genericName: "",
+            icon: entry.icon || guessIconForWindow(window),
+            iconName: entry.icon || "",
+            iconPath: "",
+            command: "",
+            executable: "",
+            startupWmClass: "",
+            noDisplay: false,
+            terminal: false,
+            matchKeys: windowTokens(window)
+        };
     }
 
     function tooltipFor(item) {
@@ -461,22 +767,16 @@ Item {
         var bestRawScore = 0;
         var apps = Services.AppPanelService.apps || [];
         var tokens = windowTokens(window);
+        var entry = desktopEntryForWindow(window);
+        var entryApp = appByDesktopEntry(entry);
+
         for (var i = 0; i < apps.length; i++) {
             var app = apps[i];
             var score = appMatchScore(window, app, tokens);
             if (score < 70)
                 continue;
 
-            var desktopId = String(app.desktopId || "");
-            var rank = score;
-            if (Services.AppPanelService.launchingIds[desktopId])
-                rank += 22;
-            if (Services.AppPanelService.isPinned(desktopId))
-                rank += 14;
-            if ((Services.AppPanelService.orderIds || []).indexOf(desktopId) >= 0)
-                rank += 4;
-            if (app.noDisplay)
-                rank -= 6;
+            var rank = score + appPreferenceBonus(app);
 
             if (rank > bestRank || (rank === bestRank && score > bestRawScore)) {
                 bestRank = rank;
@@ -484,7 +784,9 @@ Item {
                 bestApp = app;
             }
         }
-        return bestRawScore >= 70 ? bestApp : null;
+        if (bestRawScore >= 70)
+            return bestApp;
+        return entryApp || fallbackAppFromDesktopEntry(entry, window);
     }
 
     function windowAddressKey(window) {
@@ -492,11 +794,12 @@ Item {
         return address.length > 0 ? address : normalizeToken(window && (window.appId || window.rawClass || window.title) || "window");
     }
 
-    function cloneAppItem(app, pinned, itemId, window, allWindows, orderKey) {
+    function cloneAppItem(app, pinned, itemId, window, allWindows, orderKey, groupWindows) {
         var id = String(app.desktopId || "");
         var key = String(itemId || id);
         var orderingKey = String(orderKey || key);
-        var sourceWindows = allWindows && allWindows.length > 0 ? allWindows : (window ? [window] : []);
+        var sourceWindows = groupWindows && allWindows && allWindows.length > 0 ? allWindows : (window ? [window] : []);
+        var allKnownWindows = allWindows && allWindows.length > 0 ? sortWindows(allWindows) : sourceWindows;
         var wins = sortWindows(sourceWindows);
         return {
             itemId: key,
@@ -510,7 +813,7 @@ Item {
             pinned: !!pinned,
             hasDesktop: true,
             windows: wins,
-            allWindows: wins,
+            allWindows: allKnownWindows,
             active: false,
             open: wins.length > 0,
             otherWorkspace: false,
@@ -527,7 +830,7 @@ Item {
             sourceDesktopId: "",
             name: window.appId || window.rawClass || window.title || "Application",
             displayName: window.appId || window.rawClass || window.title || "Application",
-            icon: window.icon || "",
+            icon: guessIconForWindow(window),
             command: "",
             pinned: false,
             hasDesktop: false,
@@ -745,6 +1048,50 @@ Item {
         return ordered;
     }
 
+    function compatibleWindowGroupForPinned(pinApp, windowsByDesktop, appByDesktop) {
+        if (!pinApp)
+            return [];
+
+        var exactId = String(pinApp.desktopId || "");
+        if (windowsByDesktop[exactId])
+            return windowsByDesktop[exactId];
+
+        for (var desktopId in windowsByDesktop) {
+            var openApp = appByDesktop[desktopId];
+            if (openApp && appsCompatible(pinApp, openApp))
+                return windowsByDesktop[desktopId];
+        }
+
+        var pinKeys = appIdentityKeys(pinApp, "");
+        for (var fallbackId in windowsByDesktop) {
+            if (pinKeys.indexOf(normalizeToken(fallbackId)) >= 0)
+                return windowsByDesktop[fallbackId];
+        }
+
+        return [];
+    }
+
+    function pinnedAppForOpenApp(openApp) {
+        if (!openApp)
+            return null;
+
+        var pins = Services.AppPanelService.pinnedIds || [];
+        for (var i = 0; i < pins.length; i++) {
+            var pinApp = Services.AppPanelService.appById(String(pins[i] || ""));
+            if (pinApp && appsCompatible(pinApp, openApp))
+                return pinApp;
+        }
+        return null;
+    }
+
+    function rememberOpenDesktopId(openDesktopIds, openDesktopSeen, desktopId) {
+        var id = String(desktopId || "");
+        if (!id || openDesktopSeen[id])
+            return;
+        openDesktopSeen[id] = true;
+        openDesktopIds.push(id);
+    }
+
     function rebuildModel() {
         if (draggingItem) {
             rebuildQueued = true;
@@ -771,10 +1118,7 @@ Item {
                     windowsByDesktop[desktopId] = [];
                 windowsByDesktop[desktopId].push(window);
                 appByDesktop[desktopId] = app;
-                if (!openDesktopSeen[desktopId]) {
-                    openDesktopSeen[desktopId] = true;
-                    openDesktopIds.push(desktopId);
-                }
+                rememberOpenDesktopId(openDesktopIds, openDesktopSeen, desktopId);
             } else {
                 result.push(placeholderForWindow(window));
                 unknownAppRefreshTimer.restart();
@@ -783,19 +1127,22 @@ Item {
 
         for (var desktopId in windowsByDesktop) {
             var app = appByDesktop[desktopId];
+            if (pinnedAppForOpenApp(app))
+                continue;
             var sorted = sortWindows(windowsByDesktop[desktopId]);
-            result.push(cloneAppItem(app, Services.AppPanelService.isPinned(desktopId), desktopId, sorted[0], sorted, desktopId));
+            result.push(cloneAppItem(app, false, desktopId, sorted[0], sorted, desktopId, true));
         }
 
         var pins = Services.AppPanelService.pinnedIds || [];
         for (var p = 0; p < pins.length; p++) {
             var pinId = String(pins[p] || "");
-            if (windowsByDesktop[pinId])
-                continue;
             var pinApp = Services.AppPanelService.appById(pinId);
             if (!pinApp)
                 continue;
-            result.push(cloneAppItem(pinApp, true, pinId, null, []));
+            var pinWindows = sortWindows(compatibleWindowGroupForPinned(pinApp, windowsByDesktop, appByDesktop));
+            if (pinWindows.length > 0)
+                rememberOpenDesktopId(openDesktopIds, openDesktopSeen, pinId);
+            result.push(cloneAppItem(pinApp, true, pinId, pinWindows.length > 0 ? pinWindows[0] : null, pinWindows, pinId, true));
         }
 
         for (var x = 0; x < result.length; x++)
@@ -1144,7 +1491,22 @@ Item {
         onTriggered: Services.AppPanelService.requestRefresh(true)
     }
 
-    Component.onCompleted: rebuildModel()
+    Timer {
+        id: desktopEntryRetryTimer
+        interval: 1000
+        repeat: true
+        running: desktopEntryRetryCount < 5
+        onTriggered: {
+            desktopEntryRetryCount += 1;
+            rebuildModel();
+        }
+    }
+
+    Component.onCompleted: {
+        desktopEntryRetryCount = 0;
+        rebuildModel();
+        desktopEntryRetryTimer.restart();
+    }
 
     Connections {
         target: Services.AppPanelService
