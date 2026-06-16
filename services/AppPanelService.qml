@@ -22,6 +22,8 @@ Item {
     property var launchStartedAt: ({})
     property string pendingCommand: ""
     property var pendingArgs: []
+    property bool pendingRefresh: false
+    property bool pendingRefreshForce: false
 
     function rebuildAppsById() {
         var next = {};
@@ -127,8 +129,15 @@ Item {
     }
 
     function requestRefresh(force) {
-        if (refreshing)
+        if (refreshing || refreshProc.running) {
+            pendingRefresh = true;
+            pendingRefreshForce = pendingRefreshForce || !!force;
             return;
+        }
+        startRefresh(force);
+    }
+
+    function startRefresh(force) {
         refreshProc.command = ["python3", scriptPath, force ? "refresh" : "list"];
         refreshing = true;
         refreshProc.running = true;
@@ -318,7 +327,14 @@ Item {
             onStreamFinished: root.parsePayload(this.text)
         }
         onExited: {
+            refreshProc.running = false;
             refreshing = false;
+            if (root.pendingRefresh) {
+                var force = root.pendingRefreshForce;
+                root.pendingRefresh = false;
+                root.pendingRefreshForce = false;
+                root.startRefresh(force);
+            }
         }
     }
 
@@ -331,6 +347,7 @@ Item {
             }
         }
         onExited: {
+            actionProc.running = false;
             actionRunning = false;
             if (root.pendingCommand)
                 root.startPendingAction();
