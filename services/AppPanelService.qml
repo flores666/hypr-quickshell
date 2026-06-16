@@ -291,14 +291,15 @@ Item {
     Component.onCompleted: requestRefresh(false)
 
     // Desktop files can appear while Quickshell is already running, for example
-    // after installing a new application. Refresh periodically, but the Python
-    // helper reuses its cache when desktop-file mtimes did not change.
+    // after installing a new application. Use a forced refresh here: it is cheap
+    // now that icon lookup no longer scans icon themes recursively, and it avoids
+    // stale mtime/cache edge cases from package managers.
     Timer {
         id: desktopAppsRefreshTimer
-        interval: 10000
+        interval: 5000
         repeat: true
         running: true
-        onTriggered: root.requestRefresh(false)
+        onTriggered: root.requestRefresh(true)
     }
 
     Timer {

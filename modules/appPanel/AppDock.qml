@@ -180,7 +180,7 @@ PanelWindow {
             id: dockBackground
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.verticalCenter: appPanel.verticalCenter
-            width: Math.max(82, appPanel.implicitWidth + root.dockHorizontalPadding * 2)
+            width: Math.max(82, Math.min(root.width - 16, appPanel.implicitWidth + root.dockHorizontalPadding * 2))
             height: root.dockBackgroundHeight
             radiusSize: 28
             glassColor: "#b006080c"

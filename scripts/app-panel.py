@@ -13,7 +13,7 @@ CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / 
 PINS_FILE = CONFIG_DIR / "app-panel.json"
 RUNTIME_DIR = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / APP_NAME
 CACHE_FILE = RUNTIME_DIR / "desktop-apps-cache.json"
-CACHE_VERSION = 3
+CACHE_VERSION = 4
 
 DESKTOP_DIRS = []
 for raw_dir in [
@@ -161,33 +161,15 @@ def find_icon(icon_name: str) -> str:
     else:
         names = [icon + ext for ext in ICON_EXTS]
 
-    # Fast common paths first.
-    common_sizes = ["scalable", "symbolic", "256x256", "128x128", "96x96", "64x64", "48x48", "32x32", "24x24", "22x22", "16x16"]
-    common_categories = ["apps", "devices", "status", "places", "mimetypes", "actions"]
-    for base in ICON_DIRS:
-        if not base.exists():
-            continue
-        if base.name == "pixmaps":
-            for name in names:
-                path = base / name
-                if path.exists():
-                    return str(path)
-            continue
-        for size in common_sizes:
-            for category in common_categories:
-                for name in names:
-                    path = base / "hicolor" / size / category / name
-                    if path.exists():
-                        return str(path)
-        # Theme-agnostic bounded search. It is done only during app list refresh.
-        try:
-            for name in names:
-                matches = list(base.glob(f"*/**/{name}"))
-                if matches:
-                    matches.sort(key=lambda p: ("scalable" not in str(p), len(str(p))))
-                    return str(matches[0])
-        except OSError:
-            continue
+    # Keep this deliberately cheap. Quickshell resolves themed icon names in
+    # QML, so the helper only handles explicit files and the flat pixmaps dir.
+    # A recursive scan under /usr/share/icons for every desktop file can pin a
+    # CPU core for minutes on large icon themes.
+    pixmaps = Path("/usr/share/pixmaps")
+    for name in names:
+        path = pixmaps / name
+        if path.exists():
+            return str(path)
 
     return ""
 

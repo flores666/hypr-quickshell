@@ -77,7 +77,12 @@ Item {
     }
 
     function maxPanelWidth() {
-        return maxVisibleItems * itemSize + Math.max(0, maxVisibleItems - 1) * itemSpacing;
+        var itemLimit = maxVisibleItems * itemSize + Math.max(0, maxVisibleItems - 1) * itemSpacing;
+        if (hostWidth <= 0)
+            return itemLimit;
+
+        var screenLimit = Math.max(itemSize, hostWidth - overviewSectionWidth - 48);
+        return Math.min(itemLimit, screenLimit);
     }
 
     function normalizeToken(value) {
@@ -128,6 +133,69 @@ Item {
             addUniqueToken(list, parts[i]);
     }
 
+    function canonicalAppToken(value) {
+        var key = normalizeToken(appSubstitution(value));
+        var aliases = {
+            "navigator": "firefox",
+            "firefox": "firefox",
+            "mozillafirefox": "firefox",
+            "orgmozillafirefox": "firefox",
+            "firefoxdeveloperedition": "firefoxdeveloperedition",
+            "obsidian": "obsidian",
+            "mdobsidian": "obsidian",
+            "telegramdesktop": "telegramdesktop",
+            "orgtelegramdesktop": "telegramdesktop",
+            "zed": "zed",
+            "devzedzed": "zed",
+            "code": "visualstudiocode",
+            "vscode": "visualstudiocode",
+            "visualstudiocode": "visualstudiocode",
+            "comvisualstudiocode": "visualstudiocode",
+            "orggnomenautilus": "nautilus",
+            "gnomenautilus": "nautilus",
+            "nautilus": "nautilus",
+            "orgkdedolphin": "dolphin",
+            "kdedolphin": "dolphin",
+            "dolphin": "dolphin",
+            "thunar": "thunar",
+            "kitty": "kitty",
+            "orgwezfurlongwezterm": "wezterm",
+            "wezfurlongwezterm": "wezterm",
+            "wezterm": "wezterm"
+        };
+        return aliases[key] || key;
+    }
+
+    function addCanonicalAppToken(list, value) {
+        var raw = String(value || "").trim();
+        if (!raw)
+            return;
+
+        var candidates = [
+            raw,
+            appSubstitution(raw),
+            reverseDomainNameAppName(raw),
+            kebabNormalizedAppName(raw)
+        ];
+        for (var i = 0; i < candidates.length; i++) {
+            var token = canonicalAppToken(candidates[i]);
+            if (token.length > 0 && list.indexOf(token) < 0)
+                list.push(token);
+        }
+    }
+
+    function appCanonicalKeys(app, extraValue) {
+        var keys = [];
+        if (app) {
+            addCanonicalAppToken(keys, app.desktopId || "");
+            addCanonicalAppToken(keys, app.iconName || "");
+            addCanonicalAppToken(keys, app.executable || "");
+            addCanonicalAppToken(keys, app.startupWmClass || "");
+        }
+        addCanonicalAppToken(keys, extraValue || "");
+        return keys;
+    }
+
     function appIdentityKeys(app, extraValue) {
         var keys = [];
         if (app) {
@@ -162,13 +230,62 @@ Item {
         var idB = String(appB.desktopId || "");
         if (idA && idB && idA === idB)
             return true;
-        return listsShareIdentity(appIdentityKeys(appA, extraA), appIdentityKeys(appB, extraB));
+        return listsShareIdentity(appCanonicalKeys(appA, extraA), appCanonicalKeys(appB, extraB));
     }
 
     function appMatchesKeys(app, keys) {
         if (!app)
             return false;
         return listsShareIdentity(appIdentityKeys(app, ""), keys || []);
+    }
+
+    function runtimeAppKeysForWindow(window) {
+        var result = [];
+        var fields = [window && window.appId, window && window.rawClass, window && window.initialClass];
+        for (var i = 0; i < fields.length; i++) {
+            var key = canonicalAppToken(fields[i]);
+            if (key.length > 0 && result.indexOf(key) < 0)
+                result.push(key);
+        }
+        return result;
+    }
+
+    function runtimeAppKeyForWindow(window) {
+        var keys = runtimeAppKeysForWindow(window);
+        for (var i = 0; i < keys.length; i++) {
+            if (pinnedAppForRuntimeKey(keys[i]))
+                return keys[i];
+        }
+        var apps = Services.AppPanelService.apps || [];
+        for (var k = 0; k < keys.length; k++) {
+            for (var a = 0; a < apps.length; a++) {
+                if (appMatchesRuntimeKey(apps[a], keys[k]))
+                    return keys[k];
+            }
+        }
+        return keys.length > 0 ? keys[0] : "";
+    }
+
+    function appMatchesRuntimeKey(app, appKey) {
+        var key = String(appKey || "");
+        if (!app || !key)
+            return false;
+        return appCanonicalKeys(app, "").indexOf(key) >= 0;
+    }
+
+    function pinnedAppForRuntimeKey(appKey) {
+        var key = String(appKey || "");
+        if (!key)
+            return null;
+
+        var pins = Services.AppPanelService.pinnedIds || [];
+        for (var i = 0; i < pins.length; i++) {
+            var pinId = String(pins[i] || "");
+            var pinApp = Services.AppPanelService.appById(pinId);
+            if (pinApp && appMatchesRuntimeKey(pinApp, key))
+                return pinApp;
+        }
+        return null;
     }
 
     function appPinnedBonus(app) {
@@ -179,12 +296,12 @@ Item {
             return 24;
 
         var pins = Services.AppPanelService.pinnedIds || [];
-        var keys = appIdentityKeys(app, "");
+        var keys = appCanonicalKeys(app, "");
         for (var i = 0; i < pins.length; i++) {
             var pinId = String(pins[i] || "");
             if (!pinId)
                 continue;
-            if (keys.indexOf(normalizeToken(pinId)) >= 0)
+            if (keys.indexOf(canonicalAppToken(pinId)) >= 0)
                 return 18;
             var pinApp = Services.AppPanelService.appById(pinId);
             if (pinApp && appsCompatible(app, pinApp))
@@ -360,9 +477,8 @@ Item {
         if (!entry)
             return null;
         var entryKeys = [];
-        addIdentityVariants(entryKeys, entry.id || "");
-        addIdentityVariants(entryKeys, entry.name || "");
-        addIdentityVariants(entryKeys, entry.icon || "");
+        addCanonicalAppToken(entryKeys, entry.id || "");
+        addCanonicalAppToken(entryKeys, entry.icon || "");
 
         var bestApp = null;
         var bestRank = 0;
@@ -373,7 +489,7 @@ Item {
             var rank = 0;
             if (appId && appId === String(entry.id || ""))
                 rank = 120;
-            else if (appMatchesKeys(app, entryKeys))
+            else if (listsShareIdentity(appCanonicalKeys(app, ""), entryKeys))
                 rank = 100;
             else
                 continue;
@@ -769,6 +885,10 @@ Item {
         var tokens = windowTokens(window);
         var entry = desktopEntryForWindow(window);
         var entryApp = appByDesktopEntry(entry);
+        var runtimeKey = runtimeAppKeyForWindow(window);
+        var pinnedApp = pinnedAppForRuntimeKey(runtimeKey);
+        if (pinnedApp)
+            return pinnedApp;
 
         for (var i = 0; i < apps.length; i++) {
             var app = apps[i];
@@ -794,7 +914,7 @@ Item {
         return address.length > 0 ? address : normalizeToken(window && (window.appId || window.rawClass || window.title) || "window");
     }
 
-    function cloneAppItem(app, pinned, itemId, window, allWindows, orderKey, groupWindows) {
+    function cloneAppItem(app, pinned, itemId, window, allWindows, orderKey, groupWindows, appKey) {
         var id = String(app.desktopId || "");
         var key = String(itemId || id);
         var orderingKey = String(orderKey || key);
@@ -803,6 +923,7 @@ Item {
         var wins = sortWindows(sourceWindows);
         return {
             itemId: key,
+            appKey: String(appKey || key),
             orderKey: orderingKey,
             desktopId: id,
             sourceDesktopId: id,
@@ -821,21 +942,25 @@ Item {
         };
     }
 
-    function placeholderForWindow(window) {
-        var key = "__window__" + windowAddressKey(window);
+    function placeholderForWindow(window, allWindows, appKey) {
+        var runtimeKey = String(appKey || runtimeAppKeyForWindow(window) || "");
+        var key = runtimeKey.length > 0 ? "__app__" + runtimeKey : "__window__" + windowAddressKey(window);
+        var wins = allWindows && allWindows.length > 0 ? sortWindows(allWindows) : [window];
+        var top = wins.length > 0 ? wins[0] : window;
         return {
             itemId: key,
+            appKey: runtimeKey || key,
             orderKey: key,
             desktopId: key,
             sourceDesktopId: "",
-            name: window.appId || window.rawClass || window.title || "Application",
-            displayName: window.appId || window.rawClass || window.title || "Application",
-            icon: guessIconForWindow(window),
+            name: top.appId || top.rawClass || top.title || "Application",
+            displayName: top.appId || top.rawClass || top.title || "Application",
+            icon: guessIconForWindow(top),
             command: "",
             pinned: false,
             hasDesktop: false,
-            windows: [window],
-            allWindows: [window],
+            windows: wins,
+            allWindows: wins,
             active: false,
             open: true,
             otherWorkspace: false,
@@ -969,6 +1094,7 @@ Item {
             }
             result.push([
                 itemKey(item),
+                item.appKey,
                 orderKeyFor(item),
                 item.desktopId,
                 item.displayName,
@@ -1062,9 +1188,9 @@ Item {
                 return windowsByDesktop[desktopId];
         }
 
-        var pinKeys = appIdentityKeys(pinApp, "");
+        var pinKeys = appCanonicalKeys(pinApp, "");
         for (var fallbackId in windowsByDesktop) {
-            if (pinKeys.indexOf(normalizeToken(fallbackId)) >= 0)
+            if (pinKeys.indexOf(canonicalAppToken(fallbackId)) >= 0)
                 return windowsByDesktop[fallbackId];
         }
 
@@ -1101,8 +1227,10 @@ Item {
         var result = [];
         var openDesktopIds = [];
         var openDesktopSeen = {};
-        var windowsByDesktop = {};
-        var appByDesktop = {};
+        var windowsByAppKey = {};
+        var appByAppKey = {};
+        var appKeyOrder = [];
+        var claimedAppKeys = {};
         var windows = Services.ShellState.windows || [];
         syncWindowInstanceOrder(windows);
 
@@ -1111,26 +1239,27 @@ Item {
             if (!window || window.hiddenByShell || !window.address)
                 continue;
 
-            var app = findAppForWindow(window);
-            if (app) {
-                var desktopId = String(app.desktopId || "");
-                if (!windowsByDesktop[desktopId])
-                    windowsByDesktop[desktopId] = [];
-                windowsByDesktop[desktopId].push(window);
-                appByDesktop[desktopId] = app;
-                rememberOpenDesktopId(openDesktopIds, openDesktopSeen, desktopId);
-            } else {
+            var appKey = runtimeAppKeyForWindow(window);
+            if (!appKey) {
                 result.push(placeholderForWindow(window));
                 unknownAppRefreshTimer.restart();
-            }
-        }
-
-        for (var desktopId in windowsByDesktop) {
-            var app = appByDesktop[desktopId];
-            if (pinnedAppForOpenApp(app))
                 continue;
-            var sorted = sortWindows(windowsByDesktop[desktopId]);
-            result.push(cloneAppItem(app, false, desktopId, sorted[0], sorted, desktopId, true));
+            }
+
+            if (!windowsByAppKey[appKey]) {
+                windowsByAppKey[appKey] = [];
+                appKeyOrder.push(appKey);
+            }
+            windowsByAppKey[appKey].push(window);
+
+            var app = findAppForWindow(window);
+            if (app) {
+                var previous = appByAppKey[appKey];
+                if (!previous || appPreferenceBonus(app) > appPreferenceBonus(previous))
+                    appByAppKey[appKey] = app;
+            } else {
+                unknownAppRefreshTimer.restart();
+            }
         }
 
         var pins = Services.AppPanelService.pinnedIds || [];
@@ -1139,10 +1268,37 @@ Item {
             var pinApp = Services.AppPanelService.appById(pinId);
             if (!pinApp)
                 continue;
-            var pinWindows = sortWindows(compatibleWindowGroupForPinned(pinApp, windowsByDesktop, appByDesktop));
+            var pinWindows = [];
+            var pinKeys = appCanonicalKeys(pinApp, "");
+            var matchedAppKey = "";
+            for (var pk = 0; pk < appKeyOrder.length; pk++) {
+                var openKey = appKeyOrder[pk];
+                if (claimedAppKeys[openKey] || pinKeys.indexOf(openKey) < 0)
+                    continue;
+                pinWindows = pinWindows.concat(windowsByAppKey[openKey] || []);
+                claimedAppKeys[openKey] = true;
+                if (!matchedAppKey)
+                    matchedAppKey = openKey;
+            }
             if (pinWindows.length > 0)
                 rememberOpenDesktopId(openDesktopIds, openDesktopSeen, pinId);
-            result.push(cloneAppItem(pinApp, true, pinId, pinWindows.length > 0 ? pinWindows[0] : null, pinWindows, pinId, true));
+            result.push(cloneAppItem(pinApp, true, pinId, pinWindows.length > 0 ? pinWindows[0] : null, pinWindows, pinId, true, matchedAppKey || canonicalAppToken(pinId)));
+        }
+
+        for (var a = 0; a < appKeyOrder.length; a++) {
+            var key = appKeyOrder[a];
+            if (claimedAppKeys[key])
+                continue;
+
+            var sorted = sortWindows(windowsByAppKey[key]);
+            var openApp = appByAppKey[key];
+            if (openApp) {
+                var openDesktopId = String(openApp.desktopId || "");
+                rememberOpenDesktopId(openDesktopIds, openDesktopSeen, openDesktopId);
+                result.push(cloneAppItem(openApp, false, key, sorted[0], sorted, openDesktopId || key, true, key));
+            } else {
+                result.push(placeholderForWindow(sorted[0], sorted, key));
+            }
         }
 
         for (var x = 0; x < result.length; x++)
