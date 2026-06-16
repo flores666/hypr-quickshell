@@ -11,9 +11,10 @@ PLUGIN_DIR="$ROOT_DIR/plugins/quickshell-gnome-overview"
 SO_PATH="$PLUGIN_DIR/quickshell-gnome-overview.so"
 SNIPPET_PATH="$ROOT_DIR/config/hyprland-live-overview.conf.snippet"
 HYPR_CONFIG="${HYPR_CONFIG:-$HOME/.config/hypr/hyprland.conf}"
+HYPR_HOME_ROOT='$HOME/hypr-quickshell'
 MANAGED_BEGIN="# >>> hypr-quickshell live overview"
 MANAGED_END="# <<< hypr-quickshell live overview"
-SOURCE_LINE="source = $SNIPPET_PATH"
+SOURCE_LINE="source = ${HYPR_HOME_ROOT}/config/hyprland-live-overview.conf.snippet"
 
 has_cmd() { command -v "$1" >/dev/null 2>&1; }
 need_hypr() {
@@ -62,7 +63,7 @@ write_snippet() {
 # Managed by hypr-quickshell/scripts/live-overview-plugin.sh
 # It renders one fullscreen wallpaper blur/dim layer and a live workspace ribbon above it.
 
-exec-once = hyprctl plugin load $SO_PATH
+exec-once = sh -lc 'hyprctl plugin load "\$HOME/hypr-quickshell/plugins/quickshell-gnome-overview/quickshell-gnome-overview.so"'
 
 plugin {
     overview {

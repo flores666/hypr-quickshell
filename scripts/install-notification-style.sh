@@ -4,7 +4,7 @@ set -euo pipefail
 HYPR_CONFIG="${HYPR_CONFIG:-$HOME/.config/hypr/hyprland.conf}"
 HYPR_TARGET_DIR="$HOME/hypr-quickshell/config"
 HYPR_SNIPPET_TARGET="$HYPR_TARGET_DIR/hyprland-notifications.conf.snippet"
-SOURCE_LINE="source = ~/hypr-quickshell/config/hyprland-notifications.conf.snippet"
+SOURCE_LINE='source = $HOME/hypr-quickshell/config/hyprland-notifications.conf.snippet'
 
 backup_file() {
     local file="$1"

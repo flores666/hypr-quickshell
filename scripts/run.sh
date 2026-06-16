@@ -2,4 +2,4 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
-qs -p ./shell.qml
+qs -p "$HOME/hypr-quickshell/shell.qml"
