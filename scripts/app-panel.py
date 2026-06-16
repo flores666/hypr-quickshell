@@ -13,13 +13,18 @@ CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / 
 PINS_FILE = CONFIG_DIR / "app-panel.json"
 RUNTIME_DIR = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / APP_NAME
 CACHE_FILE = RUNTIME_DIR / "desktop-apps-cache.json"
-CACHE_VERSION = 2
+CACHE_VERSION = 3
 
-DESKTOP_DIRS = [
-    Path.home() / ".local/share/applications",
-    Path("/usr/local/share/applications"),
-    Path("/usr/share/applications"),
-]
+DESKTOP_DIRS = []
+for raw_dir in [
+    str(Path.home() / ".local/share/applications"),
+    *os.environ.get("XDG_DATA_DIRS", "/usr/local/share:/usr/share").split(":"),
+]:
+    directory = Path(raw_dir).expanduser()
+    if directory.name != "applications":
+        directory = directory / "applications"
+    if directory not in DESKTOP_DIRS:
+        DESKTOP_DIRS.append(directory)
 
 FIELD_CODE_RE = re.compile(r"\s+%[fFuUdDnNickvm]")
 INLINE_FIELD_CODE_RE = re.compile(r"%[fFuUdDnNickvm]")
@@ -39,6 +44,20 @@ DEFAULT_PIN_CANDIDATES = [
     ["kitty.desktop", "org.gnome.Console.desktop", "org.gnome.Terminal.desktop", "org.kde.konsole.desktop", "Alacritty.desktop"],
     ["org.gnome.Nautilus.desktop", "nautilus.desktop", "thunar.desktop", "org.kde.dolphin.desktop", "pcmanfm.desktop"],
 ]
+
+APP_ALIASES = {
+    "firefox": ["firefox", "mozillafirefox", "orgmozillafirefox", "mozilla"],
+    "firefoxdeveloperedition": ["firefoxdeveloperedition", "firefoxdeveloper", "firefox"],
+    "orgmozillafirefox": ["firefox", "mozillafirefox", "orgmozillafirefox"],
+    "mozillafirefox": ["firefox", "mozillafirefox", "orgmozillafirefox"],
+    "obsidian": ["obsidian", "mdobsidian"],
+    "mdobsidian": ["obsidian", "mdobsidian"],
+    "code": ["code", "vscode", "visualstudiocode"],
+    "visualstudiocode": ["code", "vscode", "visualstudiocode"],
+    "chromium": ["chromium", "chromiumbrowser"],
+    "googlechrome": ["googlechrome", "chrome"],
+    "bravebrowser": ["brave", "bravebrowser"],
+}
 
 
 def warn(message: str) -> None:
@@ -93,8 +112,6 @@ def read_desktop_file(path: Path) -> Optional[Dict[str, str]]:
         result.setdefault(key, value.strip())
 
     if result.get("Type") != "Application":
-        return None
-    if result.get("NoDisplay", "false").lower() == "true":
         return None
     if result.get("Hidden", "false").lower() == "true":
         return None
@@ -175,6 +192,26 @@ def find_icon(icon_name: str) -> str:
     return ""
 
 
+def add_match_token(tokens: List[str], value: str) -> None:
+    token = normalize_token(value)
+    if not token:
+        return
+    for candidate in [token, *APP_ALIASES.get(token, [])]:
+        normalized = normalize_token(candidate)
+        if normalized and normalized not in tokens:
+            tokens.append(normalized)
+
+
+def add_desktop_id_tokens(tokens: List[str], desktop_id: str) -> None:
+    stem = desktop_id[:-8] if desktop_id.endswith(".desktop") else desktop_id
+    add_match_token(tokens, stem)
+    parts = [part for part in re.split(r"[.\-_]+", stem) if part]
+    for part in parts:
+        add_match_token(tokens, part)
+    if parts:
+        add_match_token(tokens, parts[-1])
+
+
 def app_from_desktop(path: Path) -> Optional[Dict[str, object]]:
     entry = read_desktop_file(path)
     if not entry:
@@ -189,32 +226,31 @@ def app_from_desktop(path: Path) -> Optional[Dict[str, object]]:
     name = entry.get("Name", desktop_id.replace(".desktop", ""))
     generic_name = entry.get("GenericName", "")
 
-    tokens = []
+    tokens: List[str] = []
+    add_desktop_id_tokens(tokens, desktop_id)
     for value in [
-        desktop_id,
-        desktop_id.replace(".desktop", ""),
         name,
         generic_name,
         startup_wm_class,
         executable,
         Path(executable).stem,
+        icon_name,
     ]:
-        token = normalize_token(value)
-        if token and token not in tokens:
-            tokens.append(token)
+        add_match_token(tokens, value)
 
     return {
         "desktopId": desktop_id,
         "name": name,
         "genericName": generic_name,
-        # QML Image needs file:// URLs for local files. Theme names are not passed
-        # directly because Quickshell may try to load them as qrc resources.
-        "icon": file_uri(icon_path) if icon_path else "",
+        # Prefer a resolved file URI, but keep the theme icon name as a fallback.
+        # QML resolves theme names through Quickshell.iconPath when needed.
+        "icon": file_uri(icon_path) if icon_path else icon_name,
         "iconName": icon_name,
         "iconPath": icon_path,
         "command": command,
         "executable": executable,
         "startupWmClass": startup_wm_class,
+        "noDisplay": entry.get("NoDisplay", "false").lower() == "true",
         "terminal": entry.get("Terminal", "false").lower() == "true",
         "matchKeys": tokens,
     }

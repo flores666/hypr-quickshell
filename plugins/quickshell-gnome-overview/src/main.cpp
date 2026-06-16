@@ -596,6 +596,8 @@ void onKeyPress(const IKeyboard::SKeyEvent& event, SCallbackInfo& info) {
                 const uint32_t unsafeOtherMods = mods & (HL_MODIFIER_SHIFT | HL_MODIFIER_CTRL | HL_MODIFIER_ALT | HL_MODIFIER_MOD2 | HL_MODIFIER_MOD3 | HL_MODIFIER_MOD5);
                 g_mainModCancelled = unsafeOtherMods != 0;
             }
+            if (isAnyOverviewActive())
+                info.cancelled = true;
             return;
         }
 
@@ -608,6 +610,8 @@ void onKeyPress(const IKeyboard::SKeyEvent& event, SCallbackInfo& info) {
             if (safeSinglePress) {
                 toggleOverviewForCurrentMonitor();
                 info.cancelled = true;
+            } else if (isAnyOverviewActive()) {
+                info.cancelled = true;
             }
             return;
         }
@@ -618,26 +622,31 @@ void onKeyPress(const IKeyboard::SKeyEvent& event, SCallbackInfo& info) {
     }
 
     auto* pExitKeyCfg = HyprlandAPI::getConfigValue(pHandle, "plugin:overview:exitKey");
-    if (!pExitKeyCfg)
-        return;
+    if (pExitKeyCfg) {
+        const Hyprlang::STRING cfgExitKey = std::any_cast<Hyprlang::STRING>(pExitKeyCfg->getValue());
+        if (cfgExitKey && cfgExitKey[0] != '\0') {
+            const xkb_keysym_t cfgExitKeysym = xkb_keysym_from_name(cfgExitKey, XKB_KEYSYM_CASE_INSENSITIVE);
 
-    const Hyprlang::STRING cfgExitKey = std::any_cast<Hyprlang::STRING>(pExitKeyCfg->getValue());
-    if (!cfgExitKey || cfgExitKey[0] == '\0')
-        return;
-
-    const xkb_keysym_t cfgExitKeysym = xkb_keysym_from_name(cfgExitKey, XKB_KEYSYM_CASE_INSENSITIVE);
-
-    if (pressed && keysym == cfgExitKeysym) {
-        bool overviewActive = false;
-        for (auto& widget : g_overviewWidgets) {
-            if (widget != nullptr && widget->isActive()) {
-                widget->hide();
-                overviewActive = true;
+            if (pressed && keysym == cfgExitKeysym) {
+                bool overviewActive = false;
+                for (auto& widget : g_overviewWidgets) {
+                    if (widget != nullptr && widget->isActive()) {
+                        widget->hide();
+                        overviewActive = true;
+                    }
+                }
+                if (overviewActive)
+                    info.cancelled = true;
+                return;
             }
         }
-        if (overviewActive)
-            info.cancelled = true;
     }
+
+    // While live overview is visible, do not let text input fall through to the
+    // focused client underneath. This still keeps the explicit overview shortcuts
+    // above working, but normal typing no longer edits the hidden application.
+    if (isAnyOverviewActive())
+        info.cancelled = true;
 }
 
 PHLMONITOR g_pTouchedMonitor;

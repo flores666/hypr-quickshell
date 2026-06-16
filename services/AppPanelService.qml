@@ -290,6 +290,17 @@ Item {
 
     Component.onCompleted: requestRefresh(false)
 
+    // Desktop files can appear while Quickshell is already running, for example
+    // after installing a new application. Refresh periodically, but the Python
+    // helper reuses its cache when desktop-file mtimes did not change.
+    Timer {
+        id: desktopAppsRefreshTimer
+        interval: 10000
+        repeat: true
+        running: true
+        onTriggered: root.requestRefresh(false)
+    }
+
     Timer {
         id: launchCleanupTimer
         interval: 7000

@@ -459,9 +459,11 @@ void CHyprspaceWidget::show() {
         notifyQuickshellOverviewState("open");
     }
 
-    // Do not synthesize pointer motion while entering overview. Sending motion
-    // to the real client below the cursor made buttons/links under the preview
-    // hoverable for a moment. Real pointer events are blocked by the input hooks.
+    // Refresh pointer focus after enabling overview so stale client cursors
+    // like text/select/resize do not remain visible over the overview. The input
+    // hooks above keep this synthetic motion from reaching normal windows.
+    g_pInputManager->refocus();
+    g_pInputManager->simulateMouseMovement();
 
     g_pHyprRenderer->damageMonitor(owner);
     g_pCompositor->scheduleFrameForMonitor(owner);

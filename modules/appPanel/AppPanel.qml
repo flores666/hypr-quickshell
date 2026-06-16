@@ -200,6 +200,14 @@ Item {
             return icon;
         if (icon.charAt(0) === "/")
             return "file://" + icon;
+        var themedPath = Quickshell.iconPath(icon, true);
+        if (themedPath && themedPath.length > 0 && themedPath.indexOf("image-missing") < 0) {
+            if (themedPath.indexOf("file://") === 0 || themedPath.indexOf("qrc:/") === 0)
+                return themedPath;
+            if (themedPath.charAt(0) === "/")
+                return "file://" + themedPath;
+            return themedPath;
+        }
         return "";
     }
 
@@ -370,14 +378,44 @@ Item {
     function windowTokens(window) {
         if (!window)
             return [];
-        var fields = [window.appId, window.rawClass, window.initialClass, window.initialTitle, window.title];
+
+        // Only stable window identity fields are used for app matching. Window
+        // titles and initial titles are deliberately excluded: browser tabs or
+        // document titles can contain words like "emacs" and must not turn the
+        // browser into another application in AppDock.
+        var fields = [window.appId, window.rawClass, window.initialClass];
         var result = [];
         for (var i = 0; i < fields.length; i++) {
-            var key = normalizeToken(fields[i]);
-            if (key.length > 0 && result.indexOf(key) < 0)
-                result.push(key);
+            addWindowToken(result, fields[i]);
         }
         return result;
+    }
+
+    function addWindowToken(result, value) {
+        var key = normalizeToken(value);
+        if (key.length <= 0)
+            return;
+
+        var aliases = {
+            "firefox": ["firefox", "mozillafirefox", "orgmozillafirefox", "mozilla"],
+            "mozillafirefox": ["firefox", "mozillafirefox", "orgmozillafirefox"],
+            "orgmozillafirefox": ["firefox", "mozillafirefox", "orgmozillafirefox"],
+            "firefoxdeveloperedition": ["firefoxdeveloperedition", "firefoxdeveloper", "firefox"],
+            "obsidian": ["obsidian", "mdobsidian"],
+            "mdobsidian": ["obsidian", "mdobsidian"],
+            "code": ["code", "vscode", "visualstudiocode"],
+            "visualstudiocode": ["code", "vscode", "visualstudiocode"],
+            "chromium": ["chromium", "chromiumbrowser"],
+            "googlechrome": ["googlechrome", "chrome"],
+            "bravebrowser": ["brave", "bravebrowser"]
+        };
+
+        var candidates = [key].concat(aliases[key] || []);
+        for (var i = 0; i < candidates.length; i++) {
+            var token = normalizeToken(candidates[i]);
+            if (token.length > 0 && result.indexOf(token) < 0)
+                result.push(token);
+        }
     }
 
     function appMatchScore(window, app, tokens) {
@@ -392,46 +430,61 @@ Item {
                 var key = String(keys[j] || "");
                 if (!key)
                     continue;
-                if (tokens[i] === key)
+                if (tokens[i] === key) {
                     best = Math.max(best, 100);
-                else if (tokens[i].indexOf(key) >= 0 || key.indexOf(tokens[i]) >= 0)
+                } else if (key.length >= 5 && tokens[i].length >= 5 && (tokens[i].indexOf(key) >= 0 || key.indexOf(tokens[i]) >= 0)) {
+                    // Permit useful long-form matches such as org.mozilla.firefox
+                    // -> firefox, but reject short ambiguous keys such as obs ->
+                    // obsidian. Short substrings caused Obsidian to be shown as OBS.
                     best = Math.max(best, 72);
+                }
             }
         }
 
         var executable = normalizeToken(app.executable || "");
         if (executable) {
             for (var t = 0; t < tokens.length; t++) {
-                if (tokens[t] === executable)
+                if (tokens[t] === executable) {
                     best = Math.max(best, 92);
-                else if (tokens[t].indexOf(executable) >= 0 || executable.indexOf(tokens[t]) >= 0)
+                } else if (executable.length >= 5 && tokens[t].length >= 5 && (tokens[t].indexOf(executable) >= 0 || executable.indexOf(tokens[t]) >= 0)) {
                     best = Math.max(best, 70);
+                }
             }
         }
-
-        var appName = normalizeToken(app.name || "");
-        if (appName && stringContainsAppKey(window.title, appName))
-            best = Math.max(best, 44);
 
         return best;
     }
 
     function findAppForWindow(window) {
         var bestApp = null;
-        var bestScore = 0;
+        var bestRank = 0;
+        var bestRawScore = 0;
         var apps = Services.AppPanelService.apps || [];
         var tokens = windowTokens(window);
         for (var i = 0; i < apps.length; i++) {
             var app = apps[i];
             var score = appMatchScore(window, app, tokens);
-            if (score > bestScore) {
-                bestScore = score;
+            if (score < 70)
+                continue;
+
+            var desktopId = String(app.desktopId || "");
+            var rank = score;
+            if (Services.AppPanelService.launchingIds[desktopId])
+                rank += 22;
+            if (Services.AppPanelService.isPinned(desktopId))
+                rank += 14;
+            if ((Services.AppPanelService.orderIds || []).indexOf(desktopId) >= 0)
+                rank += 4;
+            if (app.noDisplay)
+                rank -= 6;
+
+            if (rank > bestRank || (rank === bestRank && score > bestRawScore)) {
+                bestRank = rank;
+                bestRawScore = score;
                 bestApp = app;
-                if (bestScore >= 100)
-                    break;
             }
         }
-        return bestScore >= 44 ? bestApp : null;
+        return bestRawScore >= 70 ? bestApp : null;
     }
 
     function windowAddressKey(window) {
@@ -443,7 +496,8 @@ Item {
         var id = String(app.desktopId || "");
         var key = String(itemId || id);
         var orderingKey = String(orderKey || key);
-        var wins = window ? [window] : [];
+        var sourceWindows = allWindows && allWindows.length > 0 ? allWindows : (window ? [window] : []);
+        var wins = sortWindows(sourceWindows);
         return {
             itemId: key,
             orderKey: orderingKey,
@@ -456,7 +510,7 @@ Item {
             pinned: !!pinned,
             hasDesktop: true,
             windows: wins,
-            allWindows: allWindows || wins,
+            allWindows: wins,
             active: false,
             open: wins.length > 0,
             otherWorkspace: false,
@@ -544,6 +598,11 @@ Item {
     function sortWindows(windows) {
         var result = (windows || []).slice();
         result.sort(function(a, b) {
+            var focusA = Number(a && a.focusHistoryId !== undefined ? a.focusHistoryId : 9999);
+            var focusB = Number(b && b.focusHistoryId !== undefined ? b.focusHistoryId : 9999);
+            if (focusA !== focusB)
+                return focusA - focusB;
+
             var orderA = windowOrderValue(a);
             var orderB = windowOrderValue(b);
             if (orderA !== orderB)
@@ -718,18 +777,14 @@ Item {
                 }
             } else {
                 result.push(placeholderForWindow(window));
+                unknownAppRefreshTimer.restart();
             }
         }
 
         for (var desktopId in windowsByDesktop) {
             var app = appByDesktop[desktopId];
             var sorted = sortWindows(windowsByDesktop[desktopId]);
-            for (var i = 0; i < sorted.length; i++) {
-                var win = sorted[i];
-                var itemId = desktopId + "::" + windowAddressKey(win);
-                var orderKey = i === 0 ? desktopId : itemId;
-                result.push(cloneAppItem(app, Services.AppPanelService.isPinned(desktopId), itemId, win, sorted, orderKey));
-            }
+            result.push(cloneAppItem(app, Services.AppPanelService.isPinned(desktopId), desktopId, sorted[0], sorted, desktopId));
         }
 
         var pins = Services.AppPanelService.pinnedIds || [];
@@ -1080,6 +1135,13 @@ Item {
             Services.ShellActions.moveWindowToSpecialWorkspace(targetWindow);
         else
             Services.ShellActions.moveWindowToWorkspace(targetWindow, workspace);
+    }
+
+    Timer {
+        id: unknownAppRefreshTimer
+        interval: 900
+        repeat: false
+        onTriggered: Services.AppPanelService.requestRefresh(true)
     }
 
     Component.onCompleted: rebuildModel()

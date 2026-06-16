@@ -315,10 +315,18 @@ Item {
 
         if (lower.indexOf("firefox") >= 0)
             return "firefox";
+        if (lower.indexOf("obsidian") >= 0)
+            return "obsidian";
         if (lower.indexOf("kitty") >= 0 || lower.indexOf("terminal") >= 0)
             return "utilities-terminal";
-        if (lower.indexOf("code") >= 0)
+        if (lower === "code" || lower.indexOf("visual-studio-code") >= 0 || lower.indexOf("vscode") >= 0)
             return "code";
+        if (lower.indexOf("chromium") >= 0)
+            return "chromium";
+        if (lower.indexOf("google-chrome") >= 0 || lower === "chrome")
+            return "google-chrome";
+        if (lower.indexOf("brave") >= 0)
+            return "brave-browser";
 
         return "application-x-executable";
     }
