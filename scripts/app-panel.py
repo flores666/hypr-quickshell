@@ -13,7 +13,7 @@ CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / 
 PINS_FILE = CONFIG_DIR / "app-panel.json"
 RUNTIME_DIR = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / APP_NAME
 CACHE_FILE = RUNTIME_DIR / "desktop-apps-cache.json"
-CACHE_VERSION = 4
+CACHE_VERSION = 5
 
 DESKTOP_DIRS = []
 for raw_dir in [
@@ -46,17 +46,46 @@ DEFAULT_PIN_CANDIDATES = [
 ]
 
 APP_ALIASES = {
-    "firefox": ["firefox", "mozillafirefox", "orgmozillafirefox", "mozilla"],
+    "navigator": ["firefox", "mozillafirefox", "orgmozillafirefox", "navigator"],
+    "firefox": ["firefox", "mozillafirefox", "orgmozillafirefox", "mozilla", "navigator"],
     "firefoxdeveloperedition": ["firefoxdeveloperedition", "firefoxdeveloper", "firefox"],
     "orgmozillafirefox": ["firefox", "mozillafirefox", "orgmozillafirefox"],
     "mozillafirefox": ["firefox", "mozillafirefox", "orgmozillafirefox"],
     "obsidian": ["obsidian", "mdobsidian"],
     "mdobsidian": ["obsidian", "mdobsidian"],
+    "devzedzed": ["zed", "devzedzed"],
+    "zed": ["zed", "devzedzed"],
+    "emacs": ["emacs", "gnuemacs"],
+    "orggnuemacs": ["emacs", "gnuemacs"],
+    "telegramdesktop": ["telegramdesktop", "orgtelegramdesktop"],
+    "orgtelegramdesktop": ["telegramdesktop", "orgtelegramdesktop"],
     "code": ["code", "vscode", "visualstudiocode"],
     "visualstudiocode": ["code", "vscode", "visualstudiocode"],
+    "codium": ["codium", "vscodium"],
+    "vscodium": ["codium", "vscodium"],
     "chromium": ["chromium", "chromiumbrowser"],
     "googlechrome": ["googlechrome", "chrome"],
     "bravebrowser": ["brave", "bravebrowser"],
+}
+
+IGNORED_MATCH_TOKENS = {
+    "app",
+    "apps",
+    "application",
+    "browser",
+    "com",
+    "desktop",
+    "dev",
+    "electron",
+    "flatpak",
+    "gtk",
+    "io",
+    "kde",
+    "net",
+    "org",
+    "qt",
+    "wayland",
+    "x11",
 }
 
 
@@ -176,11 +205,11 @@ def find_icon(icon_name: str) -> str:
 
 def add_match_token(tokens: List[str], value: str) -> None:
     token = normalize_token(value)
-    if not token:
+    if not token or token in IGNORED_MATCH_TOKENS:
         return
     for candidate in [token, *APP_ALIASES.get(token, [])]:
         normalized = normalize_token(candidate)
-        if normalized and normalized not in tokens:
+        if normalized and normalized not in IGNORED_MATCH_TOKENS and normalized not in tokens:
             tokens.append(normalized)
 
 
@@ -222,6 +251,7 @@ def app_from_desktop(path: Path) -> Optional[Dict[str, object]]:
 
     return {
         "desktopId": desktop_id,
+        "desktopPath": str(path),
         "name": name,
         "genericName": generic_name,
         # Prefer a resolved file URI, but keep the theme icon name as a fallback.
@@ -361,6 +391,50 @@ def app_map(apps: List[Dict[str, object]]) -> Dict[str, Dict[str, object]]:
     return {str(app.get("desktopId")): app for app in apps}
 
 
+def resolve_desktop_id(value: str, apps: List[Dict[str, object]]) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+
+    if raw.startswith("__app__"):
+        raw = raw[len("__app__") :]
+
+    by_id = app_map(apps)
+    candidates = [raw]
+    if not raw.endswith(".desktop"):
+        candidates.append(f"{raw}.desktop")
+    else:
+        candidates.append(raw[:-8])
+
+    for candidate in candidates:
+        if candidate in by_id:
+            return candidate
+
+    lookup_tokens: List[str] = []
+    for candidate in candidates:
+        add_match_token(lookup_tokens, candidate)
+
+    best_id = ""
+    best_score = 0
+    for app in apps:
+        desktop_id = str(app.get("desktopId", ""))
+        app_tokens = [str(token) for token in app.get("matchKeys", [])]
+        score = 0
+        for token in lookup_tokens:
+            if token in app_tokens:
+                score = max(score, 100)
+            else:
+                for app_token in app_tokens:
+                    if len(token) >= 5 and len(app_token) >= 5 and (token in app_token or app_token in token):
+                        score = max(score, 72)
+
+        if score > best_score:
+            best_score = score
+            best_id = desktop_id
+
+    return best_id if best_score >= 72 else ""
+
+
 def list_payload(force: bool = False) -> Dict[str, object]:
     apps = load_apps(force)
     pins, order = load_config(apps)
@@ -392,6 +466,7 @@ def list_payload(force: bool = False) -> Dict[str, object]:
 
 def pin_app(desktop_id: str) -> None:
     apps = load_apps()
+    desktop_id = resolve_desktop_id(desktop_id, apps)
     pins, order = load_config(apps)
     by_id = app_map(apps)
     if desktop_id not in by_id:
@@ -406,6 +481,7 @@ def pin_app(desktop_id: str) -> None:
 
 def unpin_app(desktop_id: str) -> None:
     apps = load_apps()
+    desktop_id = resolve_desktop_id(desktop_id, apps) or desktop_id
     pins, order = load_config(apps)
     pins = [item for item in pins if item != desktop_id]
     # Keep visual order. If the app is open, it stays in the same place. If it is
@@ -415,6 +491,7 @@ def unpin_app(desktop_id: str) -> None:
 
 def pin_app_at(desktop_id: str, index: int) -> None:
     apps = load_apps()
+    desktop_id = resolve_desktop_id(desktop_id, apps)
     pins, order = load_config(apps)
     by_id = app_map(apps)
     if desktop_id not in by_id:
@@ -431,6 +508,7 @@ def pin_app_at(desktop_id: str, index: int) -> None:
 
 def move_pinned_app(desktop_id: str, index: int) -> None:
     apps = load_apps()
+    desktop_id = resolve_desktop_id(desktop_id, apps) or desktop_id
     pins, order = load_config(apps)
     if desktop_id not in pins and desktop_id not in order:
         return
@@ -445,7 +523,14 @@ def clean_order(desktop_ids: List[str], by_id: Dict[str, Dict[str, object]]) -> 
     # Order may contain stable desktop ids and temporary window instance keys
     # like firefox.desktop::abc123. Keep unknown keys because QML uses them for
     # the current session and old configs still work with plain desktop ids.
-    return unique_ids([str(item) for item in desktop_ids if str(item or "").strip()])
+    apps = list(by_id.values())
+    result: List[str] = []
+    for item in desktop_ids:
+        raw = str(item or "").strip()
+        if not raw:
+            continue
+        result.append(resolve_desktop_id(raw, apps) or raw)
+    return unique_ids(result)
 
 
 def set_pinned_order(desktop_ids: List[str]) -> None:
@@ -457,6 +542,7 @@ def set_pinned_order(desktop_ids: List[str]) -> None:
 
 def pin_with_order(desktop_id: str, desktop_ids: List[str]) -> None:
     apps = load_apps()
+    desktop_id = resolve_desktop_id(desktop_id, apps)
     pins, order = load_config(apps)
     by_id = app_map(apps)
     if desktop_id not in by_id:
@@ -472,6 +558,7 @@ def pin_with_order(desktop_id: str, desktop_ids: List[str]) -> None:
 
 def unpin_with_order(desktop_id: str, desktop_ids: List[str]) -> None:
     apps = load_apps()
+    desktop_id = resolve_desktop_id(desktop_id, apps) or desktop_id
     pins, order = load_config(apps)
     by_id = app_map(apps)
     pins = [item for item in pins if item != desktop_id]
@@ -480,6 +567,7 @@ def unpin_with_order(desktop_id: str, desktop_ids: List[str]) -> None:
 
 def launch_app(desktop_id: str) -> int:
     apps = load_apps()
+    desktop_id = resolve_desktop_id(desktop_id, apps)
     by_id = app_map(apps)
     app = by_id.get(desktop_id)
     if not app:
@@ -501,12 +589,34 @@ def launch_app(desktop_id: str) -> int:
         warn(f"cannot launch {desktop_id}: empty command")
         return 5
 
+    desktop_path = str(app.get("desktopPath", "")).strip()
+    launchers: List[List[str]] = []
+    if desktop_path:
+        launchers.append(["gio", "launch", desktop_path])
+    launchers.append(["gtk-launch", desktop_id])
+    if desktop_id.endswith(".desktop"):
+        launchers.append(["gtk-launch", desktop_id[:-8]])
+    launchers.append(parts)
+
+    last_error = ""
+    for launcher in launchers[:-1]:
+        try:
+            completed = subprocess.run(launcher, start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2.0)
+            if completed.returncode == 0:
+                return 0
+            last_error = f"{launcher[0]} exited with {completed.returncode}"
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            last_error = str(exc)
+            continue
+
     try:
-        subprocess.Popen(parts, start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.Popen(launchers[-1], start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return 0
     except OSError as exc:
-        warn(f"cannot launch {desktop_id}: {exc}")
-        return 6
+        last_error = str(exc)
+
+    warn(f"cannot launch {desktop_id}: {last_error}")
+    return 6
 
 
 def main() -> int:

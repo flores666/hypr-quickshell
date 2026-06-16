@@ -105,7 +105,7 @@ Item {
 
     function normalizeToken(value) {
         var text = String(value || "").trim().toLowerCase();
-        if (text.lastIndexOf(".desktop") === text.length - 8)
+        if (text.length >= 8 && text.lastIndexOf(".desktop") === text.length - 8)
             text = text.substring(0, text.length - 8);
         if (text.indexOf("org.") === 0)
             text = text.substring(4);
