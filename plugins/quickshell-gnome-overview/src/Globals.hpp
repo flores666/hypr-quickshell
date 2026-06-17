@@ -40,52 +40,15 @@ CHyprSignalListener listenCancellable(Signal& signal, std::function<void(const E
 
 inline HANDLE pHandle = NULL;
 
-typedef void (*tRenderWindow)(void*, PHLWINDOW, PHLMONITOR, const Time::steady_tp&, bool, Render::eRenderPassMode, bool, bool);
-extern void* pRenderWindow;
-typedef void (*tRenderLayer)(void*, PHLLS, PHLMONITOR, const Time::steady_tp&, bool, bool);
-extern void* pRenderLayer;
 namespace Config {
-    extern CHyprColor panelBaseColor;
-    extern CHyprColor panelBorderColor;
     extern CHyprColor workspaceActiveBackground;
     extern CHyprColor workspaceInactiveBackground;
-    extern CHyprColor workspaceActiveBorder;
-    extern CHyprColor workspaceInactiveBorder;
 
-    extern int panelHeight;
-    extern int panelBorderWidth;
     extern int workspaceMargin;
     extern int reservedArea;
-    extern int workspaceBorderSize;
-    extern bool adaptiveHeight; // TODO: implement
-    extern bool centerAligned;
-    extern bool onBottom; // TODO: implement
-    extern bool hideBackgroundLayers;
-    extern bool hideTopLayers;
-    extern bool hideOverlayLayers;
-    extern bool drawActiveWorkspace;
-    extern bool hideRealLayers;
-    extern bool affectStrut;
-
-    extern bool overrideGaps;
-    extern int gapsIn;
-    extern int gapsOut;
-
-    extern bool autoDrag;
-    extern bool autoScroll;
-    extern bool exitOnClick;
-    extern bool switchOnDrop;
-    extern bool exitOnSwitch;
     extern bool showNewWorkspace;
-    extern bool showEmptyWorkspace;
-    extern bool showSpecialWorkspace;
-
-    extern bool disableGestures;
-    extern bool reverseSwipe;
 
     extern bool disableBlur;
-    extern float overrideAnimSpeed;
-    extern float dragAlpha;
 
     // GNOME-like single-mainMod toggle. The plugin toggles overview only when
     // the main modifier is pressed and released alone. If another key/mouse/touch
@@ -99,6 +62,3 @@ namespace Config {
     extern int hotCornerMinTravel;
     extern float hotCornerMinSpeed;
 }
-
-
-extern int numWorkspaces;

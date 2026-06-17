@@ -11,10 +11,6 @@ class CHyprspaceWidget {
 
     int64_t ownerID;
 
-    // animation override stuff
-    Hyprutils::Animation::SAnimationPropertyConfig curAnimationConfig;
-    Hyprutils::Animation::SAnimationPropertyConfig curAnimation;
-
     // While the native overview is visible, Hyprland's own workspace
     // transition animation must be suppressed. Otherwise selecting or scrolling
     // workspaces inside the overview makes the real desktop perform its normal
@@ -26,31 +22,8 @@ class CHyprspaceWidget {
     // modified on draw call, accessed on mouse click and release
     std::vector<std::tuple<int, CBox>> workspaceBoxes;
 
-    // for storing the fullscreen state of windows prior to overview activation (which unfullscreens all windows)
-    std::vector<std::tuple<PHLWINDOWREF, eFullscreenMode>> prevFullscreen;
-
-    // for storing the layer alpha values prior to overview activation (which sets all panel to transparent when configured)
-    std::vector<std::tuple<PHLLS, float>> oLayerAlpha;
-
     // for click-to-exit
     std::chrono::system_clock::time_point lastPressedTime = std::chrono::high_resolution_clock::now();
-
-    bool swiping = false;
-    // whether if the panel is active before the current swiping event
-    bool activeBeforeSwipe = false;
-    double avgSwipeSpeed = 0.;
-    // number of swiping speed frames recorded
-    int swipePoints = 0;
-    // on second thought, this seems redundant as we could just write to curYOffset while swiping
-    double curSwipeOffset = 10.;
-
-    PHLANIMVAR<float> workspaceScrollOffset;
-
-    // Scroll bounds are recalculated on every draw from the current workspace ribbon
-    // geometry. axisEvent clamps against them so scrolling from workspace 1 starts
-    // immediately instead of first fighting the final startX clamp in draw().
-    double workspaceScrollMin = 0.0;
-    double workspaceScrollMax = 0.0;
 
     // Smooth touchpad scrolling is accumulated and converted into exact one-workspace
     // steps. Coarse mouse-wheel notches switch immediately by exactly one workspace.
@@ -86,7 +59,6 @@ class CHyprspaceWidget {
     int workspaceSelectionFromID = 0;
     int workspaceSelectionToID = 0;
 
-    double currentWorkspaceStep() const;
     double overviewOpenProgress() const;
     double workspaceSelectionProgress() const;
     bool workspaceSelectionCloseMorphActive() const;
@@ -106,9 +78,6 @@ class CHyprspaceWidget {
 
 public:
 
-    // for slide-in animation and swiping
-    PHLANIMVAR<float> curYOffset;
-
     CHyprspaceWidget(uint64_t);
     ~CHyprspaceWidget();
 
@@ -118,13 +87,8 @@ public:
     void show();
     void hide();
 
-    void updateConfig();
-
     // should be called active or not
     void draw();
-
-    // reserves area on owner monitor
-    void updateLayout();
 
     bool buttonEvent(bool, Vector2D coords);
     bool axisEvent(double, wl_pointer_axis axis, Vector2D coords);
@@ -136,11 +100,5 @@ public:
     bool activateWorkspaceInOverview(int targetWorkspaceID);
     bool selectWorkspaceInOverviewBy(int direction);
     bool syncExternalWorkspaceSwitch(int targetWorkspaceID);
-
-    bool isSwiping();
-
-    bool beginSwipe(IPointer::SSwipeBeginEvent);
-    bool updateSwipe(IPointer::SSwipeUpdateEvent);
-    bool endSwipe(IPointer::SSwipeEndEvent);
 
 };

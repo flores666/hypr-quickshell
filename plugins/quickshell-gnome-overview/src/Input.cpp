@@ -94,19 +94,3 @@ bool CHyprspaceWidget::axisEvent(double delta, wl_pointer_axis axis, Vector2D co
 
     return false;
 }
-
-bool CHyprspaceWidget::isSwiping() {
-    return false;
-}
-
-bool CHyprspaceWidget::beginSwipe(IPointer::SSwipeBeginEvent e) {
-    return true;
-}
-
-bool CHyprspaceWidget::updateSwipe(IPointer::SSwipeUpdateEvent e) {
-    return true;
-}
-
-bool CHyprspaceWidget::endSwipe(IPointer::SSwipeEndEvent e) {
-    return true;
-}

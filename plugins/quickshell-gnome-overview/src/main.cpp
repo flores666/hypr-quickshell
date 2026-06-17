@@ -15,55 +15,17 @@
 #include "Overview.hpp"
 #include "Globals.hpp"
 
-void* pRenderWindow;
-void* pRenderLayer;
-
 std::vector<std::shared_ptr<CHyprspaceWidget>> g_overviewWidgets;
 
 
-CHyprColor Config::panelBaseColor = CHyprColor(0.02, 0.025, 0.032, 0.42);
-CHyprColor Config::panelBorderColor = CHyprColor(1, 1, 1, 0);
 CHyprColor Config::workspaceActiveBackground = CHyprColor(0, 0, 0, 0);
 CHyprColor Config::workspaceInactiveBackground = CHyprColor(0, 0, 0, 0);
-CHyprColor Config::workspaceActiveBorder = CHyprColor(1, 1, 1, 0);
-CHyprColor Config::workspaceInactiveBorder = CHyprColor(1, 1, 1, 0);
 
-int Config::panelHeight = 520;
-int Config::panelBorderWidth = 0;
 int Config::workspaceMargin = 16;
 int Config::reservedArea = 110;
-int Config::workspaceBorderSize = 0;
-bool Config::adaptiveHeight = false; // TODO: implement
-bool Config::centerAligned = true;
-bool Config::onBottom = true; // Keep overview above the bottom AppDock.
-bool Config::hideBackgroundLayers = false;
-bool Config::hideTopLayers = true;
-bool Config::hideOverlayLayers = true;
-bool Config::drawActiveWorkspace = true;
-bool Config::hideRealLayers = false;
-bool Config::affectStrut = false;
-
-bool Config::overrideGaps = false;
-int Config::gapsIn = 24;
-int Config::gapsOut = 70;
-
-bool Config::autoDrag = false;
-bool Config::autoScroll = true;
-bool Config::exitOnClick = true;
-bool Config::switchOnDrop = false;
-bool Config::exitOnSwitch = true;
 bool Config::showNewWorkspace = false;
-bool Config::showEmptyWorkspace = true;
-bool Config::showSpecialWorkspace = false;
-
-bool Config::disableGestures = true;
-bool Config::reverseSwipe = false;
 
 bool Config::disableBlur = false;
-
-float Config::overrideAnimSpeed = 1.0;
-
-float Config::dragAlpha = 0.2;
 
 bool Config::mainModToggle = true;
 std::string Config::mainModKey = "Super_L";
@@ -73,8 +35,6 @@ int Config::hotCornerCooldown = 450;
 int Config::hotCornerApproachDistance = 72;
 int Config::hotCornerMinTravel = 18;
 float Config::hotCornerMinSpeed = 0.18;
-
-int numWorkspaces = -1; //hyprsplit/split-monitor-workspaces support
 
 // Event listener handles (auto-unregister when destroyed)
 CHyprSignalListener g_pRenderHook;
@@ -246,18 +206,6 @@ static bool isCoordsOverInteractiveLayer(PHLMONITORREF monitor, const Vector2D& 
 
 static bool shouldPassPointerToRealLayer(PHLMONITORREF monitor) {
     return isCoordsOverInteractiveLayer(monitor, g_pInputManager->getMouseCoordsInternal());
-}
-
-static std::shared_ptr<CHyprspaceWidget> getActiveOverviewWidgetForCurrentMonitor() {
-    const auto monitor = g_pCompositor->getMonitorFromCursor();
-    if (!monitor)
-        return nullptr;
-
-    const auto widget = getWidgetForMonitor(monitor);
-    if (widget && widget->isActive())
-        return widget;
-
-    return nullptr;
 }
 
 static void toggleOverviewForCurrentMonitor() {
@@ -503,63 +451,25 @@ void onMouseAxis(const IPointer::SAxisEvent& event, SCallbackInfo& info) {
 void onSwipeBegin(const IPointer::SSwipeBeginEvent& event, SCallbackInfo& info) {
     cancelMainModToggleGesture();
 
-    const auto widget = getActiveOverviewWidgetForCurrentMonitor();
-    if (widget) {
+    if (isAnyOverviewActive()) {
         // While overview is visible, native Hyprland workspace-swipe gestures
         // must not reach the compositor. The overview has its own wheel/touchpad
         // navigation and its own morph animation, so the compositor swipe would
         // appear as a second animation underneath it.
-        widget->beginSwipe(event);
         info.cancelled = true;
-        return;
-    }
-
-    if (Config::disableGestures) return;
-
-    const auto inactiveWidget = getWidgetForMonitor(g_pCompositor->getMonitorFromCursor());
-    if (inactiveWidget != nullptr)
-        inactiveWidget->beginSwipe(event);
-
-    // end other widget swipe
-    for (auto& w : g_overviewWidgets) {
-        if (w != inactiveWidget && w->isSwiping()) {
-            IPointer::SSwipeEndEvent dummy;
-            dummy.cancelled = true;
-            w->endSwipe(dummy);
-        }
     }
 }
 
 // event hook for update swipe, most of the swiping mechanics are here
 void onSwipeUpdate(const IPointer::SSwipeUpdateEvent& event, SCallbackInfo& info) {
-    const auto widget = getActiveOverviewWidgetForCurrentMonitor();
-    if (widget) {
-        widget->updateSwipe(event);
+    if (isAnyOverviewActive())
         info.cancelled = true;
-        return;
-    }
-
-    if (Config::disableGestures) return;
-
-    const auto inactiveWidget = getWidgetForMonitor(g_pCompositor->getMonitorFromCursor());
-    if (inactiveWidget != nullptr)
-        info.cancelled = !inactiveWidget->updateSwipe(event);
 }
 
 // event hook for end swipe
 void onSwipeEnd(const IPointer::SSwipeEndEvent& event, SCallbackInfo& info) {
-    const auto widget = getActiveOverviewWidgetForCurrentMonitor();
-    if (widget) {
-        widget->endSwipe(event);
+    if (isAnyOverviewActive())
         info.cancelled = true;
-        return;
-    }
-
-    if (Config::disableGestures) return;
-
-    const auto inactiveWidget = getWidgetForMonitor(g_pCompositor->getMonitorFromCursor());
-    if (inactiveWidget != nullptr)
-        inactiveWidget->endSwipe(event);
 }
 
 // Close overview with configurable key and implement safe GNOME-like mainMod toggle.
@@ -777,16 +687,6 @@ static SDispatchResult dispatchPrevOverview(std::string) {
     return SDispatchResult{};
 }
 
-void* findFunctionBySymbol(HANDLE inHandle, const std::string func, const std::string sym) {
-    // should return all functions
-    auto funcSearch = HyprlandAPI::findFunctionsByName(inHandle, func);
-    for (auto f : funcSearch) {
-        if (f.demangled.contains(sym))
-            return f.address;
-    }
-    return nullptr;
-}
-
 template <typename T>
 T getConfigValueOr(const std::string& name, const T& fallback) {
     const auto* value = HyprlandAPI::getConfigValue(pHandle, name);
@@ -808,61 +708,22 @@ CHyprColor getConfigColorOr(const std::string& name, const CHyprColor& fallback)
 }
 
 void reloadConfig() {
-    Config::panelBaseColor = getConfigColorOr("plugin:overview:panelColor", Config::panelBaseColor);
-    Config::panelBorderColor = getConfigColorOr("plugin:overview:panelBorderColor", Config::panelBorderColor);
     Config::workspaceActiveBackground = getConfigColorOr("plugin:overview:workspaceActiveBackground", Config::workspaceActiveBackground);
     Config::workspaceInactiveBackground = getConfigColorOr("plugin:overview:workspaceInactiveBackground", Config::workspaceInactiveBackground);
-    Config::workspaceActiveBorder = getConfigColorOr("plugin:overview:workspaceActiveBorder", Config::workspaceActiveBorder);
-    Config::workspaceInactiveBorder = getConfigColorOr("plugin:overview:workspaceInactiveBorder", Config::workspaceInactiveBorder);
 
-    Config::panelHeight = getConfigValueOr<Hyprlang::INT>("plugin:overview:panelHeight", Config::panelHeight);
-    Config::panelBorderWidth = getConfigValueOr<Hyprlang::INT>("plugin:overview:panelBorderWidth", Config::panelBorderWidth);
     Config::workspaceMargin = getConfigValueOr<Hyprlang::INT>("plugin:overview:workspaceMargin", Config::workspaceMargin);
     Config::reservedArea = getConfigValueOr<Hyprlang::INT>("plugin:overview:reservedArea", Config::reservedArea);
-    Config::workspaceBorderSize = getConfigValueOr<Hyprlang::INT>("plugin:overview:workspaceBorderSize", Config::workspaceBorderSize);
-    Config::adaptiveHeight = getConfigValueOr<Hyprlang::INT>("plugin:overview:adaptiveHeight", Config::adaptiveHeight) != 0;
-    Config::centerAligned = getConfigValueOr<Hyprlang::INT>("plugin:overview:centerAligned", Config::centerAligned) != 0;
-    Config::onBottom = getConfigValueOr<Hyprlang::INT>("plugin:overview:onBottom", Config::onBottom) != 0;
-    Config::hideBackgroundLayers = getConfigValueOr<Hyprlang::INT>("plugin:overview:hideBackgroundLayers", Config::hideBackgroundLayers) != 0;
-    Config::hideTopLayers = getConfigValueOr<Hyprlang::INT>("plugin:overview:hideTopLayers", Config::hideTopLayers) != 0;
-    Config::hideOverlayLayers = getConfigValueOr<Hyprlang::INT>("plugin:overview:hideOverlayLayers", Config::hideOverlayLayers) != 0;
-    Config::drawActiveWorkspace = getConfigValueOr<Hyprlang::INT>("plugin:overview:drawActiveWorkspace", Config::drawActiveWorkspace) != 0;
-    Config::hideRealLayers = getConfigValueOr<Hyprlang::INT>("plugin:overview:hideRealLayers", Config::hideRealLayers) != 0;
-    Config::affectStrut = getConfigValueOr<Hyprlang::INT>("plugin:overview:affectStrut", Config::affectStrut) != 0;
-
-    Config::overrideGaps = getConfigValueOr<Hyprlang::INT>("plugin:overview:overrideGaps", Config::overrideGaps) != 0;
-    Config::gapsIn = getConfigValueOr<Hyprlang::INT>("plugin:overview:gapsIn", Config::gapsIn);
-    Config::gapsOut = getConfigValueOr<Hyprlang::INT>("plugin:overview:gapsOut", Config::gapsOut);
-
-    Config::autoDrag = getConfigValueOr<Hyprlang::INT>("plugin:overview:autoDrag", Config::autoDrag) != 0;
-    Config::autoScroll = getConfigValueOr<Hyprlang::INT>("plugin:overview:autoScroll", Config::autoScroll) != 0;
-    Config::exitOnClick = getConfigValueOr<Hyprlang::INT>("plugin:overview:exitOnClick", Config::exitOnClick) != 0;
-    Config::switchOnDrop = getConfigValueOr<Hyprlang::INT>("plugin:overview:switchOnDrop", Config::switchOnDrop) != 0;
-    Config::exitOnSwitch = getConfigValueOr<Hyprlang::INT>("plugin:overview:exitOnSwitch", Config::exitOnSwitch) != 0;
     Config::showNewWorkspace = getConfigValueOr<Hyprlang::INT>("plugin:overview:showNewWorkspace", Config::showNewWorkspace) != 0;
-    Config::showEmptyWorkspace = getConfigValueOr<Hyprlang::INT>("plugin:overview:showEmptyWorkspace", Config::showEmptyWorkspace) != 0;
-    Config::showSpecialWorkspace = getConfigValueOr<Hyprlang::INT>("plugin:overview:showSpecialWorkspace", Config::showSpecialWorkspace) != 0;
-
-    Config::disableGestures = getConfigValueOr<Hyprlang::INT>("plugin:overview:disableGestures", Config::disableGestures) != 0;
-    Config::reverseSwipe = getConfigValueOr<Hyprlang::INT>("plugin:overview:reverseSwipe", Config::reverseSwipe) != 0;
 
     Config::disableBlur = getConfigValueOr<Hyprlang::INT>("plugin:overview:disableBlur", Config::disableBlur) != 0;
 
-    Config::overrideAnimSpeed = getConfigValueOr<Hyprlang::FLOAT>("plugin:overview:overrideAnimSpeed", Config::overrideAnimSpeed);
-    
     // We don't need to store exitKey in Config namespace as it's only used in onKeyPress
 
     for (auto& widget : g_overviewWidgets) {
-        widget->updateConfig();
-        if (widget->isActive() || widget->isSwiping()) {
+        if (widget->isActive())
             widget->hide();
-            IPointer::SSwipeEndEvent dummy;
-            dummy.cancelled = true;
-            widget->endSwipe(dummy);
-        }
     }
 
-    Config::dragAlpha = getConfigValueOr<Hyprlang::FLOAT>("plugin:overview:dragAlpha", Config::dragAlpha);
     Config::mainModToggle = getConfigValueOr<Hyprlang::INT>("plugin:overview:mainModToggle", Config::mainModToggle) != 0;
     Config::mainModKey = getConfigValueOr<Hyprlang::STRING>("plugin:overview:mainModKey", Config::mainModKey.c_str());
     Config::hotCorner = getConfigValueOr<Hyprlang::INT>("plugin:overview:hotCorner", Config::hotCorner) != 0;
@@ -883,13 +744,6 @@ void reloadConfig() {
         Config::mainModKey = "Super_L";
         g_mainModKeysym = XKB_KEY_Super_L;
     }
-
-    // get number of workspaces from hyprsplit or split-monitor-workspaces plugin config
-    Hyprlang::CConfigValue* numWorkspacesConfig = HyprlandAPI::getConfigValue(pHandle, "plugin:hyprsplit:num_workspaces");
-    if (!numWorkspacesConfig)
-        numWorkspacesConfig = HyprlandAPI::getConfigValue(pHandle, "plugin:split-monitor-workspaces:count");
-    if (numWorkspacesConfig)
-        numWorkspaces = std::any_cast<Hyprlang::INT>(numWorkspacesConfig->getValue());
 
     // TODO: schedule frame for monitor?
 }
@@ -1002,10 +856,6 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE inHandle) {
 
     g_pSwitchWorkspaceHook = Event::bus()->m_events.workspace.active.listen(onWorkspaceChange);
 
-    // Minimal renderer does not hook private renderWindow/renderLayer symbols.
-    pRenderWindow = nullptr;
-    pRenderLayer = nullptr;
-
     registerMonitors();
     g_pAddMonitorHook = Event::bus()->m_events.monitor.added.listen([](PHLMONITOR) { registerMonitors(); });
 
@@ -1033,7 +883,5 @@ APICALL EXPORT void PLUGIN_EXIT() {
 
     g_overviewWidgets.clear();
 
-    pRenderWindow = nullptr;
-    pRenderLayer = nullptr;
     pHandle = nullptr;
 }

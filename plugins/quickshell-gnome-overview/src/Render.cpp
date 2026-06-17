@@ -3,7 +3,6 @@
 #include <hyprland/src/helpers/memory/Memory.hpp>
 #include <hyprland/src/config/shared/complex/ComplexDataTypes.hpp>
 #include <hyprland/src/render/pass/RectPassElement.hpp>
-#include <hyprland/src/render/pass/BorderPassElement.hpp>
 #include <hyprland/src/render/pass/SurfacePassElement.hpp>
 #include <hyprland/src/render/pass/RendererHintsPassElement.hpp>
 #include <hyprlang.hpp>
@@ -32,16 +31,6 @@ void renderRectWithBlur(CBox box, CHyprColor color, int rounding = 0, float roun
     rectdata.roundingPower = roundingPower;
     rectdata.blur = true;
     g_pHyprRenderer->m_renderPass.add(makeUnique<CRectPassElement>(rectdata));
-}
-
-void renderBorder(CBox box, const Config::CGradientValueData& gradient, int size, int rounding = 0) {
-    CBorderPassElement::SBorderData data;
-    data.box = box;
-    data.grad1 = gradient;
-    data.round = rounding;
-    data.a = 1.f;
-    data.borderSize = size;
-    g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(data));
 }
 
 void renderWindowStub(PHLWINDOW pWindow, PHLMONITOR pMonitor, PHLWORKSPACE pWorkspaceOverride, CBox rectOverride, CBox clipBox, const Time::steady_tp& time, float alpha = 1.F, int forcedRounding = -1, float forcedRoundingPower = 2.0F) {
@@ -596,12 +585,6 @@ void CHyprspaceWidget::draw() {
     // while fractional selection moves the strip between two adjacent previews.
     const double averageStep = (centerPreviewW + sidePreviewW) * 0.5 + workspaceGap;
     const double fractionalOffsetX = (static_cast<double>(visualCenterIndexRounded) - visualCenterIndex) * averageStep;
-    workspaceScrollMin = 0.0;
-    workspaceScrollMax = 0.0;
-
-    if (workspaceScrollOffset->value() != 0.0)
-        workspaceScrollOffset->setValueAndWarp(0.0);
-
     const auto frameNow = std::chrono::steady_clock::now();
     double frameDt = 1.0 / 60.0;
     if (lastWorkspaceHoverFrameValid) {

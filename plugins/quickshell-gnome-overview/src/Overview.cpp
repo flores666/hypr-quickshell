@@ -12,18 +12,6 @@ static void notifyQuickshellOverviewState(const char* state) {
 
 CHyprspaceWidget::CHyprspaceWidget(uint64_t inOwnerID) {
     ownerID = inOwnerID;
-
-    curAnimationConfig = *Config::animationTree()->getAnimationPropertyConfig("windows");
-    curAnimation = *curAnimationConfig.pValues.lock();
-    *curAnimationConfig.pValues.lock() = curAnimation;
-
-    if (Config::overrideAnimSpeed > 0)
-        curAnimation.internalSpeed = Config::overrideAnimSpeed;
-
-    g_pAnimationManager->createAnimation(0.F, curYOffset, curAnimationConfig.pValues.lock(), AVARDAMAGE_ENTIRE);
-    g_pAnimationManager->createAnimation(0.F, workspaceScrollOffset, curAnimationConfig.pValues.lock(), AVARDAMAGE_ENTIRE);
-    curYOffset->setValueAndWarp(0);
-    workspaceScrollOffset->setValueAndWarp(0);
     workspaceScrollAccumulator = 0.0;
     workspaceSelectionAnimating = false;
     closeAfterWorkspaceSelectionAnimation = false;
@@ -163,22 +151,6 @@ std::vector<int> CHyprspaceWidget::overviewWorkspaceIds() const {
     return result;
 }
 
-double CHyprspaceWidget::currentWorkspaceStep() const {
-    if (workspaceBoxes.size() >= 2) {
-        const auto first = std::get<1>(workspaceBoxes[0]);
-        const auto second = std::get<1>(workspaceBoxes[1]);
-        const double step = std::abs(second.x - first.x);
-        if (step > 1.0)
-            return step;
-    }
-
-    const auto owner = g_pCompositor->getMonitorFromID(ownerID);
-    if (owner)
-        return std::max<double>(180.0, owner->m_size.x * 0.38);
-
-    return 300.0;
-}
-
 static double overviewSelectionEase(double value) {
     const double t = std::clamp(value, 0.0, 1.0);
     return t < 0.5
@@ -245,7 +217,6 @@ bool CHyprspaceWidget::startWorkspaceSelectionAnimation(int targetWorkspaceID, b
 
     closeOwnerSpecialWorkspace();
     workspaceScrollAccumulator = 0.0;
-    workspaceScrollOffset->setValueAndWarp(0);
 
     if (targetWorkspaceID == currentWorkspaceID && !closeAfterAnimation) {
         centeredWorkspaceID = targetWorkspaceID;
@@ -293,7 +264,6 @@ void CHyprspaceWidget::finishWorkspaceSelectionAnimation() {
     workspaceSelectionFromID = 0;
     workspaceSelectionToID = 0;
     centeredWorkspaceID = targetWorkspaceID;
-    workspaceScrollOffset->setValueAndWarp(0);
     workspaceScrollAccumulator = 0.0;
     workspaceHoverProgress.clear();
     lastWorkspaceHoverFrameValid = false;
@@ -450,9 +420,7 @@ void CHyprspaceWidget::show() {
     workspaceSelectionFromID = 0;
     workspaceSelectionToID = 0;
     centeredWorkspaceID = std::max(1, static_cast<int>(owner->activeWorkspaceID()));
-    workspaceScrollOffset->setValueAndWarp(0);
     workspaceScrollAccumulator = 0.0;
-    curYOffset->setValueAndWarp(0);
 
     lastWorkspaceHoverFrameValid = false;
 
@@ -485,9 +453,7 @@ void CHyprspaceWidget::finishHide() {
     workspaceSelectionToID = 0;
     centeredWorkspaceID = 0;
     workspaceBoxes.clear();
-    workspaceScrollOffset->setValueAndWarp(0);
     workspaceScrollAccumulator = 0.0;
-    curYOffset->setValueAndWarp(0);
 
     workspaceHoverProgress.clear();
     lastWorkspaceHoverFrameValid = false;
@@ -566,30 +532,6 @@ double CHyprspaceWidget::overviewOpenProgress() const {
 
 bool CHyprspaceWidget::isClosing() const {
     return overviewClosing;
-}
-
-void CHyprspaceWidget::updateConfig() {
-    curAnimationConfig = *Config::animationTree()->getAnimationPropertyConfig("windows");
-    curAnimation = *curAnimationConfig.pValues.lock();
-    *curAnimationConfig.pValues.lock() = curAnimation;
-
-    if (Config::overrideAnimSpeed > 0)
-        curAnimation.internalSpeed = Config::overrideAnimSpeed;
-
-    g_pAnimationManager->createAnimation(0.F, curYOffset, curAnimationConfig.pValues.lock(), AVARDAMAGE_ENTIRE);
-    g_pAnimationManager->createAnimation(0.F, workspaceScrollOffset, curAnimationConfig.pValues.lock(), AVARDAMAGE_ENTIRE);
-    curYOffset->setValueAndWarp(0);
-    workspaceScrollOffset->setValueAndWarp(0);
-    workspaceScrollAccumulator = 0.0;
-    workspaceSelectionAnimating = false;
-    closeAfterWorkspaceSelectionAnimation = false;
-    closeNotifiedForWorkspaceSelection = false;
-    applyingWorkspaceActivation = false;
-    workspaceSelectionFromID = 0;
-    workspaceSelectionToID = 0;
-    overviewClosing = false;
-    overviewAnimationStarted = active;
-    overviewAnimationStartedAt = std::chrono::steady_clock::now();
 }
 
 bool CHyprspaceWidget::isActive() {
