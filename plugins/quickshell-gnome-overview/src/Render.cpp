@@ -69,8 +69,6 @@ void renderWindowStub(PHLWINDOW pWindow, PHLMONITOR pMonitor, PHLWORKSPACE pWork
         g_pHyprRenderer->m_renderPass.add(makeUnique<CRendererHintsPassElement>(CRendererHintsPassElement::SData{.renderModif = Render::SRenderModifData{}}));
     });
 
-    g_pHyprRenderer->damageWindow(pWindow);
-
     CSurfacePassElement::SRenderData renderdata = {pMonitor, time};
     renderdata.pos                  = oRealPosition + pWindow->m_floatingOffset;
     renderdata.w                    = std::max(oSize.x, 5.0);
@@ -186,7 +184,7 @@ bool renderFullscreenBackground(PHLMONITOR pMonitor, const CBox& monitorClip, co
     return rendered;
 }
 
-bool renderWorkspaceBackground(PHLMONITOR pMonitor, const CBox& workspaceBox, const CBox& clipBox, const Time::steady_tp& time, float alpha, double topInset) {
+bool renderWorkspaceBackground(PHLMONITOR pMonitor, const CBox& workspaceBox, const CBox& clipBox, const Time::steady_tp& time, float alpha, double topInset, int rounding, float roundingPower) {
     if (!pMonitor)
         return false;
 
@@ -206,7 +204,7 @@ bool renderWorkspaceBackground(PHLMONITOR pMonitor, const CBox& workspaceBox, co
         if (!layer->m_mapped || layer->m_readyToDelete || !layer->m_layerSurface || !layer->wlSurface() || !layer->wlSurface()->resource())
             continue;
 
-        renderLayerStub(layer, pMonitor, backgroundBox, clipBox, time, alpha);
+        renderLayerStub(layer, pMonitor, backgroundBox, clipBox, time, alpha, rounding, roundingPower);
         rendered = true;
     }
 
@@ -294,25 +292,18 @@ static void renderWorkspaceShadow(const CBox& workspaceBox, float opacity, int r
     constexpr double b = 80.0 / 255.0;
 
     CBox shadowOuter = workspaceBox;
-    shadowOuter.x -= 16.0;
-    shadowOuter.y -= 12.0;
-    shadowOuter.w += 32.0;
-    shadowOuter.h += 32.0;
-    renderRect(shadowOuter, CHyprColor(r, g, b, 0.026F * alpha), rounding + 16, roundingPower);
+    shadowOuter.x -= 18.0;
+    shadowOuter.y -= 14.0;
+    shadowOuter.w += 36.0;
+    shadowOuter.h += 36.0;
+    renderRect(shadowOuter, CHyprColor(r, g, b, 0.024F * alpha), rounding + 18, roundingPower);
 
     CBox shadowMid = workspaceBox;
-    shadowMid.x -= 10.0;
-    shadowMid.y -= 6.0;
-    shadowMid.w += 20.0;
-    shadowMid.h += 20.0;
-    renderRect(shadowMid, CHyprColor(r, g, b, 0.044F * alpha), rounding + 10, roundingPower);
-
-    CBox shadowCore = workspaceBox;
-    shadowCore.x -= 4.0;
-    shadowCore.y += 1.0;
-    shadowCore.w += 8.0;
-    shadowCore.h += 8.0;
-    renderRect(shadowCore, CHyprColor(r, g, b, 0.080F * alpha), rounding + 4, roundingPower);
+    shadowMid.x -= 8.0;
+    shadowMid.y -= 8.0;
+    shadowMid.w += 16.0;
+    shadowMid.h += 16.0;
+    renderRect(shadowMid, CHyprColor(r, g, b, 0.036F * alpha), rounding + 8, roundingPower);
 }
 
 static void renderWorkspaceShapeOverlay(const CBox& workspaceBox, float opacity, int rounding, float roundingPower) {
@@ -321,33 +312,6 @@ static void renderWorkspaceShapeOverlay(const CBox& workspaceBox, float opacity,
         return;
 
     renderRect(workspaceBox, CHyprColor(1.0, 1.0, 1.0, 0.018F * alpha), rounding, roundingPower);
-}
-
-static std::vector<CBox> overviewRoundedClipBoxes(const CBox& workspaceBox, int rounding) {
-    std::vector<CBox> clips;
-    const int radius = std::min<int>(std::max(0, rounding), static_cast<int>(std::floor(std::min(workspaceBox.w, workspaceBox.h) * 0.5)));
-    if (radius <= 1) {
-        clips.push_back(workspaceBox);
-        return clips;
-    }
-
-    const double middleH = workspaceBox.h - static_cast<double>(radius * 2);
-    if (middleH > 0.0)
-        clips.push_back(CBox{workspaceBox.x, workspaceBox.y + radius, workspaceBox.w, middleH});
-
-    for (int y = 0; y < radius; ++y) {
-        const double distanceFromCenter = static_cast<double>(radius) - (static_cast<double>(y) + 0.5);
-        const double circleReach = std::sqrt(std::max(0.0, static_cast<double>(radius * radius) - distanceFromCenter * distanceFromCenter));
-        const double inset = std::ceil(static_cast<double>(radius) - circleReach);
-        const double stripW = workspaceBox.w - inset * 2.0;
-        if (!(stripW > 0.0))
-            continue;
-
-        clips.push_back(CBox{workspaceBox.x + inset, workspaceBox.y + y, stripW, 1.0});
-        clips.push_back(CBox{workspaceBox.x + inset, workspaceBox.y + workspaceBox.h - y - 1.0, stripW, 1.0});
-    }
-
-    return clips;
 }
 
 static bool boxContainsPointForOverview(const std::optional<CBox>& box, const Vector2D& coords) {
@@ -469,13 +433,12 @@ void CHyprspaceWidget::draw() {
     // Do not draw any additional wallpaper/dim layer inside the strip itself, otherwise
     // the image looks like three separate layers instead of one unified GNOME-like canvas.
     const CBox fullscreenDim = CBox{0, 0, owner->m_transformedSize.x, owner->m_transformedSize.y};
-    const double dimAlpha = overviewLerp(0.0, Config::disableBlur ? 0.62 : 0.54, openProgress);
-    const double extraBlurAlpha = Config::disableBlur ? 0.0 : overviewLerp(0.0, 0.10, openProgress);
+    const double dimAlpha = overviewLerp(0.0, 0.10, openProgress);
     if (dimAlpha > 0.001) {
         if (!Config::disableBlur) {
-            renderRectWithBlur(fullscreenDim, CHyprColor(0.02, 0.025, 0.032, dimAlpha));
-            if (extraBlurAlpha > 0.001)
-                renderRectWithBlur(fullscreenDim, CHyprColor(0.02, 0.025, 0.032, extraBlurAlpha));
+            const double blurPassAlpha = 1.0 - std::pow(1.0 - dimAlpha, 1.0 / 3.0);
+            for (int pass = 0; pass < 3; ++pass)
+                renderRectWithBlur(fullscreenDim, CHyprColor(0.02, 0.025, 0.032, blurPassAlpha));
         } else {
             renderRect(fullscreenDim, CHyprColor(0.02, 0.025, 0.032, dimAlpha));
         }
@@ -683,45 +646,39 @@ void CHyprspaceWidget::draw() {
         const CBox workspaceBox = preview.box;
         const double monitorScaleForPreview = preview.monitorScaleForPreview;
         const double previewScale = preview.previewScale;
-        const auto roundedClips = overviewRoundedClipBoxes(workspaceBox, preview.rounding);
-
         renderWorkspaceShadow(workspaceBox, preview.opacity, preview.rounding, preview.roundingPower);
 
-        auto renderPreviewContentsForClip = [&](const CBox& clipBox) {
-            if (preview.opacity <= 0.001F)
-                return;
+        if (preview.opacity <= 0.001F)
+            return;
 
-            const bool backgroundRendered = renderWorkspaceBackground(owner, workspaceBox, clipBox, time, preview.opacity, preview.topInset);
-            if (!backgroundRendered) {
-                CHyprColor fallbackColor = preview.wsID == morphTargetWorkspaceID ? Config::workspaceActiveBackground : Config::workspaceInactiveBackground;
-                fallbackColor.a = std::max<float>(fallbackColor.a * preview.opacity, 0.22F * preview.opacity);
-                renderRect(clipBox, fallbackColor);
+        const CBox previewClip = workspaceBox;
+        const bool backgroundRendered = renderWorkspaceBackground(owner, workspaceBox, previewClip, time, preview.opacity, preview.topInset, preview.rounding, preview.roundingPower);
+        if (!backgroundRendered) {
+            CHyprColor fallbackColor = preview.wsID == morphTargetWorkspaceID ? Config::workspaceActiveBackground : Config::workspaceInactiveBackground;
+            fallbackColor.a = std::max<float>(fallbackColor.a * preview.opacity, 0.22F * preview.opacity);
+            renderRect(previewClip, fallbackColor, preview.rounding, preview.roundingPower);
+        }
+
+        if (ws) {
+            for (auto& w : g_pCompositor->m_windows) {
+                if (!w)
+                    continue;
+                if (w->m_workspace != ws)
+                    continue;
+                if (!w->m_isMapped)
+                    continue;
+
+                const double wX = workspaceBox.x + ((w->m_realPosition->value().x - owner->m_position.x) * monitorScaleForPreview);
+                const double wY = workspaceBox.y + ((w->m_realPosition->value().y - owner->m_position.y) * monitorScaleForPreview) - (preview.topInset * previewScale);
+                const double wW = w->m_realSize->value().x * monitorScaleForPreview;
+                const double wH = w->m_realSize->value().y * monitorScaleForPreview;
+
+                if (!(wW > 1 && wH > 1))
+                    continue;
+
+                renderWindowStub(w, owner, ws, CBox{wX, wY, wW, wH}, previewClip, time, preview.opacity);
             }
-
-            if (ws) {
-                for (auto& w : g_pCompositor->m_windows) {
-                    if (!w)
-                        continue;
-                    if (w->m_workspace != ws)
-                        continue;
-                    if (!w->m_isMapped)
-                        continue;
-
-                    const double wX = workspaceBox.x + ((w->m_realPosition->value().x - owner->m_position.x) * monitorScaleForPreview);
-                    const double wY = workspaceBox.y + ((w->m_realPosition->value().y - owner->m_position.y) * monitorScaleForPreview) - (preview.topInset * previewScale);
-                    const double wW = w->m_realSize->value().x * monitorScaleForPreview;
-                    const double wH = w->m_realSize->value().y * monitorScaleForPreview;
-
-                    if (!(wW > 1 && wH > 1))
-                        continue;
-
-                    renderWindowStub(w, owner, ws, CBox{wX, wY, wW, wH}, clipBox, time, preview.opacity);
-                }
-            }
-        };
-
-        for (const auto& clipBox : roundedClips)
-            renderPreviewContentsForClip(clipBox);
+        }
 
         renderWorkspaceShapeOverlay(workspaceBox, preview.opacity, preview.rounding, preview.roundingPower);
 
@@ -743,13 +700,14 @@ void CHyprspaceWidget::draw() {
         renderPreview(previews[topPreviewIndex]);
 
     g_pHyprRenderer->m_renderData.clipBox = monitorClip;
-    g_pHyprRenderer->damageMonitor(owner);
 
     if (selectionAnimationRunning && workspaceSelectionProgress() >= 0.999) {
         finishWorkspaceSelectionAnimation();
         return;
     }
 
-    if (morphAnimationRunning || selectionAnimationRunning)
+    if (morphAnimationRunning || selectionAnimationRunning) {
+        g_pHyprRenderer->damageMonitor(owner);
         g_pCompositor->scheduleFrameForMonitor(owner);
+    }
 }
