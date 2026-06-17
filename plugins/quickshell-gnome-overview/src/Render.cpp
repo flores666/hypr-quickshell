@@ -627,8 +627,18 @@ void CHyprspaceWidget::draw() {
         float roundingPower = 2.0F;
         float opacity = 1.0F;
         bool hovered = false;
-        bool hasVisibleWindow = false;
     };
+
+    std::vector<PHLWINDOW> mappedWindows;
+    mappedWindows.reserve(g_pCompositor->m_windows.size());
+    for (auto& w : g_pCompositor->m_windows) {
+        if (!w)
+            continue;
+        if (!w->m_isMapped || !w->m_workspace)
+            continue;
+
+        mappedWindows.push_back(w);
+    }
 
     std::vector<SWorkspacePreview> previews;
     previews.reserve(workspaces.size());
@@ -694,39 +704,28 @@ void CHyprspaceWidget::draw() {
         inputBox.y += owner->m_position.y;
         preview.inputBox = inputBox;
 
-        if (ws && preview.opacity > 0.001F) {
-            for (auto& w : g_pCompositor->m_windows) {
-                if (!w)
-                    continue;
-                if (w->m_workspace != ws)
-                    continue;
-                if (!w->m_isMapped)
-                    continue;
-
-                preview.hasVisibleWindow = true;
-                break;
-            }
-        }
-
         previews.push_back(preview);
     }
 
     auto renderPreview = [&](const SWorkspacePreview& preview) {
         const auto ws = preview.ws;
         const CBox workspaceBox = overviewPixelSnappedBox(preview.box);
+        CBox visibleBounds = workspaceBox;
+        visibleBounds.x -= 48.0;
+        visibleBounds.y -= 48.0;
+        visibleBounds.w += 96.0;
+        visibleBounds.h += 96.0;
+        if (!overviewBoxesIntersect(visibleBounds, monitorClip))
+            return;
+
         const double previewScale = workspaceBox.w / std::max<double>(owner->m_transformedSize.x, 1.0);
         const double monitorScaleForPreview = previewScale * owner->m_scale;
-        const auto roundedClips = overviewRoundedClipBoxes(workspaceBox, preview.rounding);
         std::vector<SOverviewWindowPreview> visibleWindows;
 
         if (ws && preview.opacity > 0.001F) {
-            visibleWindows.reserve(g_pCompositor->m_windows.size());
-            for (auto& w : g_pCompositor->m_windows) {
-                if (!w)
-                    continue;
+            visibleWindows.reserve(mappedWindows.size());
+            for (auto& w : mappedWindows) {
                 if (w->m_workspace != ws)
-                    continue;
-                if (!w->m_isMapped)
                     continue;
 
                 const double wX = workspaceBox.x + ((w->m_realPosition->value().x - owner->m_position.x) * monitorScaleForPreview);
@@ -754,11 +753,12 @@ void CHyprspaceWidget::draw() {
         if (preview.opacity <= 0.001F)
             return;
 
-        auto renderPreviewContentsForClip = [&](const SOverviewClipBox& clip) {
+        const auto roundedClips = overviewRoundedClipBoxes(workspaceBox, preview.rounding);
+        for (const auto& clip : roundedClips) {
             const CBox& clipBox = clip.box;
             const float clipOpacity = std::clamp(preview.opacity * clip.alpha, 0.0F, 1.0F);
             if (clipOpacity <= 0.001F)
-                return;
+                continue;
 
             const bool backgroundRendered = renderWorkspaceBackground(owner, workspaceBox, clipBox, time, clipOpacity, preview.topInset, preview.rounding, preview.roundingPower);
             if (!backgroundRendered) {
@@ -766,17 +766,25 @@ void CHyprspaceWidget::draw() {
                 fallbackColor.a = std::max<float>(fallbackColor.a * clipOpacity, 0.22F * clipOpacity);
                 renderRect(clipBox, fallbackColor);
             }
+        }
 
-            for (const auto& windowPreview : visibleWindows) {
+        for (const auto& windowPreview : visibleWindows) {
+            if (!windowPreview.touchesWorkspaceEdge) {
+                renderWindowStub(windowPreview.window, owner, ws, windowPreview.box, workspaceBox, time, preview.opacity, -1, preview.roundingPower);
+                continue;
+            }
+
+            for (const auto& clip : roundedClips) {
+                const CBox& clipBox = clip.box;
+                const float clipOpacity = std::clamp(preview.opacity * clip.alpha, 0.0F, 1.0F);
+                if (clipOpacity <= 0.001F)
+                    continue;
                 if (!overviewBoxesIntersect(windowPreview.box, clipBox))
                     continue;
 
                 renderWindowStub(windowPreview.window, owner, ws, windowPreview.box, clipBox, time, clipOpacity, windowPreview.touchesWorkspaceEdge ? preview.rounding : -1, preview.roundingPower);
             }
-        };
-
-        for (const auto& clip : roundedClips)
-            renderPreviewContentsForClip(clip);
+        }
 
         workspaceBoxes.emplace_back(std::make_tuple(preview.wsID, preview.inputBox));
     };
