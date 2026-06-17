@@ -326,9 +326,16 @@ struct SOverviewClipBox {
     float alpha = 1.0F;
 };
 
+struct SOverviewWindowPreview {
+    PHLWINDOW window;
+    CBox box;
+    bool touchesWorkspaceEdge = false;
+};
+
 static std::vector<SOverviewClipBox> overviewRoundedClipBoxes(const CBox& workspaceBox, int rounding) {
     std::vector<SOverviewClipBox> clips;
     const int radius = std::min<int>(std::max(0, rounding), static_cast<int>(std::floor(std::min(workspaceBox.w, workspaceBox.h) * 0.5)));
+    clips.reserve(radius > 1 ? static_cast<size_t>(radius) * 8 + 3 : 1);
     if (radius <= 1) {
         clips.push_back({workspaceBox, 1.0F});
         return clips;
@@ -710,6 +717,38 @@ void CHyprspaceWidget::draw() {
         const double previewScale = workspaceBox.w / std::max<double>(owner->m_transformedSize.x, 1.0);
         const double monitorScaleForPreview = previewScale * owner->m_scale;
         const auto roundedClips = overviewRoundedClipBoxes(workspaceBox, preview.rounding);
+        std::vector<SOverviewWindowPreview> visibleWindows;
+
+        if (ws && preview.opacity > 0.001F) {
+            visibleWindows.reserve(g_pCompositor->m_windows.size());
+            for (auto& w : g_pCompositor->m_windows) {
+                if (!w)
+                    continue;
+                if (w->m_workspace != ws)
+                    continue;
+                if (!w->m_isMapped)
+                    continue;
+
+                const double wX = workspaceBox.x + ((w->m_realPosition->value().x - owner->m_position.x) * monitorScaleForPreview);
+                const double wY = workspaceBox.y + ((w->m_realPosition->value().y - owner->m_position.y) * monitorScaleForPreview) - (preview.topInset * previewScale);
+                const double wW = w->m_realSize->value().x * monitorScaleForPreview;
+                const double wH = w->m_realSize->value().y * monitorScaleForPreview;
+
+                if (!(wW > 1 && wH > 1))
+                    continue;
+
+                const CBox windowBox = CBox{wX, wY, wW, wH};
+                if (!overviewBoxesIntersect(windowBox, workspaceBox))
+                    continue;
+
+                const bool touchesWorkspaceEdge = wX <= workspaceBox.x + 1.0 ||
+                    wY <= workspaceBox.y + 1.0 ||
+                    wX + wW >= workspaceBox.x + workspaceBox.w - 1.0 ||
+                    wY + wH >= workspaceBox.y + workspaceBox.h - 1.0;
+                visibleWindows.push_back({w, windowBox, touchesWorkspaceEdge});
+            }
+        }
+
         renderWorkspaceShadow(workspaceBox, preview.opacity, preview.rounding, preview.roundingPower);
 
         if (preview.opacity <= 0.001F)
@@ -728,33 +767,11 @@ void CHyprspaceWidget::draw() {
                 renderRect(clipBox, fallbackColor);
             }
 
-            if (ws) {
-                for (auto& w : g_pCompositor->m_windows) {
-                    if (!w)
-                        continue;
-                    if (w->m_workspace != ws)
-                        continue;
-                    if (!w->m_isMapped)
-                        continue;
+            for (const auto& windowPreview : visibleWindows) {
+                if (!overviewBoxesIntersect(windowPreview.box, clipBox))
+                    continue;
 
-                    const double wX = workspaceBox.x + ((w->m_realPosition->value().x - owner->m_position.x) * monitorScaleForPreview);
-                    const double wY = workspaceBox.y + ((w->m_realPosition->value().y - owner->m_position.y) * monitorScaleForPreview) - (preview.topInset * previewScale);
-                    const double wW = w->m_realSize->value().x * monitorScaleForPreview;
-                    const double wH = w->m_realSize->value().y * monitorScaleForPreview;
-
-                    if (!(wW > 1 && wH > 1))
-                        continue;
-
-                    const CBox windowBox = CBox{wX, wY, wW, wH};
-                    if (!overviewBoxesIntersect(windowBox, clipBox))
-                        continue;
-
-                    const bool touchesWorkspaceEdge = wX <= workspaceBox.x + 1.0 ||
-                        wY <= workspaceBox.y + 1.0 ||
-                        wX + wW >= workspaceBox.x + workspaceBox.w - 1.0 ||
-                        wY + wH >= workspaceBox.y + workspaceBox.h - 1.0;
-                    renderWindowStub(w, owner, ws, windowBox, clipBox, time, clipOpacity, touchesWorkspaceEdge ? preview.rounding : -1, preview.roundingPower);
-                }
+                renderWindowStub(windowPreview.window, owner, ws, windowPreview.box, clipBox, time, clipOpacity, windowPreview.touchesWorkspaceEdge ? preview.rounding : -1, preview.roundingPower);
             }
         };
 
