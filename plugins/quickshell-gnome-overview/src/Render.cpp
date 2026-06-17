@@ -188,10 +188,9 @@ bool renderWorkspaceBackground(PHLMONITOR pMonitor, const CBox& workspaceBox, co
     if (!pMonitor)
         return false;
 
-    const double previewScale = workspaceBox.w / std::max<double>(pMonitor->m_transformedSize.x, 1.0);
+    (void)topInset;
+
     CBox backgroundBox = workspaceBox;
-    backgroundBox.y -= topInset * previewScale;
-    backgroundBox.h = pMonitor->m_transformedSize.y * previewScale;
 
     bool rendered = false;
     for (auto& ls : pMonitor->m_layerSurfaceLayers[0]) {
@@ -306,12 +305,76 @@ static void renderWorkspaceShadow(const CBox& workspaceBox, float opacity, int r
     renderRect(shadowMid, CHyprColor(r, g, b, 0.036F * alpha), rounding + 8, roundingPower);
 }
 
-static void renderWorkspaceShapeOverlay(const CBox& workspaceBox, float opacity, int rounding, float roundingPower) {
-    const float alpha = std::clamp(opacity, 0.F, 1.F);
-    if (alpha <= 0.001F)
-        return;
+static CBox overviewPixelSnappedBox(const CBox& box) {
+    const double left = std::round(box.x);
+    const double top = std::round(box.y);
+    const double right = std::round(box.x + box.w);
+    const double bottom = std::round(box.y + box.h);
 
-    renderRect(workspaceBox, CHyprColor(1.0, 1.0, 1.0, 0.018F * alpha), rounding, roundingPower);
+    return CBox{left, top, std::max(1.0, right - left), std::max(1.0, bottom - top)};
+}
+
+static bool overviewBoxesIntersect(const CBox& lhs, const CBox& rhs) {
+    return lhs.x < rhs.x + rhs.w &&
+        lhs.x + lhs.w > rhs.x &&
+        lhs.y < rhs.y + rhs.h &&
+        lhs.y + lhs.h > rhs.y;
+}
+
+struct SOverviewClipBox {
+    CBox box;
+    float alpha = 1.0F;
+};
+
+static std::vector<SOverviewClipBox> overviewRoundedClipBoxes(const CBox& workspaceBox, int rounding) {
+    std::vector<SOverviewClipBox> clips;
+    const int radius = std::min<int>(std::max(0, rounding), static_cast<int>(std::floor(std::min(workspaceBox.w, workspaceBox.h) * 0.5)));
+    if (radius <= 1) {
+        clips.push_back({workspaceBox, 1.0F});
+        return clips;
+    }
+
+    const double centerW = workspaceBox.w - static_cast<double>(radius * 2);
+    if (centerW > 0.0)
+        clips.push_back({CBox{workspaceBox.x + radius, workspaceBox.y, centerW, workspaceBox.h}, 1.0F});
+
+    const double middleH = workspaceBox.h - static_cast<double>(radius * 2);
+    if (middleH > 0.0) {
+        clips.push_back({CBox{workspaceBox.x, workspaceBox.y + radius, static_cast<double>(radius), middleH}, 1.0F});
+        clips.push_back({CBox{workspaceBox.x + workspaceBox.w - radius, workspaceBox.y + radius, static_cast<double>(radius), middleH}, 1.0F});
+    }
+
+    for (int y = 0; y < radius; ++y) {
+        const double distanceFromCenter = static_cast<double>(radius) - (static_cast<double>(y) + 0.5);
+        const double circleReach = std::sqrt(std::max(0.0, static_cast<double>(radius * radius) - distanceFromCenter * distanceFromCenter));
+        const double exactInset = static_cast<double>(radius) - circleReach;
+        const double solidInset = std::ceil(exactInset);
+        const double cornerW = static_cast<double>(radius) - solidInset;
+        if (!(cornerW > 0.0))
+            continue;
+
+        const double topY = workspaceBox.y + y;
+        const double bottomY = workspaceBox.y + workspaceBox.h - y - 1.0;
+        const double rightX = workspaceBox.x + workspaceBox.w - radius;
+        clips.push_back({CBox{workspaceBox.x + solidInset, topY, cornerW, 1.0}, 1.0F});
+        clips.push_back({CBox{rightX, topY, cornerW, 1.0}, 1.0F});
+        clips.push_back({CBox{workspaceBox.x + solidInset, bottomY, cornerW, 1.0}, 1.0F});
+        clips.push_back({CBox{rightX, bottomY, cornerW, 1.0}, 1.0F});
+
+        const double edgeInset = std::floor(exactInset);
+        const double edgeAlpha = solidInset - exactInset;
+        if (edgeInset < solidInset && edgeAlpha > 0.001) {
+            const float alpha = static_cast<float>(std::clamp(edgeAlpha, 0.0, 1.0));
+            const double leftX = workspaceBox.x + edgeInset;
+            const double rightX = workspaceBox.x + workspaceBox.w - edgeInset - 1.0;
+            clips.push_back({CBox{leftX, topY, 1.0, 1.0}, alpha});
+            clips.push_back({CBox{rightX, topY, 1.0, 1.0}, alpha});
+            clips.push_back({CBox{leftX, bottomY, 1.0, 1.0}, alpha});
+            clips.push_back({CBox{rightX, bottomY, 1.0, 1.0}, alpha});
+        }
+    }
+
+    return clips;
 }
 
 static bool boxContainsPointForOverview(const std::optional<CBox>& box, const Vector2D& coords) {
@@ -643,44 +706,60 @@ void CHyprspaceWidget::draw() {
 
     auto renderPreview = [&](const SWorkspacePreview& preview) {
         const auto ws = preview.ws;
-        const CBox workspaceBox = preview.box;
-        const double monitorScaleForPreview = preview.monitorScaleForPreview;
-        const double previewScale = preview.previewScale;
+        const CBox workspaceBox = overviewPixelSnappedBox(preview.box);
+        const double previewScale = workspaceBox.w / std::max<double>(owner->m_transformedSize.x, 1.0);
+        const double monitorScaleForPreview = previewScale * owner->m_scale;
+        const auto roundedClips = overviewRoundedClipBoxes(workspaceBox, preview.rounding);
         renderWorkspaceShadow(workspaceBox, preview.opacity, preview.rounding, preview.roundingPower);
 
         if (preview.opacity <= 0.001F)
             return;
 
-        const CBox previewClip = workspaceBox;
-        const bool backgroundRendered = renderWorkspaceBackground(owner, workspaceBox, previewClip, time, preview.opacity, preview.topInset, preview.rounding, preview.roundingPower);
-        if (!backgroundRendered) {
-            CHyprColor fallbackColor = preview.wsID == morphTargetWorkspaceID ? Config::workspaceActiveBackground : Config::workspaceInactiveBackground;
-            fallbackColor.a = std::max<float>(fallbackColor.a * preview.opacity, 0.22F * preview.opacity);
-            renderRect(previewClip, fallbackColor, preview.rounding, preview.roundingPower);
-        }
+        auto renderPreviewContentsForClip = [&](const SOverviewClipBox& clip) {
+            const CBox& clipBox = clip.box;
+            const float clipOpacity = std::clamp(preview.opacity * clip.alpha, 0.0F, 1.0F);
+            if (clipOpacity <= 0.001F)
+                return;
 
-        if (ws) {
-            for (auto& w : g_pCompositor->m_windows) {
-                if (!w)
-                    continue;
-                if (w->m_workspace != ws)
-                    continue;
-                if (!w->m_isMapped)
-                    continue;
-
-                const double wX = workspaceBox.x + ((w->m_realPosition->value().x - owner->m_position.x) * monitorScaleForPreview);
-                const double wY = workspaceBox.y + ((w->m_realPosition->value().y - owner->m_position.y) * monitorScaleForPreview) - (preview.topInset * previewScale);
-                const double wW = w->m_realSize->value().x * monitorScaleForPreview;
-                const double wH = w->m_realSize->value().y * monitorScaleForPreview;
-
-                if (!(wW > 1 && wH > 1))
-                    continue;
-
-                renderWindowStub(w, owner, ws, CBox{wX, wY, wW, wH}, previewClip, time, preview.opacity);
+            const bool backgroundRendered = renderWorkspaceBackground(owner, workspaceBox, clipBox, time, clipOpacity, preview.topInset, preview.rounding, preview.roundingPower);
+            if (!backgroundRendered) {
+                CHyprColor fallbackColor = preview.wsID == morphTargetWorkspaceID ? Config::workspaceActiveBackground : Config::workspaceInactiveBackground;
+                fallbackColor.a = std::max<float>(fallbackColor.a * clipOpacity, 0.22F * clipOpacity);
+                renderRect(clipBox, fallbackColor);
             }
-        }
 
-        renderWorkspaceShapeOverlay(workspaceBox, preview.opacity, preview.rounding, preview.roundingPower);
+            if (ws) {
+                for (auto& w : g_pCompositor->m_windows) {
+                    if (!w)
+                        continue;
+                    if (w->m_workspace != ws)
+                        continue;
+                    if (!w->m_isMapped)
+                        continue;
+
+                    const double wX = workspaceBox.x + ((w->m_realPosition->value().x - owner->m_position.x) * monitorScaleForPreview);
+                    const double wY = workspaceBox.y + ((w->m_realPosition->value().y - owner->m_position.y) * monitorScaleForPreview) - (preview.topInset * previewScale);
+                    const double wW = w->m_realSize->value().x * monitorScaleForPreview;
+                    const double wH = w->m_realSize->value().y * monitorScaleForPreview;
+
+                    if (!(wW > 1 && wH > 1))
+                        continue;
+
+                    const CBox windowBox = CBox{wX, wY, wW, wH};
+                    if (!overviewBoxesIntersect(windowBox, clipBox))
+                        continue;
+
+                    const bool touchesWorkspaceEdge = wX <= workspaceBox.x + 1.0 ||
+                        wY <= workspaceBox.y + 1.0 ||
+                        wX + wW >= workspaceBox.x + workspaceBox.w - 1.0 ||
+                        wY + wH >= workspaceBox.y + workspaceBox.h - 1.0;
+                    renderWindowStub(w, owner, ws, windowBox, clipBox, time, clipOpacity, touchesWorkspaceEdge ? preview.rounding : -1, preview.roundingPower);
+                }
+            }
+        };
+
+        for (const auto& clip : roundedClips)
+            renderPreviewContentsForClip(clip);
 
         workspaceBoxes.emplace_back(std::make_tuple(preview.wsID, preview.inputBox));
     };
