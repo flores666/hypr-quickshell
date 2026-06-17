@@ -235,6 +235,10 @@ bool CHyprspaceWidget::startWorkspaceSelectionAnimation(int targetWorkspaceID, b
     if (!owner || targetWorkspaceID < 1)
         return false;
 
+    const auto visibleWorkspaceIDs = overviewWorkspaceIds();
+    if (std::find(visibleWorkspaceIDs.begin(), visibleWorkspaceIDs.end(), targetWorkspaceID) == visibleWorkspaceIDs.end())
+        return false;
+
     const int currentWorkspaceID = centeredWorkspaceID > 0
         ? centeredWorkspaceID
         : std::max(1, static_cast<int>(owner->activeWorkspaceID()));

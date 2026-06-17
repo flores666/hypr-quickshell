@@ -40,7 +40,16 @@ bool CHyprspaceWidget::buttonEvent(bool pressed, Vector2D coords) {
         if (targetWorkspace && targetWorkspace->m_isSpecialWorkspace) {
             getOwner()->activeSpecialWorkspaceID() == targetWorkspaceID ? getOwner()->setSpecialWorkspace(nullptr) : getOwner()->setSpecialWorkspace(targetWorkspaceID);
         } else {
-            startWorkspaceSelectionAnimation(targetWorkspaceID, true);
+            const auto owner = getOwner();
+            const auto visibleWorkspaceIDs = overviewWorkspaceIds();
+            if (std::find(visibleWorkspaceIDs.begin(), visibleWorkspaceIDs.end(), targetWorkspaceID) == visibleWorkspaceIDs.end())
+                return false;
+
+            const int currentCenteredWorkspaceID = centeredWorkspaceID > 0
+                ? centeredWorkspaceID
+                : (owner ? std::max(1, static_cast<int>(owner->activeWorkspaceID())) : 1);
+            const bool targetIsCentered = targetWorkspaceID == currentCenteredWorkspaceID;
+            startWorkspaceSelectionAnimation(targetWorkspaceID, targetIsCentered);
         }
         return false;
     }

@@ -56,7 +56,7 @@ class CHyprspaceWidget {
     // steps. Coarse mouse-wheel notches switch immediately by exactly one workspace.
     double workspaceScrollAccumulator = 0.0;
 
-    // Per-workspace hover progress for the small GNOME-like zoom on hover.
+    // Per-workspace hover progress for hit testing and draw ordering.
     std::unordered_map<int, float> workspaceHoverProgress;
 
     // Workspace preview currently centered in the overview strip. This is
