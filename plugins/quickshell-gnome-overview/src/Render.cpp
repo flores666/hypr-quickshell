@@ -390,8 +390,11 @@ void CHyprspaceWidget::draw() {
                 // fullscreen in one combined GNOME-like motion.
                 workspaceBox = overviewLerpBox(fullWorkspaceBox, workspaceBox, openProgress);
             } else {
-                const double sideProgress = overviewEaseOutQuart((rawOpenProgress - 0.16) / 0.84);
-                const double slideDistance = owner->m_transformedSize.x * 0.10;
+                const double sideExitProgress = overviewClamp01((rawOpenProgress - 0.30) / 0.70);
+                const double sideProgress = closingAnimationRunning
+                    ? sideExitProgress * sideExitProgress
+                    : overviewEaseOutQuart((rawOpenProgress - 0.16) / 0.84);
+                const double slideDistance = owner->m_transformedSize.x * (closingAnimationRunning ? 0.14 : 0.10);
                 CBox sideStartBox = workspaceBox;
                 sideStartBox.x += (directionFromTarget < 0 ? -slideDistance : slideDistance);
                 workspaceBox = overviewLerpBox(sideStartBox, workspaceBox, sideProgress);
@@ -475,12 +478,16 @@ void CHyprspaceWidget::draw() {
             });
 
         if (!fullCoverWindowVisible) {
-            const bool backgroundRendered = renderWorkspaceBackgroundTexture(owner, workspaceBox, workspaceBox, preview.opacity, preview.rounding, 2.0F);
+            float backgroundOpacity = preview.opacity;
+            if (preview.wsID == morphTargetWorkspaceID && (morphAnimationRunning || selectionAnimationRunning))
+                backgroundOpacity *= static_cast<float>(openProgress);
+
+            const bool backgroundRendered = renderWorkspaceBackgroundTexture(owner, workspaceBox, workspaceBox, backgroundOpacity, preview.rounding, 2.0F);
 
             CHyprColor tintColor = preview.wsID == morphTargetWorkspaceID ? Config::workspaceActiveBackground : Config::workspaceInactiveBackground;
             tintColor.a = backgroundRendered
-                ? std::max<float>(tintColor.a * preview.opacity, 0.10F * preview.opacity)
-                : std::max<float>(tintColor.a * preview.opacity, 0.22F * preview.opacity);
+                ? std::max<float>(tintColor.a * backgroundOpacity, 0.10F * backgroundOpacity)
+                : std::max<float>(tintColor.a * backgroundOpacity, 0.22F * backgroundOpacity);
             renderRect(workspaceBox, tintColor, preview.rounding, 2.0F);
         }
 
