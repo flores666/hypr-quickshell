@@ -2,6 +2,7 @@
 #include "Globals.hpp"
 #include "OverviewCornerMask.hpp"
 #include "OverviewRenderHelpers.hpp"
+#include "OverviewShadow.hpp"
 #include <algorithm>
 #include <cmath>
 #include <optional>
@@ -465,6 +466,8 @@ void CHyprspaceWidget::draw() {
 
         if (preview.opacity <= 0.001F)
             return;
+
+        renderWorkspacePreviewShadow(owner, workspaceBox, preview.rounding, preview.opacity);
 
         const bool fullCoverWindowVisible = !morphAnimationRunning && !selectionAnimationRunning && preview.opacity >= 0.999F &&
             std::any_of(visibleWindows.begin(), visibleWindows.end(), [](const SOverviewWindowPreview& windowPreview) {
