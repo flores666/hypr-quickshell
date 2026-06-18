@@ -4,6 +4,7 @@
 #include <hyprland/src/config/shared/complex/ComplexDataTypes.hpp>
 #include <hyprland/src/render/pass/RectPassElement.hpp>
 #include <hyprland/src/render/pass/SurfacePassElement.hpp>
+#include <hyprland/src/render/pass/TexPassElement.hpp>
 #include <hyprland/src/render/pass/RendererHintsPassElement.hpp>
 #include <hyprlang.hpp>
 #include <hyprutils/utils/ScopeGuard.hpp>
@@ -197,6 +198,42 @@ bool renderWorkspaceBackground(PHLMONITOR pMonitor, const CBox& workspaceBox, co
     }
 
     return rendered;
+}
+
+bool renderWorkspaceBackgroundTexture(PHLMONITOR pMonitor, const CBox& workspaceBox, const CBox& clipBox, float alpha, int rounding, float roundingPower) {
+    if (!pMonitor)
+        return false;
+
+    for (auto& ls : pMonitor->m_layerSurfaceLayers[0]) {
+        if (!ls)
+            continue;
+
+        const auto layer = ls.lock();
+        if (!layer)
+            continue;
+        if (!layer->m_mapped || layer->m_readyToDelete || !layer->m_layerSurface || !layer->wlSurface() || !layer->wlSurface()->resource())
+            continue;
+
+        const auto surface = layer->wlSurface()->resource();
+        if (!surface->m_current.texture)
+            continue;
+
+        if (surface->m_current.size.x < 1 || surface->m_current.size.y < 1)
+            continue;
+
+        CTexPassElement::SRenderData renderData;
+        renderData.tex = surface->m_current.texture;
+        renderData.box = workspaceBox;
+        renderData.a = std::clamp(alpha, 0.F, 1.F);
+        renderData.round = rounding;
+        renderData.roundingPower = roundingPower;
+        renderData.clipBox = clipBox;
+        renderData.surface = surface;
+        g_pHyprRenderer->m_renderPass.add(makeUnique<CTexPassElement>(renderData));
+        return true;
+    }
+
+    return false;
 }
 
 static bool isQuickshellLayerNamespaceForOverview(const std::string& ns) {
@@ -642,9 +679,13 @@ void CHyprspaceWidget::draw() {
             });
 
         if (!fullCoverWindowVisible) {
-            CHyprColor fallbackColor = preview.wsID == morphTargetWorkspaceID ? Config::workspaceActiveBackground : Config::workspaceInactiveBackground;
-            fallbackColor.a = std::max<float>(fallbackColor.a * preview.opacity, 0.22F * preview.opacity);
-            renderRect(workspaceBox, fallbackColor, preview.rounding, 2.0F);
+            const bool backgroundRendered = renderWorkspaceBackgroundTexture(owner, workspaceBox, workspaceBox, preview.opacity, preview.rounding, 2.0F);
+
+            CHyprColor tintColor = preview.wsID == morphTargetWorkspaceID ? Config::workspaceActiveBackground : Config::workspaceInactiveBackground;
+            tintColor.a = backgroundRendered
+                ? std::max<float>(tintColor.a * preview.opacity, 0.10F * preview.opacity)
+                : std::max<float>(tintColor.a * preview.opacity, 0.22F * preview.opacity);
+            renderRect(workspaceBox, tintColor, preview.rounding, 2.0F);
         }
 
         for (const auto& windowPreview : visibleWindows) {
