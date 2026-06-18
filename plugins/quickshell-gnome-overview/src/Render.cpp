@@ -249,10 +249,34 @@ static bool overviewBoxesIntersect(const CBox& lhs, const CBox& rhs) {
         lhs.y + lhs.h > rhs.y;
 }
 
+static int overviewWorkspaceRounding(PHLMONITOR pMonitor) {
+    if (!pMonitor)
+        return 10;
+
+    return std::max(8, static_cast<int>(std::round(10.0 * pMonitor->m_scale)));
+}
+
+static bool overviewBoxOverlapsWorkspaceCorner(const CBox& box, const CBox& workspaceBox, int rounding) {
+    const double radius = std::min<double>(std::max(0, rounding), std::floor(std::min(workspaceBox.w, workspaceBox.h) * 0.5));
+    if (radius <= 1.0)
+        return false;
+
+    const CBox topLeft{workspaceBox.x, workspaceBox.y, radius, radius};
+    const CBox topRight{workspaceBox.x + workspaceBox.w - radius, workspaceBox.y, radius, radius};
+    const CBox bottomLeft{workspaceBox.x, workspaceBox.y + workspaceBox.h - radius, radius, radius};
+    const CBox bottomRight{workspaceBox.x + workspaceBox.w - radius, workspaceBox.y + workspaceBox.h - radius, radius, radius};
+
+    return overviewBoxesIntersect(box, topLeft) ||
+        overviewBoxesIntersect(box, topRight) ||
+        overviewBoxesIntersect(box, bottomLeft) ||
+        overviewBoxesIntersect(box, bottomRight);
+}
+
 struct SOverviewWindowPreview {
     PHLWINDOW window;
     CBox box;
     bool coversWorkspace = false;
+    bool overlapsWorkspaceCorner = false;
 };
 
 static bool boxContainsPointForOverview(const std::optional<CBox>& box, const Vector2D& coords) {
@@ -394,6 +418,7 @@ void CHyprspaceWidget::draw() {
     const double availableH = std::max<double>(120.0, owner->m_transformedSize.y - reservedBottom);
     const double topReservedPixels = overviewTopReservedPixels(owner);
     const double previewSourceH = std::max<double>(120.0, owner->m_transformedSize.y - topReservedPixels);
+    const int workspaceRounding = overviewWorkspaceRounding(owner);
 
     const double visualCenterIndex = visualCenterWorkspaceIndex(workspaces);
     const int visualCenterIndexRounded = std::clamp(static_cast<int>(std::round(visualCenterIndex)), 0, static_cast<int>(workspaces.size()) - 1);
@@ -484,6 +509,7 @@ void CHyprspaceWidget::draw() {
         double monitorScaleForPreview = 1.0;
         double previewScale = 1.0;
         double topInset = 0.0;
+        int rounding = 0;
         float opacity = 1.0F;
         bool hovered = false;
     };
@@ -552,6 +578,7 @@ void CHyprspaceWidget::draw() {
         preview.previewScale = workspaceBox.w / std::max<double>(owner->m_transformedSize.x, 1.0);
         preview.monitorScaleForPreview = preview.previewScale * owner->m_scale;
         preview.topInset = topReservedPixels * openProgress;
+        preview.rounding = static_cast<int>(std::round(workspaceRounding * openProgress));
         preview.opacity = previewOpacity;
         preview.hovered = pointerOverWorkspace;
 
@@ -601,7 +628,8 @@ void CHyprspaceWidget::draw() {
                     wY <= workspaceBox.y + 1.0 &&
                     wX + wW >= workspaceBox.x + workspaceBox.w - 1.0 &&
                     wY + wH >= workspaceBox.y + workspaceBox.h - 1.0;
-                visibleWindows.push_back({w, windowBox, coversWorkspace});
+                const bool overlapsWorkspaceCorner = overviewBoxOverlapsWorkspaceCorner(windowBox, workspaceBox, preview.rounding);
+                visibleWindows.push_back({w, windowBox, coversWorkspace, overlapsWorkspaceCorner});
             }
         }
 
@@ -614,16 +642,14 @@ void CHyprspaceWidget::draw() {
             });
 
         if (!fullCoverWindowVisible) {
-            const bool backgroundRendered = renderWorkspaceBackground(owner, workspaceBox, workspaceBox, time, preview.opacity, preview.topInset, 0, 2.0F);
-            if (!backgroundRendered) {
-                CHyprColor fallbackColor = preview.wsID == morphTargetWorkspaceID ? Config::workspaceActiveBackground : Config::workspaceInactiveBackground;
-                fallbackColor.a = std::max<float>(fallbackColor.a * preview.opacity, 0.22F * preview.opacity);
-                renderRect(workspaceBox, fallbackColor);
-            }
+            CHyprColor fallbackColor = preview.wsID == morphTargetWorkspaceID ? Config::workspaceActiveBackground : Config::workspaceInactiveBackground;
+            fallbackColor.a = std::max<float>(fallbackColor.a * preview.opacity, 0.22F * preview.opacity);
+            renderRect(workspaceBox, fallbackColor, preview.rounding, 2.0F);
         }
 
         for (const auto& windowPreview : visibleWindows) {
-            renderWindowStub(windowPreview.window, owner, ws, windowPreview.box, workspaceBox, time, preview.opacity, 0, 2.0F);
+            const int forcedRounding = windowPreview.overlapsWorkspaceCorner ? preview.rounding : -1;
+            renderWindowStub(windowPreview.window, owner, ws, windowPreview.box, workspaceBox, time, preview.opacity, forcedRounding, 2.0F);
         }
 
         workspaceBoxes.emplace_back(std::make_tuple(preview.wsID, preview.inputBox));
