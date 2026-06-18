@@ -84,6 +84,22 @@ class COverviewCornerMaskPassElement : public IPassElement {
         bool savedExternalTexture = false;
     };
 
+    struct SProgramState {
+        GLuint program = 0;
+        GLint tex = -1;
+        GLint proj = -1;
+        GLint workspaceBox = -1;
+        GLint layerBox = -1;
+        GLint radius = -1;
+        GLint opacity = -1;
+        GLint dimAlpha = -1;
+    };
+
+    struct SGeometryState {
+        GLuint vao = 0;
+        GLuint vbo = 0;
+    };
+
     static GLuint compileShader(GLenum type, const char* source) {
         const GLuint shader = glCreateShader(type);
         glShaderSource(shader, 1, &source, nullptr);
@@ -99,7 +115,7 @@ class COverviewCornerMaskPassElement : public IPassElement {
         return shader;
     }
 
-    static GLuint createProgram(bool externalTexture) {
+    static SProgramState createProgram(bool externalTexture) {
         constexpr const char* vertexSource = R"(#version 300 es
 precision highp float;
 layout(location = 0) in vec2 pos;
@@ -129,7 +145,7 @@ float roundedRectOutsideAlpha(vec2 point) {
     vec2 center = workspaceBox.xy + halfSize;
     vec2 q = abs(point - center) - (halfSize - vec2(radius));
     float dist = length(max(q, vec2(0.0))) + min(max(q.x, q.y), 0.0) - radius;
-    return smoothstep(-1.0, 1.0, dist);
+    return smoothstep(-1.0, 0.0, dist);
 }
 
 void main() {
@@ -149,12 +165,12 @@ void main() {
 
         const GLuint vertex = compileShader(GL_VERTEX_SHADER, vertexSource);
         if (!vertex)
-            return 0;
+            return {};
 
         const GLuint fragment = compileShader(GL_FRAGMENT_SHADER, fragmentSource.c_str());
         if (!fragment) {
             glDeleteShader(vertex);
-            return 0;
+            return {};
         }
 
         const GLuint program = glCreateProgram();
@@ -168,25 +184,45 @@ void main() {
         glGetProgramiv(program, GL_LINK_STATUS, &ok);
         if (ok != GL_TRUE) {
             glDeleteProgram(program);
-            return 0;
+            return {};
         }
 
-        return program;
+        return SProgramState{
+            .program = program,
+            .tex = glGetUniformLocation(program, "tex"),
+            .proj = glGetUniformLocation(program, "proj"),
+            .workspaceBox = glGetUniformLocation(program, "workspaceBox"),
+            .layerBox = glGetUniformLocation(program, "layerBox"),
+            .radius = glGetUniformLocation(program, "radius"),
+            .opacity = glGetUniformLocation(program, "opacity"),
+            .dimAlpha = glGetUniformLocation(program, "dimAlpha"),
+        };
     }
 
-    static GLuint programForTexture(Render::eTextureType textureType) {
-        static GLuint texture2DProgram = 0;
-        static GLuint externalTextureProgram = 0;
+    static const SProgramState& programForTexture(Render::eTextureType textureType) {
+        static SProgramState texture2DProgram;
+        static SProgramState externalTextureProgram;
 
         if (textureType == Render::TEXTURE_EXTERNAL) {
-            if (!externalTextureProgram)
+            if (!externalTextureProgram.program)
                 externalTextureProgram = createProgram(true);
             return externalTextureProgram;
         }
 
-        if (!texture2DProgram)
+        if (!texture2DProgram.program)
             texture2DProgram = createProgram(false);
         return texture2DProgram;
+    }
+
+    static SGeometryState& geometryState() {
+        static SGeometryState state;
+
+        if (!state.vao)
+            glGenVertexArrays(1, &state.vao);
+        if (!state.vbo)
+            glGenBuffers(1, &state.vbo);
+
+        return state;
     }
 
     static void saveState(SGLState& state, GLenum textureTarget) {
@@ -233,8 +269,8 @@ void main() {
         if (!(m_data.workspaceBox.w > 0.0 && m_data.workspaceBox.h > 0.0 && m_data.layerBox.w > 0.0 && m_data.layerBox.h > 0.0))
             return;
 
-        const GLuint program = programForTexture(m_data.texture->m_type);
-        if (!program)
+        const SProgramState& program = programForTexture(m_data.texture->m_type);
+        if (!program.program)
             return;
 
         const GLenum textureTarget = m_data.texture->m_type == Render::TEXTURE_EXTERNAL ? GL_TEXTURE_EXTERNAL_OES : GL_TEXTURE_2D;
@@ -267,33 +303,28 @@ void main() {
         addQuad(m_data.workspaceBox.x, m_data.workspaceBox.y + m_data.workspaceBox.h - radius, radius, radius);
         addQuad(m_data.workspaceBox.x + m_data.workspaceBox.w - radius, m_data.workspaceBox.y + m_data.workspaceBox.h - radius, radius, radius);
 
-        GLuint vao = 0;
-        GLuint vbo = 0;
-        glGenVertexArrays(1, &vao);
-        glGenBuffers(1, &vbo);
-        glBindVertexArray(vao);
-        glBindBuffer(GL_ARRAY_BUFFER, vbo);
+        SGeometryState& geometry = geometryState();
+        glBindVertexArray(geometry.vao);
+        glBindBuffer(GL_ARRAY_BUFFER, geometry.vbo);
         glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STREAM_DRAW);
 
-        glUseProgram(program);
+        glUseProgram(program.program);
         glEnable(GL_BLEND);
         m_data.texture->bind();
         const auto projection = g_pHyprRenderer->projectBoxToTarget(m_data.workspaceBox).getMatrix();
-        glUniform1i(glGetUniformLocation(program, "tex"), 0);
-        glUniformMatrix3fv(glGetUniformLocation(program, "proj"), 1, GL_TRUE, projection.data());
-        glUniform4f(glGetUniformLocation(program, "workspaceBox"), m_data.workspaceBox.x, m_data.workspaceBox.y, m_data.workspaceBox.w, m_data.workspaceBox.h);
-        glUniform4f(glGetUniformLocation(program, "layerBox"), m_data.layerBox.x, m_data.layerBox.y, m_data.layerBox.w, m_data.layerBox.h);
-        glUniform1f(glGetUniformLocation(program, "radius"), m_data.radius);
-        glUniform1f(glGetUniformLocation(program, "opacity"), std::clamp(m_data.opacity, 0.F, 1.F));
-        glUniform1f(glGetUniformLocation(program, "dimAlpha"), std::clamp(m_data.dimAlpha, 0.F, 1.F));
+        glUniform1i(program.tex, 0);
+        glUniformMatrix3fv(program.proj, 1, GL_TRUE, projection.data());
+        glUniform4f(program.workspaceBox, m_data.workspaceBox.x, m_data.workspaceBox.y, m_data.workspaceBox.w, m_data.workspaceBox.h);
+        glUniform4f(program.layerBox, m_data.layerBox.x, m_data.layerBox.y, m_data.layerBox.w, m_data.layerBox.h);
+        glUniform1f(program.radius, m_data.radius);
+        glUniform1f(program.opacity, std::clamp(m_data.opacity, 0.F, 1.F));
+        glUniform1f(program.dimAlpha, std::clamp(m_data.dimAlpha, 0.F, 1.F));
 
         glEnableVertexAttribArray(0);
         glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), nullptr);
         glDrawArrays(GL_TRIANGLES, 0, vertices.size() / 2);
         glDisableVertexAttribArray(0);
 
-        glDeleteBuffers(1, &vbo);
-        glDeleteVertexArrays(1, &vao);
         restoreState(state);
     }
 

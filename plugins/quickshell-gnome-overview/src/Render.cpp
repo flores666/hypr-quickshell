@@ -6,6 +6,7 @@
 #include <cmath>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 
@@ -87,6 +88,11 @@ struct SOverviewWindowPreview {
     CBox box;
     bool coversWorkspace = false;
     bool overlapsWorkspaceCorner = false;
+};
+
+struct SOverviewWorkspaceWindows {
+    PHLWORKSPACE workspace;
+    std::vector<PHLWINDOW> windows;
 };
 
 static bool boxContainsPointForOverview(const std::optional<CBox>& box, const Vector2D& coords) {
@@ -324,15 +330,26 @@ void CHyprspaceWidget::draw() {
         bool hovered = false;
     };
 
-    std::vector<PHLWINDOW> mappedWindows;
-    mappedWindows.reserve(g_pCompositor->m_windows.size());
+    std::vector<SOverviewWorkspaceWindows> windowsByWorkspace;
+    windowsByWorkspace.reserve(workspaces.size());
     for (auto& w : g_pCompositor->m_windows) {
         if (!w)
             continue;
         if (!w->m_isMapped || !w->m_workspace)
             continue;
 
-        mappedWindows.push_back(w);
+        auto bucket = std::find_if(windowsByWorkspace.begin(), windowsByWorkspace.end(), [&w](const SOverviewWorkspaceWindows& item) {
+            return item.workspace == w->m_workspace;
+        });
+
+        if (bucket == windowsByWorkspace.end()) {
+            SOverviewWorkspaceWindows item;
+            item.workspace = w->m_workspace;
+            item.windows.push_back(w);
+            windowsByWorkspace.push_back(std::move(item));
+        } else {
+            bucket->windows.push_back(w);
+        }
     }
 
     std::vector<SWorkspacePreview> previews;
@@ -417,29 +434,32 @@ void CHyprspaceWidget::draw() {
         std::vector<SOverviewWindowPreview> visibleWindows;
 
         if (ws && preview.opacity > 0.001F) {
-            visibleWindows.reserve(mappedWindows.size());
-            for (auto& w : mappedWindows) {
-                if (w->m_workspace != ws)
-                    continue;
+            const auto workspaceWindows = std::find_if(windowsByWorkspace.begin(), windowsByWorkspace.end(), [&ws](const SOverviewWorkspaceWindows& item) {
+                return item.workspace == ws;
+            });
 
-                const double wX = workspaceBox.x + ((w->m_realPosition->value().x - owner->m_position.x) * monitorScaleForPreview);
-                const double wY = workspaceBox.y + ((w->m_realPosition->value().y - owner->m_position.y) * monitorScaleForPreview) - (preview.topInset * previewScale);
-                const double wW = w->m_realSize->value().x * monitorScaleForPreview;
-                const double wH = w->m_realSize->value().y * monitorScaleForPreview;
+            if (workspaceWindows != windowsByWorkspace.end()) {
+                visibleWindows.reserve(workspaceWindows->windows.size());
+                for (auto& w : workspaceWindows->windows) {
+                    const double wX = workspaceBox.x + ((w->m_realPosition->value().x - owner->m_position.x) * monitorScaleForPreview);
+                    const double wY = workspaceBox.y + ((w->m_realPosition->value().y - owner->m_position.y) * monitorScaleForPreview) - (preview.topInset * previewScale);
+                    const double wW = w->m_realSize->value().x * monitorScaleForPreview;
+                    const double wH = w->m_realSize->value().y * monitorScaleForPreview;
 
-                if (!(wW > 1 && wH > 1))
-                    continue;
+                    if (!(wW > 1 && wH > 1))
+                        continue;
 
-                const CBox windowBox = CBox{wX, wY, wW, wH};
-                if (!overviewBoxesIntersect(windowBox, workspaceBox))
-                    continue;
+                    const CBox windowBox = CBox{wX, wY, wW, wH};
+                    if (!overviewBoxesIntersect(windowBox, workspaceBox))
+                        continue;
 
-                const bool coversWorkspace = wX <= workspaceBox.x + 1.0 &&
-                    wY <= workspaceBox.y + 1.0 &&
-                    wX + wW >= workspaceBox.x + workspaceBox.w - 1.0 &&
-                    wY + wH >= workspaceBox.y + workspaceBox.h - 1.0;
-                const bool overlapsWorkspaceCorner = overviewBoxOverlapsWorkspaceCorner(windowBox, workspaceBox, preview.rounding);
-                visibleWindows.push_back({w, windowBox, coversWorkspace, overlapsWorkspaceCorner});
+                    const bool coversWorkspace = wX <= workspaceBox.x + 1.0 &&
+                        wY <= workspaceBox.y + 1.0 &&
+                        wX + wW >= workspaceBox.x + workspaceBox.w - 1.0 &&
+                        wY + wH >= workspaceBox.y + workspaceBox.h - 1.0;
+                    const bool overlapsWorkspaceCorner = overviewBoxOverlapsWorkspaceCorner(windowBox, workspaceBox, preview.rounding);
+                    visibleWindows.push_back({w, windowBox, coversWorkspace, overlapsWorkspaceCorner});
+                }
             }
         }
 
