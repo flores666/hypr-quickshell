@@ -145,7 +145,9 @@ float roundedRectOutsideAlpha(vec2 point) {
     vec2 center = workspaceBox.xy + halfSize;
     vec2 q = abs(point - center) - (halfSize - vec2(radius));
     float dist = length(max(q, vec2(0.0))) + min(max(q.x, q.y), 0.0) - radius;
-    return smoothstep(-1.0, 0.0, dist);
+    float outsideEdge = smoothstep(-0.75, 0.0, dist);
+    float cleanupBand = 1.0 - smoothstep(0.0, 2.0, dist);
+    return outsideEdge * cleanupBand;
 }
 
 void main() {
