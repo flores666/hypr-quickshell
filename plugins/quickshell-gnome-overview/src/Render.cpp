@@ -227,6 +227,7 @@ void CHyprspaceWidget::draw() {
     const auto workspaces = overviewWorkspaceIds();
     if (workspaces.empty())
         return;
+    const int passiveTrailingWorkspaceID = maxOccupiedWorkspaceID() + 1;
 
     const double margin = std::max<double>(8.0, Config::workspaceMargin * owner->m_scale);
     const double workspaceGap = std::max<double>(22.0, Config::workspaceMargin * owner->m_scale * 1.45);
@@ -319,6 +320,13 @@ void CHyprspaceWidget::draw() {
     const auto mouseCoords = g_pInputManager->getMouseCoordsInternal();
     const bool hoverBlockedByPopup = isPointerOverInteractiveLayerForOverview(owner, mouseCoords);
 
+    for (auto it = workspaceAppearProgress.begin(); it != workspaceAppearProgress.end();) {
+        if (std::find(workspaces.begin(), workspaces.end(), it->first) == workspaces.end())
+            it = workspaceAppearProgress.erase(it);
+        else
+            ++it;
+    }
+
     struct SWorkspacePreview {
         int wsID = 0;
         PHLWORKSPACE ws;
@@ -357,12 +365,32 @@ void CHyprspaceWidget::draw() {
     std::vector<SWorkspacePreview> previews;
     previews.reserve(workspaces.size());
     int hoveredPreviewIndex = -1;
+    bool workspaceAppearAnimationRunning = false;
 
     for (size_t index = 0; index < workspaces.size(); ++index) {
         const int wsID = workspaces[index];
         const auto ws = g_pCompositor->getWorkspaceByID(wsID);
+        const bool passiveTrailingPreview = wsID == passiveTrailingWorkspaceID &&
+            wsID != centeredWorkspaceID &&
+            wsID != workspaceSelectionToID &&
+            wsID != std::max(1, static_cast<int>(owner->activeWorkspaceID()));
+        float passiveAppearProgress = 1.0F;
+        if (passiveTrailingPreview) {
+            float& appearProgress = workspaceAppearProgress[wsID];
+            appearProgress += (1.0F - appearProgress) * static_cast<float>(hoverEase);
+            if (appearProgress > 0.995F)
+                appearProgress = 1.0F;
+            passiveAppearProgress = appearProgress;
+            if (passiveAppearProgress < 1.0F)
+                workspaceAppearAnimationRunning = true;
+        }
+
         CBox workspaceBox = baseWorkspaceBoxes[index];
         workspaceBox.x += fractionalOffsetX;
+        if (passiveTrailingPreview && passiveAppearProgress < 1.0F) {
+            const double slide = owner->m_transformedSize.x * 0.035 * (1.0F - passiveAppearProgress);
+            workspaceBox.x += slide;
+        }
 
         CBox baseInputBox = workspaceBox;
         baseInputBox.scale(1 / owner->m_scale);
@@ -402,6 +430,8 @@ void CHyprspaceWidget::draw() {
                 previewOpacity = static_cast<float>(sideProgress);
             }
         }
+        if (passiveTrailingPreview)
+            previewOpacity *= passiveAppearProgress * 0.85F;
 
         SWorkspacePreview preview;
         preview.wsID = wsID;
@@ -526,7 +556,7 @@ void CHyprspaceWidget::draw() {
         return;
     }
 
-    if (morphAnimationRunning || selectionAnimationRunning) {
+    if (morphAnimationRunning || selectionAnimationRunning || workspaceAppearAnimationRunning) {
         g_pHyprRenderer->damageMonitor(owner);
         g_pCompositor->scheduleFrameForMonitor(owner);
     }

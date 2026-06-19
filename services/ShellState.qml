@@ -72,20 +72,25 @@ QtObject {
         return Math.max(0, (occupiedWorkspaces || []).length);
     }
 
-    function recomputeWorkspaceCounts() {
+    function maxOccupiedWorkspaceId() {
         var occupied = occupiedWorkspaces || [];
-        var active = normalizeWorkspaceId(activeWorkspace);
         var maxOccupied = 0;
         for (var i = 0; i < occupied.length; i++)
             maxOccupied = Math.max(maxOccupied, normalizeWorkspaceId(occupied[i]));
+        return maxOccupied;
+    }
+
+    function recomputeWorkspaceCounts() {
+        var active = normalizeWorkspaceId(activeWorkspace);
+        var maxOccupied = maxOccupiedWorkspaceId();
 
         var nextEmpty = maxOccupied > 0 ? maxOccupied + 1 : 1;
 
         var nextVisible = Math.max(1, maxOccupied);
-        if (active > 0 && active <= nextEmpty)
+        if (active > 0)
             nextVisible = Math.max(nextVisible, active);
 
-        var nextOverview = Math.max(1, nextEmpty);
+        var nextOverview = Math.max(1, nextEmpty, active);
 
         if (visibleWorkspaceCount !== nextVisible)
             visibleWorkspaceCount = nextVisible;
@@ -98,8 +103,7 @@ QtObject {
         if (target <= 0)
             return 1;
 
-        var maxAllowed = Math.max(1, overviewWorkspaceCount);
-        return Math.max(1, Math.min(target, maxAllowed));
+        return Math.max(1, target);
     }
 
     function clampWorkspaceForMove(workspaceId) {
@@ -107,8 +111,7 @@ QtObject {
         if (target <= 0)
             return 1;
 
-        var maxAllowed = Math.max(1, overviewWorkspaceCount);
-        return Math.max(1, Math.min(target, maxAllowed));
+        return Math.max(1, target);
     }
 
     function isSpecialWorkspaceActive(name) {

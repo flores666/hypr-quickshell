@@ -113,6 +113,27 @@ void CHyprspaceWidget::warpWorkspaceTransitionState(int visibleWorkspaceID) {
     warpWorkspace(targetID);
 }
 
+int CHyprspaceWidget::maxOccupiedWorkspaceID() const {
+    const auto owner = getOwner();
+    if (!owner)
+        return 1;
+
+    int maxID = 1;
+    for (auto& window : g_pCompositor->m_windows) {
+        if (!window || !window->m_isMapped || !window->m_workspace || !window->m_workspace->m_monitor)
+            continue;
+        if (window->m_workspace->m_monitor->m_id != ownerID)
+            continue;
+        if (window->m_workspace->m_id < 1)
+            continue;
+
+        const int id = static_cast<int>(window->m_workspace->m_id);
+        maxID = std::max(maxID, id);
+    }
+
+    return maxID;
+}
+
 std::vector<int> CHyprspaceWidget::overviewWorkspaceIds() const {
     std::vector<int> result;
 
@@ -127,7 +148,8 @@ std::vector<int> CHyprspaceWidget::overviewWorkspaceIds() const {
             result.push_back(id);
     };
 
-    int maxOccupiedWorkspaceID = 0;
+    pushUnique(1);
+
     for (auto& window : g_pCompositor->m_windows) {
         if (!window || !window->m_isMapped || !window->m_workspace || !window->m_workspace->m_monitor)
             continue;
@@ -136,9 +158,7 @@ std::vector<int> CHyprspaceWidget::overviewWorkspaceIds() const {
         if (window->m_workspace->m_id < 1)
             continue;
 
-        const int id = static_cast<int>(window->m_workspace->m_id);
-        pushUnique(id);
-        maxOccupiedWorkspaceID = std::max(maxOccupiedWorkspaceID, id);
+        pushUnique(static_cast<int>(window->m_workspace->m_id));
     }
 
     const int activeWorkspaceID = std::max(1, static_cast<int>(owner->activeWorkspaceID()));
@@ -146,12 +166,7 @@ std::vector<int> CHyprspaceWidget::overviewWorkspaceIds() const {
     pushUnique(centeredWorkspaceID);
     pushUnique(workspaceSelectionFromID);
     pushUnique(workspaceSelectionToID);
-
-    const int trailingEmptyWorkspaceID = std::max(1, maxOccupiedWorkspaceID + 1);
-    pushUnique(trailingEmptyWorkspaceID);
-
-    if (Config::showNewWorkspace)
-        pushUnique(std::max(trailingEmptyWorkspaceID, activeWorkspaceID + 1));
+    pushUnique(maxOccupiedWorkspaceID() + 1);
 
     std::sort(result.begin(), result.end());
 
@@ -212,10 +227,6 @@ bool CHyprspaceWidget::isSelectingWorkspace() const {
 bool CHyprspaceWidget::startWorkspaceSelectionAnimation(int targetWorkspaceID, bool closeAfterAnimation) {
     auto owner = getOwner();
     if (!owner || targetWorkspaceID < 1)
-        return false;
-
-    const auto visibleWorkspaceIDs = overviewWorkspaceIds();
-    if (std::find(visibleWorkspaceIDs.begin(), visibleWorkspaceIDs.end(), targetWorkspaceID) == visibleWorkspaceIDs.end())
         return false;
 
     const int currentWorkspaceID = centeredWorkspaceID > 0
@@ -327,15 +338,27 @@ bool CHyprspaceWidget::switchOverviewWorkspaceBy(int direction) {
     const int currentWorkspaceID = centeredWorkspaceID > 0
         ? centeredWorkspaceID
         : std::max(1, static_cast<int>(owner->activeWorkspaceID()));
-    auto currentIt = std::find(ids.begin(), ids.end(), currentWorkspaceID);
-    if (currentIt == ids.end())
-        currentIt = std::lower_bound(ids.begin(), ids.end(), currentWorkspaceID);
-    if (currentIt == ids.end())
-        currentIt = ids.end() - 1;
+    const auto currentIt = std::find(ids.begin(), ids.end(), currentWorkspaceID);
+    int targetWorkspaceID = currentWorkspaceID;
+    if (currentIt != ids.end()) {
+        if (direction > 0) {
+            const auto nextIt = std::next(currentIt);
+            targetWorkspaceID = nextIt != ids.end() ? *nextIt : currentWorkspaceID + 1;
+        } else {
+            targetWorkspaceID = currentIt != ids.begin() ? *std::prev(currentIt) : std::max(1, currentWorkspaceID - 1);
+        }
+    } else {
+        const auto lowerIt = std::lower_bound(ids.begin(), ids.end(), currentWorkspaceID);
+        if (direction > 0)
+            targetWorkspaceID = lowerIt != ids.end() ? *lowerIt : currentWorkspaceID + 1;
+        else
+            targetWorkspaceID = lowerIt != ids.begin() ? *std::prev(lowerIt) : std::max(1, currentWorkspaceID - 1);
+    }
 
-    const int currentIndex = static_cast<int>(std::distance(ids.begin(), currentIt));
-    const int targetIndex = std::clamp(currentIndex + (direction > 0 ? 1 : -1), 0, static_cast<int>(ids.size()) - 1);
-    const int targetWorkspaceID = ids[targetIndex];
+    if (targetWorkspaceID == currentWorkspaceID)
+        return false;
+
+    targetWorkspaceID = std::clamp(targetWorkspaceID, 1, maxOccupiedWorkspaceID() + 1);
     if (targetWorkspaceID == currentWorkspaceID)
         return false;
 
@@ -435,6 +458,7 @@ void CHyprspaceWidget::show() {
         overviewAnimationStarted = true;
         overviewAnimationStartedAt = std::chrono::steady_clock::now();
         workspaceHoverProgress.clear();
+        workspaceAppearProgress.clear();
         notifyQuickshellOverviewState("open");
     }
 
@@ -464,6 +488,7 @@ void CHyprspaceWidget::finishHide() {
     workspaceScrollAccumulator = 0.0;
 
     workspaceHoverProgress.clear();
+    workspaceAppearProgress.clear();
     lastWorkspaceHoverFrameValid = false;
     overviewAnimationStarted = false;
     warpWorkspaceTransitionState(visibleWorkspaceID);

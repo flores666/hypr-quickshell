@@ -31,6 +31,7 @@ class CHyprspaceWidget {
 
     // Per-workspace hover progress for hit testing and draw ordering.
     std::unordered_map<int, float> workspaceHoverProgress;
+    std::unordered_map<int, float> workspaceAppearProgress;
 
     // Workspace preview currently centered in the overview strip. This is
     // intentionally separate from Hyprland's active workspace: empty in-between
@@ -65,6 +66,7 @@ class CHyprspaceWidget {
     double visualCenterWorkspaceIndex(const std::vector<int>& ids) const;
     bool isClosing() const;
     bool isSelectingWorkspace() const;
+    int maxOccupiedWorkspaceID() const;
     std::vector<int> overviewWorkspaceIds() const;
 
     void closeOwnerSpecialWorkspace();

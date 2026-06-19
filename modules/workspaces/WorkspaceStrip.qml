@@ -153,6 +153,14 @@ Item {
         return workspaceId;
     }
 
+    function clampWorkspaceForWheel(workspaceId) {
+        var maxTarget = Math.max(1, Services.ShellState.maxOccupiedWorkspaceId());
+        if (workspaceId < 1)
+            return 1;
+        if (workspaceId > maxTarget)
+            return maxTarget;
+        return workspaceId;
+    }
 
     function scrollWorkspace(deltaY) {
         if (deltaY === 0)
@@ -170,7 +178,7 @@ Item {
             return;
         }
 
-        Services.ShellActions.switchWorkspace(clampWorkspace(activeWorkspace + direction));
+        Services.ShellActions.switchWorkspace(clampWorkspaceForWheel(activeWorkspace + direction));
     }
 
     function workspaceCenterX(workspaceId) {

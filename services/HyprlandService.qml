@@ -101,61 +101,12 @@ Item {
         compactWorkspaceTimer.restart();
     }
 
-    function regularWindowForCompaction(window) {
-        if (!window || !window.address)
-            return false;
-        if (window.hiddenByShell)
-            return false;
-        if (String(window.workspaceName || "").indexOf("special:") === 0)
-            return false;
-
-        var id = Number(window.workspace || 0);
-        return !isNaN(id) && Math.floor(id) > 0;
-    }
-
-    function listHasWorkspace(list, workspaceId) {
-        var id = Math.floor(Number(workspaceId || 0));
-        for (var i = 0; i < list.length; i++) {
-            if (Math.floor(Number(list[i] || 0)) === id)
-                return true;
-        }
-        return false;
-    }
-
     function compactRegularWorkspaces() {
         compactWorkspaceQueued = false;
 
-        var windows = Services.ShellState.windows || [];
-        var occupied = [];
-
-        for (var i = 0; i < windows.length; i++) {
-            var window = windows[i] || {};
-            if (!regularWindowForCompaction(window))
-                continue;
-
-            var workspaceId = Math.floor(Number(window.workspace || 0));
-            if (!listHasWorkspace(occupied, workspaceId))
-                occupied.push(workspaceId);
-        }
-
-        occupied.sort(function(a, b) { return a - b; });
-
-        var dispatched = false;
-        var active = Math.floor(Number(Services.ShellState.activeWorkspace || 1));
-        var maxOccupied = occupied.length > 0 ? Number(occupied[occupied.length - 1]) : 0;
-        var trailingEmpty = Math.max(1, maxOccupied + 1);
-
-        if (active > trailingEmpty) {
-            Services.ShellState.activeWorkspace = trailingEmpty;
-            Hyprland.dispatch("workspace " + trailingEmpty);
-            dispatched = true;
-        }
-
-        if (dispatched) {
-            queueRefreshClients();
-            queueRefreshWorkspaces();
-            queueRefreshMonitors();
-        }
+        // Do not compact occupied workspaces anymore. Empty workspaces beyond
+        // the occupied range disappear naturally from the shell state once the
+        // user leaves them without creating windows.
     }
 
 

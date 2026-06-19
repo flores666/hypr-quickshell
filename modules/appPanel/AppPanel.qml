@@ -1467,7 +1467,8 @@ Item {
 
     function workspaceMenuItems() {
         var result = [{ label: "Special workspace", workspace: "special" }];
-        for (var i = 1; i <= workspaceCount; i++)
+        var maxWorkspace = Math.max(workspaceCount, Services.ShellState.activeWorkspace || 1) + 4;
+        for (var i = 1; i <= maxWorkspace; i++)
             result.push({ label: "Workspace " + i, workspace: i });
         return result;
     }
