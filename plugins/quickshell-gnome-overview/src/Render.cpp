@@ -234,7 +234,8 @@ void CHyprspaceWidget::draw() {
     const double availableW = owner->m_transformedSize.x;
     const double availableH = std::max<double>(120.0, owner->m_transformedSize.y - reservedBottom);
     const double topReservedPixels = overviewTopReservedPixels(owner);
-    const double previewSourceH = std::max<double>(120.0, owner->m_transformedSize.y - topReservedPixels);
+    const double previewSourceTopInset = std::max<double>(0.0, topReservedPixels - 1.0);
+    const double previewSourceH = std::max<double>(120.0, owner->m_transformedSize.y - previewSourceTopInset);
     const int workspaceRounding = overviewWorkspaceRounding(owner);
 
     const double visualCenterIndex = visualCenterWorkspaceIndex(workspaces);
@@ -390,8 +391,11 @@ void CHyprspaceWidget::draw() {
                 // fullscreen in one combined GNOME-like motion.
                 workspaceBox = overviewLerpBox(fullWorkspaceBox, workspaceBox, openProgress);
             } else {
-                const double sideProgress = overviewEaseOutQuart((rawOpenProgress - 0.16) / 0.84);
-                const double slideDistance = owner->m_transformedSize.x * 0.10;
+                const double sideExitProgress = overviewClamp01((rawOpenProgress - 0.30) / 0.70);
+                const double sideProgress = closingAnimationRunning
+                    ? sideExitProgress * sideExitProgress
+                    : overviewEaseOutQuart((rawOpenProgress - 0.16) / 0.84);
+                const double slideDistance = owner->m_transformedSize.x * (closingAnimationRunning ? 0.14 : 0.10);
                 CBox sideStartBox = workspaceBox;
                 sideStartBox.x += (directionFromTarget < 0 ? -slideDistance : slideDistance);
                 workspaceBox = overviewLerpBox(sideStartBox, workspaceBox, sideProgress);
@@ -405,7 +409,7 @@ void CHyprspaceWidget::draw() {
         preview.box = workspaceBox;
         preview.previewScale = workspaceBox.w / std::max<double>(owner->m_transformedSize.x, 1.0);
         preview.monitorScaleForPreview = preview.previewScale * owner->m_scale;
-        preview.topInset = topReservedPixels * openProgress;
+        preview.topInset = previewSourceTopInset * openProgress;
         preview.rounding = static_cast<int>(std::round(workspaceRounding * openProgress));
         preview.opacity = previewOpacity;
         preview.hovered = pointerOverWorkspace;

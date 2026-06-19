@@ -126,7 +126,6 @@ Item {
         compactWorkspaceQueued = false;
 
         var windows = Services.ShellState.windows || [];
-        var regularWindows = [];
         var occupied = [];
 
         for (var i = 0; i < windows.length; i++) {
@@ -135,40 +134,18 @@ Item {
                 continue;
 
             var workspaceId = Math.floor(Number(window.workspace || 0));
-            regularWindows.push({
-                "address": String(window.address || ""),
-                "workspace": workspaceId
-            });
-
             if (!listHasWorkspace(occupied, workspaceId))
                 occupied.push(workspaceId);
         }
 
         occupied.sort(function(a, b) { return a - b; });
 
-        var targetByWorkspace = {};
-        for (var o = 0; o < occupied.length; o++)
-            targetByWorkspace[String(occupied[o])] = o + 1;
-
         var dispatched = false;
-        for (var w = 0; w < regularWindows.length; w++) {
-            var item = regularWindows[w];
-            var target = Number(targetByWorkspace[String(item.workspace)] || 0);
-            if (target > 0 && target !== item.workspace) {
-                Hyprland.dispatch("movetoworkspacesilent " + target + ",address:" + item.address);
-                dispatched = true;
-            }
-        }
-
         var active = Math.floor(Number(Services.ShellState.activeWorkspace || 1));
-        var activeTarget = Number(targetByWorkspace[String(active)] || 0);
-        var trailingEmpty = Math.max(1, occupied.length + 1);
+        var maxOccupied = occupied.length > 0 ? Number(occupied[occupied.length - 1]) : 0;
+        var trailingEmpty = Math.max(1, maxOccupied + 1);
 
-        if (activeTarget > 0 && activeTarget !== active) {
-            Services.ShellState.activeWorkspace = activeTarget;
-            Hyprland.dispatch("workspace " + activeTarget);
-            dispatched = true;
-        } else if (active > trailingEmpty) {
+        if (active > trailingEmpty) {
             Services.ShellState.activeWorkspace = trailingEmpty;
             Hyprland.dispatch("workspace " + trailingEmpty);
             dispatched = true;

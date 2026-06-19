@@ -73,14 +73,15 @@ QtObject {
     }
 
     function recomputeWorkspaceCounts() {
-        // The service compacts occupied workspaces to 1..N. While Hyprland is
-        // still reporting a stale high id, use the amount of occupied slots, not
-        // the largest id, so the UI does not expand back to 1..10 or 1..4.
-        var occupiedCount = occupiedWorkspaceCount();
+        var occupied = occupiedWorkspaces || [];
         var active = normalizeWorkspaceId(activeWorkspace);
-        var nextEmpty = occupiedCount > 0 ? occupiedCount + 1 : 1;
+        var maxOccupied = 0;
+        for (var i = 0; i < occupied.length; i++)
+            maxOccupied = Math.max(maxOccupied, normalizeWorkspaceId(occupied[i]));
 
-        var nextVisible = Math.max(1, occupiedCount);
+        var nextEmpty = maxOccupied > 0 ? maxOccupied + 1 : 1;
+
+        var nextVisible = Math.max(1, maxOccupied);
         if (active > 0 && active <= nextEmpty)
             nextVisible = Math.max(nextVisible, active);
 

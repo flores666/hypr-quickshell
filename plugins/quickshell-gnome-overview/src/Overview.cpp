@@ -72,7 +72,10 @@ void CHyprspaceWidget::restoreWorkspaceTransitionAnimation() {
     workspaceAnimationSuppressed = false;
 }
 
-
+void CHyprspaceWidget::setOverviewCursor() {
+    if (g_pHyprRenderer)
+        g_pHyprRenderer->setCursorFromName("left_ptr", true);
+}
 
 void CHyprspaceWidget::warpWorkspaceTransitionState(int visibleWorkspaceID) {
     auto owner = getOwner();
@@ -117,7 +120,14 @@ std::vector<int> CHyprspaceWidget::overviewWorkspaceIds() const {
     if (!owner)
         return result;
 
-    std::vector<int> occupiedWorkspaceIDs;
+    auto pushUnique = [&result](int id) {
+        if (id < 1)
+            return;
+        if (std::find(result.begin(), result.end(), id) == result.end())
+            result.push_back(id);
+    };
+
+    int maxOccupiedWorkspaceID = 0;
     for (auto& window : g_pCompositor->m_windows) {
         if (!window || !window->m_isMapped || !window->m_workspace || !window->m_workspace->m_monitor)
             continue;
@@ -127,26 +137,23 @@ std::vector<int> CHyprspaceWidget::overviewWorkspaceIds() const {
             continue;
 
         const int id = static_cast<int>(window->m_workspace->m_id);
-        if (std::find(occupiedWorkspaceIDs.begin(), occupiedWorkspaceIDs.end(), id) == occupiedWorkspaceIDs.end())
-            occupiedWorkspaceIDs.push_back(id);
+        pushUnique(id);
+        maxOccupiedWorkspaceID = std::max(maxOccupiedWorkspaceID, id);
     }
 
-    // GNOME-like dynamic workspaces: the overview only shows the compact
-    // occupied count plus one trailing empty workspace. Large stale Hyprland
-    // workspace ids are ignored here; Quickshell's HyprlandService compacts
-    // windows that land there from hotkeys or hyprctl commands.
-    int maxWorkspaceID = occupiedWorkspaceIDs.empty() ? 1 : static_cast<int>(occupiedWorkspaceIDs.size()) + 1;
     const int activeWorkspaceID = std::max(1, static_cast<int>(owner->activeWorkspaceID()));
-    if (activeWorkspaceID <= maxWorkspaceID)
-        maxWorkspaceID = std::max(maxWorkspaceID, activeWorkspaceID);
-    if (centeredWorkspaceID > 0 && centeredWorkspaceID <= maxWorkspaceID)
-        maxWorkspaceID = std::max(maxWorkspaceID, centeredWorkspaceID);
+    pushUnique(activeWorkspaceID);
+    pushUnique(centeredWorkspaceID);
+    pushUnique(workspaceSelectionFromID);
+    pushUnique(workspaceSelectionToID);
+
+    const int trailingEmptyWorkspaceID = std::max(1, maxOccupiedWorkspaceID + 1);
+    pushUnique(trailingEmptyWorkspaceID);
 
     if (Config::showNewWorkspace)
-        maxWorkspaceID = std::max(maxWorkspaceID, static_cast<int>(occupiedWorkspaceIDs.size()) + 1);
+        pushUnique(std::max(trailingEmptyWorkspaceID, activeWorkspaceID + 1));
 
-    for (int id = 1; id <= maxWorkspaceID; ++id)
-        result.push_back(id);
+    std::sort(result.begin(), result.end());
 
     return result;
 }
@@ -436,6 +443,7 @@ void CHyprspaceWidget::show() {
     // hooks above keep this synthetic motion from reaching normal windows.
     g_pInputManager->refocus();
     g_pInputManager->simulateMouseMovement();
+    setOverviewCursor();
 
     g_pHyprRenderer->damageMonitor(owner);
     g_pCompositor->scheduleFrameForMonitor(owner);
@@ -480,11 +488,10 @@ void CHyprspaceWidget::hide() {
     if (!workspaceSelectionAnimating && !overviewClosing && centeredWorkspaceID > 0) {
         const int activeWorkspaceID = std::max(1, static_cast<int>(owner->activeWorkspaceID()));
         if (centeredWorkspaceID != activeWorkspaceID) {
-            // Closing after the user only browsed the ribbon should return to the
-            // real active workspace, not morph the centered preview fullscreen and
-            // then reveal a different desktop. Route it through the same selection
-            // animation to keep the visual state deterministic.
-            startWorkspaceSelectionAnimation(activeWorkspaceID, true);
+            // Closing commits the workspace currently targeted by the overview
+            // ribbon. This lets scroll/dock/Super/Escape behave like one flow:
+            // browse first, activate on close.
+            startWorkspaceSelectionAnimation(centeredWorkspaceID, true);
             return;
         }
     }

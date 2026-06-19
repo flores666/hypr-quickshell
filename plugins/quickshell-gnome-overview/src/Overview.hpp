@@ -75,6 +75,7 @@ class CHyprspaceWidget {
     bool switchOverviewWorkspaceBy(int direction);
     bool startWorkspaceSelectionAnimation(int targetWorkspaceID, bool closeAfterAnimation);
     void finishWorkspaceSelectionAnimation();
+    void setOverviewCursor();
 
 public:
 

@@ -9,6 +9,8 @@ bool CHyprspaceWidget::buttonEvent(bool pressed, Vector2D coords) {
     if (!active)
         return true;
 
+    setOverviewCursor();
+
     if (isClosing() || isSelectingWorkspace())
         return false;
 
@@ -63,6 +65,8 @@ bool CHyprspaceWidget::buttonEvent(bool pressed, Vector2D coords) {
 bool CHyprspaceWidget::axisEvent(double delta, wl_pointer_axis axis, Vector2D coords) {
     if (!active)
         return true;
+
+    setOverviewCursor();
 
     if (isClosing() || isSelectingWorkspace())
         return false;
