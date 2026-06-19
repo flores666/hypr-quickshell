@@ -93,6 +93,8 @@ static std::chrono::steady_clock::time_point g_hotCornerApproachStartTime;
 static bool g_mouseButtonDown = false;
 static std::chrono::steady_clock::time_point g_hotCornerLastOpen = std::chrono::steady_clock::now() - std::chrono::seconds(10);
 static double g_mainModAxisAccumulator = 0.0;
+static std::chrono::steady_clock::time_point g_mainModLastAxisSwitch = std::chrono::steady_clock::now() - std::chrono::milliseconds(120);
+static constexpr auto MAIN_MOD_AXIS_SWITCH_MIN_INTERVAL = std::chrono::milliseconds(120);
 
 // for restoring dragged window's alpha value
 float g_oAlpha = -1;
@@ -451,9 +453,14 @@ void onMouseAxis(const IPointer::SAxisEvent& event, SCallbackInfo& info) {
                 if (event.delta == 0.0)
                     return;
 
+                const auto now = std::chrono::steady_clock::now();
+                if (now - g_mainModLastAxisSwitch < MAIN_MOD_AXIS_SWITCH_MIN_INTERVAL)
+                    return;
+
                 const double absDelta = std::abs(event.delta);
                 if (absDelta >= 8.0) {
                     widget->activateWorkspaceBy(event.delta > 0.0 ? 1 : -1);
+                    g_mainModLastAxisSwitch = now;
                     g_mainModAxisAccumulator = 0.0;
                     return;
                 }
@@ -464,6 +471,7 @@ void onMouseAxis(const IPointer::SAxisEvent& event, SCallbackInfo& info) {
                     const int direction = g_mainModAxisAccumulator > 0.0 ? 1 : -1;
                     g_mainModAxisAccumulator = 0.0;
                     widget->activateWorkspaceBy(direction);
+                    g_mainModLastAxisSwitch = now;
                 }
             }
         }

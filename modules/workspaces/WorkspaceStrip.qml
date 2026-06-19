@@ -35,6 +35,7 @@ Item {
     property bool ready: false
     property int animationDuration: 280
     property real lastWheelSwitchAt: 0
+    readonly property int wheelSwitchMinInterval: 120
     property real wheelRemainder: 0
 
     signal workspaceScrolled()
@@ -167,7 +168,7 @@ Item {
             return;
 
         var now = Date.now();
-        if (now - lastWheelSwitchAt < 42)
+        if (now - lastWheelSwitchAt < wheelSwitchMinInterval)
             return;
 
         lastWheelSwitchAt = now;
