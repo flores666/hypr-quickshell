@@ -430,9 +430,6 @@ void CHyprspaceWidget::draw() {
                 previewOpacity = static_cast<float>(sideProgress);
             }
         }
-        if (passiveTrailingPreview)
-            previewOpacity *= passiveAppearProgress * 0.85F;
-
         SWorkspacePreview preview;
         preview.wsID = wsID;
         preview.ws = ws;

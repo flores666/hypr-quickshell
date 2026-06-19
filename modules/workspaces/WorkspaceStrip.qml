@@ -172,17 +172,22 @@ Item {
 
         lastWheelSwitchAt = now;
         var direction = deltaY > 0 ? -1 : 1;
-        root.workspaceScrolled();
         if (Services.ShellState.workspaceOverviewOpen) {
+            root.workspaceScrolled();
             Services.ShellActions.swipeWorkspaceInOverview(direction);
             return;
         }
 
-        Services.ShellActions.switchWorkspace(clampWorkspaceForWheel(activeWorkspace + direction));
+        var target = clampWorkspaceForWheel(activeWorkspace + direction);
+        if (target === activeWorkspace)
+            return;
+
+        root.workspaceScrolled();
+        Services.ShellActions.switchWorkspace(target);
     }
 
     function workspaceCenterX(workspaceId) {
-        var id = clampWorkspace(workspaceId);
+        var id = Math.max(1, Math.floor(Number(workspaceId || 1)));
         return sidePadding + (id - 1) * cellWidth + cellWidth / 2;
     }
 

@@ -105,5 +105,6 @@ public:
     bool activateWorkspaceInOverview(int targetWorkspaceID);
     bool selectWorkspaceInOverviewBy(int direction);
     bool syncExternalWorkspaceSwitch(int targetWorkspaceID);
+    bool activateWorkspaceBy(int direction);
 
 };

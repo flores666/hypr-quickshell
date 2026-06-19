@@ -134,7 +134,7 @@ int CHyprspaceWidget::maxOccupiedWorkspaceID() const {
     if (!owner)
         return 1;
 
-    int maxID = 1;
+    int maxID = 0;
     for (auto& window : g_pCompositor->m_windows) {
         if (!window || !window->m_isMapped || !window->m_workspace || !window->m_workspace->m_monitor)
             continue;
@@ -406,6 +406,28 @@ bool CHyprspaceWidget::selectWorkspaceInOverviewBy(int direction) {
         return false;
 
     return switchOverviewWorkspaceBy(direction);
+}
+
+bool CHyprspaceWidget::activateWorkspaceBy(int direction) {
+    auto owner = getOwner();
+    if (!owner || direction == 0)
+        return false;
+
+    closeOwnerSpecialWorkspace();
+
+    const int currentWorkspaceID = std::max(1, static_cast<int>(owner->activeWorkspaceID()));
+    const int targetWorkspaceID = std::clamp(currentWorkspaceID + (direction > 0 ? 1 : -1), 1, maxSelectableWorkspaceID());
+    if (targetWorkspaceID == currentWorkspaceID)
+        return false;
+
+    activateWorkspaceForOverview(targetWorkspaceID);
+
+    if (owner) {
+        g_pHyprRenderer->damageMonitor(owner);
+        g_pCompositor->scheduleFrameForMonitor(owner);
+    }
+
+    return true;
 }
 
 bool CHyprspaceWidget::syncExternalWorkspaceSwitch(int targetWorkspaceID) {

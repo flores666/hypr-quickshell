@@ -92,6 +92,7 @@ static Vector2D g_hotCornerApproachStartCoords;
 static std::chrono::steady_clock::time_point g_hotCornerApproachStartTime;
 static bool g_mouseButtonDown = false;
 static std::chrono::steady_clock::time_point g_hotCornerLastOpen = std::chrono::steady_clock::now() - std::chrono::seconds(10);
+static double g_mainModAxisAccumulator = 0.0;
 
 // for restoring dragged window's alpha value
 float g_oAlpha = -1;
@@ -441,6 +442,29 @@ void onMouseAxis(const IPointer::SAxisEvent& event, SCallbackInfo& info) {
                     return;
 
                 info.cancelled = !widget->axisEvent(event.delta, event.axis, g_pInputManager->getMouseCoordsInternal());
+                return;
+            }
+
+            if (g_mainModDown) {
+                info.cancelled = true;
+
+                if (event.delta == 0.0)
+                    return;
+
+                const double absDelta = std::abs(event.delta);
+                if (absDelta >= 8.0) {
+                    widget->activateWorkspaceBy(event.delta > 0.0 ? 1 : -1);
+                    g_mainModAxisAccumulator = 0.0;
+                    return;
+                }
+
+                g_mainModAxisAccumulator += event.delta;
+                constexpr double MAIN_MOD_AXIS_STEP_THRESHOLD = 6.0;
+                if (std::abs(g_mainModAxisAccumulator) >= MAIN_MOD_AXIS_STEP_THRESHOLD) {
+                    const int direction = g_mainModAxisAccumulator > 0.0 ? 1 : -1;
+                    g_mainModAxisAccumulator = 0.0;
+                    widget->activateWorkspaceBy(direction);
+                }
             }
         }
     }
@@ -502,6 +526,7 @@ void onKeyPress(const IKeyboard::SKeyEvent& event, SCallbackInfo& info) {
         if (pressed) {
             if (!g_mainModDown) {
                 g_mainModDown = true;
+                g_mainModAxisAccumulator = 0.0;
                 const uint32_t mods = keyboard->getModifiers();
                 const uint32_t unsafeOtherMods = mods & (HL_MODIFIER_SHIFT | HL_MODIFIER_CTRL | HL_MODIFIER_ALT | HL_MODIFIER_MOD2 | HL_MODIFIER_MOD3 | HL_MODIFIER_MOD5);
                 g_mainModCancelled = unsafeOtherMods != 0;
@@ -516,6 +541,7 @@ void onKeyPress(const IKeyboard::SKeyEvent& event, SCallbackInfo& info) {
 
             g_mainModDown = false;
             g_mainModCancelled = false;
+            g_mainModAxisAccumulator = 0.0;
 
             if (safeSinglePress) {
                 toggleOverviewForCurrentMonitor();
