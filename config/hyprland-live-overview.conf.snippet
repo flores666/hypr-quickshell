@@ -4,6 +4,8 @@
 
 exec-once = sh -lc 'hyprctl plugin load "$HOME/hypr-quickshell/plugins/quickshell-gnome-overview/quickshell-gnome-overview.so"'
 
+bind = $mainMod, A, qs-gnome-overview:applications
+
 plugin {
     overview {
         panelColor = rgba(0506086b)

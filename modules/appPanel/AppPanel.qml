@@ -1774,7 +1774,7 @@ Item {
         width: root.overviewSectionWidth
         height: root.implicitHeight
 
-        readonly property bool overviewActive: Services.ShellState.workspaceOverviewOpen
+        readonly property bool overviewActive: Services.ShellState.workspaceOverviewOpen && Services.ShellState.workspaceOverviewMode === "applications"
 
         Rectangle {
             id: overviewButtonBackground
@@ -1824,7 +1824,7 @@ Item {
                 onClicked: function(mouse) {
                     root.closePopup();
                     Services.ShellState.requestCloseTopbarPopups();
-                    Services.ShellActions.toggleWorkspaceOverview();
+                    Services.ShellActions.toggleApplicationsOverview();
                     mouse.accepted = true;
                 }
             }

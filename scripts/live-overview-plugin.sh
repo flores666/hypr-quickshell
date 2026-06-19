@@ -65,6 +65,8 @@ write_snippet() {
 
 exec-once = sh -lc 'hyprctl plugin load "\$HOME/hypr-quickshell/plugins/quickshell-gnome-overview/quickshell-gnome-overview.so"'
 
+bind = \$mainMod, A, qs-gnome-overview:applications
+
 plugin {
     overview {
         panelColor = rgba(0506086b)
@@ -132,7 +134,8 @@ add_source_to_hypr_config() {
   local tmp
   tmp="$(mktemp)"
   grep -vF "hyprland-live-overview.conf.snippet" "$HYPR_CONFIG" \
-    | grep -vF 'bindr = $mainMod, Super_L, qs-gnome-overview:toggle' > "$tmp" || true
+    | grep -vF 'bindr = $mainMod, Super_L, qs-gnome-overview:toggle' \
+    | grep -vF 'bind = $mainMod, A, qs-gnome-overview:applications' > "$tmp" || true
   cat "$tmp" > "$HYPR_CONFIG"
   rm -f "$tmp"
 

@@ -449,6 +449,14 @@ Item {
                 var overviewState = String(event.data || "").trim();
                 if (overviewState === "open") {
                     Services.ShellState.setActiveSpecialWorkspace("");
+                    if (Services.ShellState.workspaceOverviewMode !== "applications")
+                        Services.ShellState.setWorkspaceOverviewMode("workspaces");
+                    Services.ShellState.setWorkspaceOverviewOpen(true);
+                } else if (overviewState === "applications" || overviewState.indexOf("applications:") === 0) {
+                    var initialQuery = overviewState.indexOf("applications:") === 0 ? overviewState.substring(13) : "";
+                    Services.ShellState.setActiveSpecialWorkspace("");
+                    Services.ShellState.setApplicationsOverviewInitialQuery(initialQuery);
+                    Services.ShellState.setWorkspaceOverviewMode("applications");
                     Services.ShellState.setWorkspaceOverviewOpen(true);
                 } else if (overviewState === "close")
                     Services.ShellState.setWorkspaceOverviewOpen(false);

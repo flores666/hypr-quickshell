@@ -14,8 +14,9 @@ Scope {
     Services.HyprlandService {}
     Services.TrayBridge {}
 
-    Bar.Bar {}
+    Launcher.ApplicationsOverview {}
 
+    Bar.Bar {}
 
     AppPanel.AppDock {}
 

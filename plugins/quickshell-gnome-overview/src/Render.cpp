@@ -136,6 +136,31 @@ static CBox overviewLerpBox(const CBox& from, const CBox& to, double progress) {
                 overviewLerp(from.h, to.h, progress)};
 }
 
+static void renderOverviewBackdrop(PHLMONITOR owner, const CBox& monitorClip, const Time::steady_tp& time, double openProgress, double dimTargetAlpha) {
+    if (!owner)
+        return;
+
+    // Draw the real desktop background over the whole monitor first.
+    // The overview should feel like one unified GNOME-like canvas. Topbar and
+    // AppDock are layer surfaces rendered by Hyprland after this POST_WINDOWS
+    // hook, so they remain visible and clickable.
+    const bool hasBackground = renderFullscreenBackground(owner, monitorClip, time);
+    if (!hasBackground)
+        renderRect(CBox{0, 0, owner->m_transformedSize.x, owner->m_transformedSize.y}, CHyprColor(0.02, 0.025, 0.032, 1.0));
+
+    // One global background layer for the whole overview:
+    // wallpaper -> blur/dim overlay -> mode content.
+    const CBox fullscreenDim = CBox{0, 0, owner->m_transformedSize.x, owner->m_transformedSize.y};
+    const double dimAlpha = overviewLerp(0.0, dimTargetAlpha, openProgress);
+    if (dimAlpha > 0.001) {
+        if (!Config::disableBlur) {
+            renderRectWithBlur(fullscreenDim, CHyprColor(0.02, 0.025, 0.032, dimAlpha));
+        } else {
+            renderRect(fullscreenDim, CHyprColor(0.02, 0.025, 0.032, dimAlpha));
+        }
+    }
+}
+
 static bool isPointerOverInteractiveLayerForOverview(PHLMONITOR pMonitor, const Vector2D& coords) {
     if (!pMonitor)
         return false;
@@ -202,27 +227,8 @@ void CHyprspaceWidget::draw() {
 
     g_pHyprRenderer->m_renderData.clipBox = monitorClip;
 
-    // Draw the real desktop background over the whole monitor first.
-    // The overview should feel like one continuous workspace ribbon over the actual wallpaper,
-    // not like separate dark cards. Topbar/AppDock are layer surfaces rendered by Hyprland after
-    // this POST_WINDOWS hook, so they remain visible and clickable.
-    const bool hasBackground = renderFullscreenBackground(owner, monitorClip, time);
-    if (!hasBackground)
-        renderRect(CBox{0, 0, owner->m_transformedSize.x, owner->m_transformedSize.y}, CHyprColor(0.02, 0.025, 0.032, 1.0));
-
-    // One global background layer for the whole overview:
-    // wallpaper -> blur/dim overlay -> live workspace strip.
-    // Do not draw any additional wallpaper/dim layer inside the strip itself, otherwise
-    // the image looks like three separate layers instead of one unified GNOME-like canvas.
-    const CBox fullscreenDim = CBox{0, 0, owner->m_transformedSize.x, owner->m_transformedSize.y};
+    renderOverviewBackdrop(owner, monitorClip, time, openProgress, 0.10);
     const double dimAlpha = overviewLerp(0.0, 0.10, openProgress);
-    if (dimAlpha > 0.001) {
-        if (!Config::disableBlur) {
-            renderRectWithBlur(fullscreenDim, CHyprColor(0.02, 0.025, 0.032, dimAlpha));
-        } else {
-            renderRect(fullscreenDim, CHyprColor(0.02, 0.025, 0.032, dimAlpha));
-        }
-    }
 
     const auto workspaces = overviewWorkspaceIds();
     if (workspaces.empty())
@@ -553,6 +559,46 @@ void CHyprspaceWidget::draw() {
     }
 
     if (morphAnimationRunning || selectionAnimationRunning || workspaceAppearAnimationRunning) {
+        g_pHyprRenderer->damageMonitor(owner);
+        g_pCompositor->scheduleFrameForMonitor(owner);
+    }
+}
+
+void CHyprspaceWidget::drawApplicationsBackground() {
+    workspaceBoxes.clear();
+
+    if (!active)
+        return;
+
+    const auto owner = getOwner();
+    if (!owner)
+        return;
+
+    const CBox monitorClip = {{0, 0}, owner->m_transformedSize};
+    const auto time = Time::steadyNow();
+    const bool selectionCloseMorphRunning = workspaceSelectionCloseMorphActive();
+    const double selectionProgress = isSelectingWorkspace() ? workspaceSelectionProgress() : 1.0;
+    const double rawOpenProgress = selectionCloseMorphRunning ? (1.0 - selectionProgress) : overviewOpenProgress();
+    if (isClosing() && rawOpenProgress <= 0.001) {
+        finishHide();
+        g_pHyprRenderer->damageMonitor(owner);
+        return;
+    }
+
+    const bool closingAnimationRunning = isClosing() || selectionCloseMorphRunning;
+    const bool morphAnimationRunning = rawOpenProgress < 0.999 || closingAnimationRunning;
+    const double openProgress = closingAnimationRunning
+        ? overviewEaseInOutCubic(rawOpenProgress)
+        : overviewEaseOutCubic(rawOpenProgress);
+
+    g_pHyprRenderer->m_renderData.clipBox = monitorClip;
+
+    // GNOME Applications is not a popup over workspace previews. It is the
+    // second overview mode: keep the same fullscreen backdrop, but do not draw
+    // workspace thumbnails, window previews, preview shadows or corner masks.
+    renderOverviewBackdrop(owner, monitorClip, time, openProgress, 0.28);
+
+    if (morphAnimationRunning) {
         g_pHyprRenderer->damageMonitor(owner);
         g_pCompositor->scheduleFrameForMonitor(owner);
     }

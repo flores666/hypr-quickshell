@@ -5,13 +5,16 @@
 #include <hyprland/src/devices/ITouch.hpp>
 #include <hyprland/src/debug/log/Logger.hpp>
 #include <hyprland/src/managers/SeatManager.hpp>
+#include <hyprland/src/managers/EventManager.hpp>
 #include <hyprland/src/desktop/view/Window.hpp>
 #include <hyprland/src/desktop/view/LayerSurface.hpp>
 #include <hyprutils/memory/SharedPtr.hpp>
+#include <xkbcommon/xkbcommon.h>
 #include <any>
 #include <chrono>
 #include <cmath>
 #include <optional>
+#include <string>
 #include "Overview.hpp"
 #include "Globals.hpp"
 
@@ -95,6 +98,12 @@ static std::chrono::steady_clock::time_point g_hotCornerLastOpen = std::chrono::
 static double g_mainModAxisAccumulator = 0.0;
 static std::chrono::steady_clock::time_point g_mainModLastAxisSwitch = std::chrono::steady_clock::now() - std::chrono::milliseconds(120);
 static constexpr auto MAIN_MOD_AXIS_SWITCH_MIN_INTERVAL = std::chrono::milliseconds(120);
+static bool g_overviewApplicationsMode = false;
+
+static void notifyQuickshellOverviewState(const std::string& state) {
+    if (g_pEventManager)
+        g_pEventManager->postEvent(SHyprIPCEvent{"quickshelloverview", state});
+}
 
 // for restoring dragged window's alpha value
 float g_oAlpha = -1;
@@ -163,15 +172,28 @@ static bool isQuickshellLayerNamespace(const std::string& ns) {
     return ns.starts_with("quickshell") || ns.starts_with("quickshell:");
 }
 
-static bool boxContainsPoint(const std::optional<CBox>& box, const Vector2D& coords) {
-    return box.has_value() && box->containsPoint(coords);
+static bool isMonitorSizedOverlayBox(const CBox& box, PHLMONITORREF monitor) {
+    if (!monitor || !(box.w > 1.0 && box.h > 1.0))
+        return false;
+
+    const double monitorW = std::max<double>(1.0, monitor->m_size.x);
+    const double monitorH = std::max<double>(1.0, monitor->m_size.y);
+    return box.w >= monitorW * 0.92 && box.h >= monitorH * 0.92;
+}
+
+static bool layerBoxShouldReceiveOverviewInput(const CBox& box, PHLMONITORREF monitor, const Vector2D& coords, bool allowMonitorSizedOverlay) {
+    if (!box.containsPoint(coords))
+        return false;
+
+    // Some Quickshell helper layers are fullscreen transparent overlays. They
+    // must not make the overview pass pointer events through, otherwise the real
+    // client below the overview can still receive hover and clicks.
+    return allowMonitorSizedOverlay || !isMonitorSizedOverlayBox(box, monitor);
 }
 
 static bool isCoordsOverInteractiveLayer(PHLMONITORREF monitor, const Vector2D& coords) {
     if (!monitor)
         return false;
-
-    const CBox monitorBox = {monitor->m_position, monitor->m_size};
 
     // Let real layer surfaces such as the Quickshell topbar, AppDock and their
     // PopupWindow/modal surfaces receive normal pointer events while overview is
@@ -188,19 +210,21 @@ static bool isCoordsOverInteractiveLayer(PHLMONITORREF monitor, const Vector2D& 
             const bool quickshellLayer = isQuickshellLayerNamespace(layer->m_namespace);
             if (layerIndex == 0 && !quickshellLayer)
                 continue;
+            const bool applicationsLayer = layer->m_namespace == "quickshell:applications";
 
             const CBox realBox = {layer->m_realPosition->value(), layer->m_realSize->value()};
-            if (realBox.containsPoint(coords) || boxContainsPoint(layer->logicalBox(), coords) || boxContainsPoint(layer->surfaceLogicalBox(), coords))
+            const auto logicalBox = layer->logicalBox();
+            const auto surfaceBox = layer->surfaceLogicalBox();
+            if (layerBoxShouldReceiveOverviewInput(realBox, monitor, coords, applicationsLayer) ||
+                (logicalBox.has_value() && layerBoxShouldReceiveOverviewInput(*logicalBox, monitor, coords, applicationsLayer)) ||
+                (surfaceBox.has_value() && layerBoxShouldReceiveOverviewInput(*surfaceBox, monitor, coords, applicationsLayer)))
                 return true;
 
             // Qt/Wayland popups can extend outside the base layer-surface box.
-            // If a real popup tree is attached to a layer, give that layer input
-            // priority across the monitor. Quickshell's OutsideClickLayer then
-            // handles outside clicks, while hover/click inside large modal popup
-            // windows keeps working. Do not do this for every Quickshell panel,
-            // otherwise overview would stop blocking desktop clicks.
-            if (layer->popupsCount() > 0 && quickshellLayer && monitorBox.containsPoint(coords))
-                return true;
+            // Do not pass the whole monitor just because a popup tree exists:
+            // that lets real windows underneath live overview receive hover and
+            // clicks. Base layer boxes above are still allowed, so topbar/AppDock
+            // themselves remain interactive.
         }
     }
 
@@ -211,12 +235,17 @@ static bool shouldPassPointerToRealLayer(PHLMONITORREF monitor) {
     return isCoordsOverInteractiveLayer(monitor, g_pInputManager->getMouseCoordsInternal());
 }
 
+static bool shouldPassCoordsToRealLayer(PHLMONITORREF monitor, const Vector2D& coords) {
+    return isCoordsOverInteractiveLayer(monitor, coords);
+}
+
 static void toggleOverviewForCurrentMonitor() {
     const auto currentMonitor = g_pCompositor->getMonitorFromCursor();
     const auto widget = getWidgetForMonitor(currentMonitor);
     if (!widget)
         return;
 
+    g_overviewApplicationsMode = false;
     widget->isActive() ? widget->hide() : widget->show();
 }
 
@@ -225,6 +254,7 @@ static void openOverviewForMonitor(PHLMONITORREF monitor) {
     if (!widget || widget->isActive())
         return;
 
+    g_overviewApplicationsMode = false;
     widget->show();
 }
 
@@ -357,8 +387,12 @@ void onRender(eRenderStage renderStage) {
         return;
 
     const auto widget = getWidgetForMonitor(g_pHyprRenderer->m_renderData.pMonitor);
-    if (widget && widget->getOwner() && widget->isActive())
-        widget->draw();
+    if (widget && widget->getOwner() && widget->isActive()) {
+        if (g_overviewApplicationsMode)
+            widget->drawApplicationsBackground();
+        else
+            widget->draw();
+    }
 }
 
 // event hook, currently this is only here to re-hide top layer panels on workspace change
@@ -516,6 +550,18 @@ void onKeyPress(const IKeyboard::SKeyEvent& event, SCallbackInfo& info) {
     const bool released = event.state == WL_KEYBOARD_KEY_STATE_RELEASED;
 
     if (pressed) {
+        if (isAnyOverviewActive() && !g_overviewApplicationsMode && !g_mainModDown) {
+            char searchText[32] = {};
+            xkb_keysym_to_utf8(keysym, searchText, sizeof(searchText));
+            const std::string initialQuery = searchText;
+            if (!initialQuery.empty() && static_cast<unsigned char>(initialQuery[0]) >= 0x20) {
+                g_overviewApplicationsMode = true;
+                notifyQuickshellOverviewState("applications:" + initialQuery);
+                info.cancelled = true;
+                return;
+            }
+        }
+
         const int shortcutWorkspaceID = workspaceNumberFromKeysym(keysym);
         if (shortcutWorkspaceID > 0 && g_mainModDown) {
             const auto widget = getActiveWidgetForMonitor(g_pCompositor->getMonitorFromCursor());
@@ -563,6 +609,8 @@ void onKeyPress(const IKeyboard::SKeyEvent& event, SCallbackInfo& info) {
         // Any other key while mainMod is held means it was a shortcut or layout switch.
         // Do not open overview on mainMod release.
         g_mainModCancelled = true;
+        if (isAnyOverviewActive())
+            info.cancelled = true;
     }
 
     auto* pExitKeyCfg = HyprlandAPI::getConfigValue(pHandle, "plugin:overview:exitKey");
@@ -580,6 +628,8 @@ void onKeyPress(const IKeyboard::SKeyEvent& event, SCallbackInfo& info) {
                     }
                 }
                 if (overviewActive)
+                    g_overviewApplicationsMode = false;
+                if (overviewActive)
                     info.cancelled = true;
                 return;
             }
@@ -589,7 +639,7 @@ void onKeyPress(const IKeyboard::SKeyEvent& event, SCallbackInfo& info) {
     // While live overview is visible, do not let text input fall through to the
     // focused client underneath. This still keeps the explicit overview shortcuts
     // above working, but normal typing no longer edits the hidden application.
-    if (isAnyOverviewActive())
+    if (isAnyOverviewActive() && !g_overviewApplicationsMode)
         info.cancelled = true;
 }
 
@@ -607,6 +657,9 @@ void onTouchDown(const ITouch::SDownEvent& event, SCallbackInfo& info) {
     if (widget != nullptr && targetMonitor != nullptr) {
         if (widget->isActive()) {
             Vector2D pos = targetMonitor->m_position + event.pos * targetMonitor->m_size;
+            if (shouldPassCoordsToRealLayer(targetMonitor, pos))
+                return;
+
             info.cancelled = !widget->buttonEvent(true, pos);
             if (info.cancelled) {
                 g_pTouchedMonitor = targetMonitor;
@@ -635,6 +688,8 @@ void onTouchUp(const ITouch::SUpEvent& event, SCallbackInfo& info) {
 }
 
 static SDispatchResult dispatchToggleOverview(std::string arg) {
+    g_overviewApplicationsMode = false;
+
     auto currentMonitor = g_pCompositor->getMonitorFromCursor();
     auto widget = getWidgetForMonitor(currentMonitor);
     if (widget) {
@@ -661,24 +716,63 @@ static SDispatchResult dispatchToggleOverview(std::string arg) {
 }
 
 static SDispatchResult dispatchOpenOverview(std::string arg) {
+    g_overviewApplicationsMode = false;
+    bool opened = false;
+
     if (arg.contains("all")) {
         for (auto& widget : g_overviewWidgets) {
-            if (!widget->isActive()) widget->show();
+            if (!widget)
+                continue;
+            if (!widget->isActive()) {
+                widget->show();
+                opened = true;
+            } else {
+                opened = true;
+            }
         }
     }
     else {
         auto currentMonitor = g_pCompositor->getMonitorFromCursor();
         auto widget = getWidgetForMonitor(currentMonitor);
-        if (widget)
-            if (!widget->isActive()) widget->show();
+        if (widget) {
+            if (!widget->isActive()) {
+                widget->show();
+                opened = true;
+            } else {
+                opened = true;
+            }
+        }
     }
+    if (opened)
+        notifyQuickshellOverviewState("open");
+    return SDispatchResult{};
+}
+
+static SDispatchResult dispatchApplicationsOverview(std::string arg) {
+    g_overviewApplicationsMode = true;
+
+    if (arg.contains("all")) {
+        for (auto& widget : g_overviewWidgets) {
+            if (widget && !widget->isActive())
+                widget->show();
+        }
+    } else {
+        auto currentMonitor = g_pCompositor->getMonitorFromCursor();
+        auto widget = getWidgetForMonitor(currentMonitor);
+        if (widget && !widget->isActive())
+            widget->show();
+    }
+
+    notifyQuickshellOverviewState("applications");
     return SDispatchResult{};
 }
 
 static SDispatchResult dispatchCloseOverview(std::string arg) {
+    g_overviewApplicationsMode = false;
+
     if (arg.contains("all")) {
         for (auto& widget : g_overviewWidgets) {
-            if (widget->isActive()) widget->hide();
+            if (widget && widget->isActive()) widget->hide();
         }
     }
     else {
@@ -860,12 +954,14 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE inHandle) {
     HyprlandAPI::addDispatcherV2(pHandle, "overview:select", ::dispatchSelectOverview);
     HyprlandAPI::addDispatcherV2(pHandle, "overview:next", ::dispatchNextOverview);
     HyprlandAPI::addDispatcherV2(pHandle, "overview:prev", ::dispatchPrevOverview);
+    HyprlandAPI::addDispatcherV2(pHandle, "overview:applications", ::dispatchApplicationsOverview);
     HyprlandAPI::addDispatcherV2(pHandle, "qs-gnome-overview:toggle", ::dispatchToggleOverview);
     HyprlandAPI::addDispatcherV2(pHandle, "qs-gnome-overview:open", ::dispatchOpenOverview);
     HyprlandAPI::addDispatcherV2(pHandle, "qs-gnome-overview:close", ::dispatchCloseOverview);
     HyprlandAPI::addDispatcherV2(pHandle, "qs-gnome-overview:select", ::dispatchSelectOverview);
     HyprlandAPI::addDispatcherV2(pHandle, "qs-gnome-overview:next", ::dispatchNextOverview);
     HyprlandAPI::addDispatcherV2(pHandle, "qs-gnome-overview:prev", ::dispatchPrevOverview);
+    HyprlandAPI::addDispatcherV2(pHandle, "qs-gnome-overview:applications", ::dispatchApplicationsOverview);
 
     g_pRenderHook = Event::bus()->m_events.render.stage.listen([](eRenderStage stage) { onRender(stage); });
 

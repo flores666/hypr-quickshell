@@ -13,6 +13,8 @@ QtObject {
     property var workspaces: []
 
     property bool workspaceOverviewOpen: false
+    property string workspaceOverviewMode: "workspaces"
+    property string applicationsOverviewInitialQuery: ""
     // The dock button controls the native Hyprland live overview plugin.
     // Quickshell fallback overview was removed, so these dispatchers are always used.
     property string nativeWorkspaceOverviewOpenDispatcher: "qs-gnome-overview:open"
@@ -261,6 +263,22 @@ QtObject {
         if (workspaceOverviewOpen === next)
             return;
         workspaceOverviewOpen = next;
+        if (!next) {
+            workspaceOverviewMode = "workspaces";
+            applicationsOverviewInitialQuery = "";
+        }
+    }
+
+    function setWorkspaceOverviewMode(mode) {
+        var next = String(mode || "workspaces");
+        if (next !== "applications")
+            next = "workspaces";
+        if (workspaceOverviewMode !== next)
+            workspaceOverviewMode = next;
+    }
+
+    function setApplicationsOverviewInitialQuery(query) {
+        applicationsOverviewInitialQuery = String(query || "");
     }
 
 

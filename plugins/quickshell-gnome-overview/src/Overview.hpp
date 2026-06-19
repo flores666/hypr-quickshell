@@ -94,6 +94,7 @@ public:
 
     // should be called active or not
     void draw();
+    void drawApplicationsBackground();
 
     bool buttonEvent(bool, Vector2D coords);
     bool axisEvent(double, wl_pointer_axis axis, Vector2D coords);

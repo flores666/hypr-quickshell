@@ -40,6 +40,8 @@ QtObject {
             return "qs-gnome-overview:next"
         if (action === "prev")
             return "qs-gnome-overview:prev"
+        if (action === "applications")
+            return "qs-gnome-overview:applications"
         return Services.ShellState.nativeWorkspaceOverviewToggleDispatcher
     }
 
@@ -55,6 +57,7 @@ QtObject {
 
     function openWorkspaceOverview() {
         closeActiveSpecialWorkspace()
+        Services.ShellState.setWorkspaceOverviewMode("workspaces")
 
         if (nativeOverviewDispatch("open"))
             Services.ShellState.setWorkspaceOverviewOpen(true)
@@ -63,11 +66,13 @@ QtObject {
     function closeWorkspaceOverview() {
         nativeOverviewDispatch("close")
         Services.ShellState.setWorkspaceOverviewOpen(false)
+        Services.ShellState.setWorkspaceOverviewMode("workspaces")
     }
 
     function closeWorkspaceOverviewAll() {
         nativeOverviewDispatch("close", "all")
         Services.ShellState.setWorkspaceOverviewOpen(false)
+        Services.ShellState.setWorkspaceOverviewMode("workspaces")
     }
 
     function toggleWorkspaceOverview() {
@@ -77,8 +82,27 @@ QtObject {
         }
 
         closeActiveSpecialWorkspace()
+        Services.ShellState.setWorkspaceOverviewMode("workspaces")
         if (nativeOverviewDispatch("open"))
             Services.ShellState.setWorkspaceOverviewOpen(true)
+    }
+
+    function openApplicationsOverview() {
+        closeActiveSpecialWorkspace()
+        Services.ShellState.setApplicationsOverviewInitialQuery("")
+        Services.ShellState.setWorkspaceOverviewMode("applications")
+        if (nativeOverviewDispatch("applications"))
+            Services.ShellState.setWorkspaceOverviewOpen(true)
+    }
+
+    function toggleApplicationsOverview() {
+        if (Services.ShellState.workspaceOverviewOpen && Services.ShellState.workspaceOverviewMode === "applications") {
+            Services.ShellState.setWorkspaceOverviewMode("workspaces")
+            nativeOverviewDispatch("open")
+            return
+        }
+
+        openApplicationsOverview()
     }
 
     function focusWindowFromOverview(window) {
