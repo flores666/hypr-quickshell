@@ -154,7 +154,7 @@ Item {
     }
 
     function clampWorkspaceForWheel(workspaceId) {
-        var maxTarget = Math.max(1, Services.ShellState.maxOccupiedWorkspaceId());
+        var maxTarget = Math.max(1, Services.ShellState.maxOccupiedWorkspaceId() + 1);
         if (workspaceId < 1)
             return 1;
         if (workspaceId > maxTarget)

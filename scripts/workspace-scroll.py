@@ -46,7 +46,7 @@ def main():
         if workspace_id > max_occupied_id:
             max_occupied_id = workspace_id
 
-    max_target_id = max(1, max_occupied_id)
+    max_target_id = max(1, max_occupied_id + 1)
     target_id = max(1, min(current_id + direction, max_target_id))
     if target_id == current_id:
         return 0

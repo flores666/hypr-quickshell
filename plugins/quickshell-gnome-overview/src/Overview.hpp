@@ -67,12 +67,14 @@ class CHyprspaceWidget {
     bool isClosing() const;
     bool isSelectingWorkspace() const;
     int maxOccupiedWorkspaceID() const;
+    int maxSelectableWorkspaceID() const;
     std::vector<int> overviewWorkspaceIds() const;
 
     void closeOwnerSpecialWorkspace();
     void suppressWorkspaceTransitionAnimation();
     void restoreWorkspaceTransitionAnimation();
     void warpWorkspaceTransitionState(int visibleWorkspaceID);
+    void activateWorkspaceForOverview(int targetWorkspaceID);
     void finishHide();
     bool switchOverviewWorkspaceBy(int direction);
     bool startWorkspaceSelectionAnimation(int targetWorkspaceID, bool closeAfterAnimation);

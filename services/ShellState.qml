@@ -103,7 +103,8 @@ QtObject {
         if (target <= 0)
             return 1;
 
-        return Math.max(1, target);
+        var maxTarget = Math.max(1, maxOccupiedWorkspaceId() + 1);
+        return Math.max(1, Math.min(target, maxTarget));
     }
 
     function clampWorkspaceForMove(workspaceId) {

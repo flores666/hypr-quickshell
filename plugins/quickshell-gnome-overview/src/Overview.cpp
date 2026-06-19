@@ -4,6 +4,7 @@
 #include <hyprland/src/managers/EventManager.hpp>
 #include <algorithm>
 #include <cmath>
+#include <string>
 
 static void notifyQuickshellOverviewState(const char* state) {
     if (g_pEventManager)
@@ -113,6 +114,21 @@ void CHyprspaceWidget::warpWorkspaceTransitionState(int visibleWorkspaceID) {
     warpWorkspace(targetID);
 }
 
+void CHyprspaceWidget::activateWorkspaceForOverview(int targetWorkspaceID) {
+    auto owner = getOwner();
+    if (!owner || targetWorkspaceID < 1)
+        return;
+
+    PHLWORKSPACE targetWorkspace = g_pCompositor->getWorkspaceByID(targetWorkspaceID);
+    if (!targetWorkspace)
+        targetWorkspace = g_pCompositor->createNewWorkspace(targetWorkspaceID, owner->m_id, std::to_string(targetWorkspaceID), true);
+
+    if (targetWorkspace)
+        owner->changeWorkspace(targetWorkspace, false, true);
+    else
+        owner->changeWorkspace(targetWorkspaceID, false, true);
+}
+
 int CHyprspaceWidget::maxOccupiedWorkspaceID() const {
     const auto owner = getOwner();
     if (!owner)
@@ -132,6 +148,10 @@ int CHyprspaceWidget::maxOccupiedWorkspaceID() const {
     }
 
     return maxID;
+}
+
+int CHyprspaceWidget::maxSelectableWorkspaceID() const {
+    return std::max(1, maxOccupiedWorkspaceID() + 1);
 }
 
 std::vector<int> CHyprspaceWidget::overviewWorkspaceIds() const {
@@ -166,7 +186,7 @@ std::vector<int> CHyprspaceWidget::overviewWorkspaceIds() const {
     pushUnique(centeredWorkspaceID);
     pushUnique(workspaceSelectionFromID);
     pushUnique(workspaceSelectionToID);
-    pushUnique(maxOccupiedWorkspaceID() + 1);
+    pushUnique(maxSelectableWorkspaceID());
 
     std::sort(result.begin(), result.end());
 
@@ -228,6 +248,8 @@ bool CHyprspaceWidget::startWorkspaceSelectionAnimation(int targetWorkspaceID, b
     auto owner = getOwner();
     if (!owner || targetWorkspaceID < 1)
         return false;
+
+    targetWorkspaceID = std::clamp(targetWorkspaceID, 1, maxSelectableWorkspaceID());
 
     const int currentWorkspaceID = centeredWorkspaceID > 0
         ? centeredWorkspaceID
@@ -301,7 +323,7 @@ void CHyprspaceWidget::finishWorkspaceSelectionAnimation() {
         // GNOME-like morph has finished.
         warpWorkspaceTransitionState(targetWorkspaceID);
         if (owner->activeWorkspaceID() != targetWorkspaceID)
-            owner->changeWorkspace(targetWorkspaceID);
+            activateWorkspaceForOverview(targetWorkspaceID);
         warpWorkspaceTransitionState(targetWorkspaceID);
 
         // Keep the guard enabled until finishHide() flips active to false. Some
@@ -358,7 +380,7 @@ bool CHyprspaceWidget::switchOverviewWorkspaceBy(int direction) {
     if (targetWorkspaceID == currentWorkspaceID)
         return false;
 
-    targetWorkspaceID = std::clamp(targetWorkspaceID, 1, maxOccupiedWorkspaceID() + 1);
+    targetWorkspaceID = std::clamp(targetWorkspaceID, 1, maxSelectableWorkspaceID());
     if (targetWorkspaceID == currentWorkspaceID)
         return false;
 
