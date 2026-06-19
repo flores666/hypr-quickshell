@@ -520,8 +520,7 @@ void CHyprspaceWidget::draw() {
         }
 
         for (const auto& windowPreview : visibleWindows) {
-            const int forcedRounding = windowPreview.overlapsWorkspaceCorner ? preview.rounding : -1;
-            renderWindowStub(windowPreview.window, owner, ws, windowPreview.box, workspaceBox, time, preview.opacity, forcedRounding, 2.0F);
+            renderWindowStub(windowPreview.window, owner, ws, windowPreview.box, workspaceBox, time, preview.opacity, -1, 2.0F);
         }
 
         if (std::any_of(visibleWindows.begin(), visibleWindows.end(), [](const SOverviewWindowPreview& windowPreview) {

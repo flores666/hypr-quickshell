@@ -9,6 +9,14 @@
 
 #include <algorithm>
 #include <any>
+#include <cmath>
+
+static bool boxesIntersectForOverview(const CBox& a, const CBox& b) {
+    return a.x < b.x + b.w &&
+        a.x + a.w > b.x &&
+        a.y < b.y + b.h &&
+        a.y + a.h > b.y;
+}
 
 void renderRect(CBox box, CHyprColor color, int rounding, float roundingPower) {
     CRectPassElement::SRectData rectdata;
@@ -33,63 +41,55 @@ void renderWindowStub(PHLWINDOW pWindow, PHLMONITOR pMonitor, PHLWORKSPACE pWork
     if (!pWindow || !pMonitor || !pWorkspaceOverride) return;
     if (!pWindow->m_isMapped || !pWindow->wlSurface() || !pWindow->wlSurface()->resource()) return;
 
-    Render::SRenderModifData renderModif;
-
-    const auto oRealPosition = pWindow->m_realPosition->value();
     const auto oSize = pWindow->m_realSize->value();
     const float logicalW = std::max((float)oSize.x, 5.F);
-    const float scaleMod = rectOverride.w / std::max(logicalW * pMonitor->m_scale, 5.F);
-    if (!(scaleMod > 0.F) || !(rectOverride.w > 0 && rectOverride.h > 0)) return;
+    const float logicalH = std::max((float)oSize.y, 5.F);
+    const float scaleX = rectOverride.w / logicalW;
+    const float scaleY = rectOverride.h / logicalH;
+    if (!(scaleX > 0.F) || !(scaleY > 0.F) || !(rectOverride.w > 0 && rectOverride.h > 0)) return;
 
-    const Vector2D logicalTL = oRealPosition + pWindow->m_floatingOffset;
-    const Vector2D scaledTL = (logicalTL - pMonitor->m_position) * pMonitor->m_scale;
-    const Vector2D translate = rectOverride.pos() / scaleMod - scaledTL;
-
-    renderModif.modifs.push_back(std::make_pair(Render::SRenderModifData::eRenderModifType::RMOD_TYPE_TRANSLATE, std::any(translate)));
-    renderModif.modifs.push_back(std::make_pair(Render::SRenderModifData::eRenderModifType::RMOD_TYPE_SCALE, std::any(scaleMod)));
-    renderModif.enabled = true;
-
-    g_pHyprRenderer->m_renderPass.add(makeUnique<CRendererHintsPassElement>(CRendererHintsPassElement::SData{.renderModif = renderModif}));
-    Hyprutils::Utils::CScopeGuard x([] {
-        g_pHyprRenderer->m_renderPass.add(makeUnique<CRendererHintsPassElement>(CRendererHintsPassElement::SData{.renderModif = Render::SRenderModifData{}}));
-    });
-
-    CSurfacePassElement::SRenderData renderdata = {pMonitor, time};
-    renderdata.pos = oRealPosition + pWindow->m_floatingOffset;
-    renderdata.w = std::max(oSize.x, 5.0);
-    renderdata.h = std::max(oSize.y, 5.0);
-    renderdata.surface = pWindow->wlSurface()->resource();
-    renderdata.dontRound = forcedRounding < 0 && pWindow->isEffectiveInternalFSMode(FSMODE_FULLSCREEN);
-    renderdata.fadeAlpha = std::clamp(alpha, 0.F, 1.F);
-    renderdata.alpha = std::clamp(alpha, 0.F, 1.F);
-    renderdata.decorate = false;
-    renderdata.rounding = renderdata.dontRound ? 0 : pWindow->rounding() * scaleMod * pMonitor->m_scale;
-    renderdata.roundingPower = renderdata.dontRound ? 2.0F : pWindow->roundingPower();
-    if (forcedRounding >= 0) {
-        renderdata.rounding = static_cast<decltype(renderdata.rounding)>(forcedRounding);
-        renderdata.roundingPower = forcedRoundingPower;
-    }
-    renderdata.blur = false;
-    renderdata.pWindow = pWindow;
-    renderdata.clipBox = clipBox;
-    renderdata.useNearestNeighbor = false;
-    renderdata.squishOversized = true;
-    renderdata.surfaceCounter = 0;
+    const int windowRounding = forcedRounding >= 0
+        ? forcedRounding
+        : (pWindow->isEffectiveInternalFSMode(FSMODE_FULLSCREEN) ? 0 : static_cast<int>(std::round(pWindow->rounding() * scaleX)));
+    const float windowRoundingPower = forcedRounding >= 0 ? forcedRoundingPower : pWindow->roundingPower();
 
     pWindow->wlSurface()->resource()->breadthfirst(
-        [&renderdata, &pWindow](SP<CWLSurfaceResource> s, const Vector2D& offset, void*) {
+        [&](SP<CWLSurfaceResource> s, const Vector2D& offset, void*) {
             if (!s || !s->m_current.texture)
                 return;
 
             if (s->m_current.size.x < 1 || s->m_current.size.y < 1)
                 return;
 
-            renderdata.localPos = offset;
-            renderdata.texture = s->m_current.texture;
-            renderdata.surface = s;
-            renderdata.mainSurface = s == pWindow->wlSurface()->resource();
-            g_pHyprRenderer->m_renderPass.add(makeUnique<CSurfacePassElement>(renderdata));
-            renderdata.surfaceCounter++;
+            const bool mainSurface = s == pWindow->wlSurface()->resource();
+            CBox surfaceBox = rectOverride;
+            int rounding = windowRounding;
+            float roundingPower = windowRoundingPower;
+
+            if (!mainSurface) {
+                surfaceBox = CBox{
+                    rectOverride.x + offset.x * scaleX,
+                    rectOverride.y + offset.y * scaleY,
+                    std::max<double>(2.0, s->m_current.size.x * scaleX),
+                    std::max<double>(2.0, s->m_current.size.y * scaleY),
+                };
+                rounding = 0;
+                roundingPower = 2.0F;
+            }
+
+            if (!(surfaceBox.w > 0.5 && surfaceBox.h > 0.5) || !boxesIntersectForOverview(surfaceBox, clipBox))
+                return;
+
+            CTexPassElement::SRenderData renderData;
+            renderData.tex = s->m_current.texture;
+            renderData.box = surfaceBox;
+            renderData.a = std::clamp(alpha, 0.F, 1.F);
+            renderData.round = rounding;
+            renderData.roundingPower = roundingPower;
+            renderData.clipBox = clipBox;
+            renderData.surface = s;
+            renderData.discardMode = DISCARD_ALPHA;
+            g_pHyprRenderer->m_renderPass.add(makeUnique<CTexPassElement>(renderData));
         },
         nullptr);
 }
