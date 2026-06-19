@@ -390,11 +390,8 @@ void CHyprspaceWidget::draw() {
                 // fullscreen in one combined GNOME-like motion.
                 workspaceBox = overviewLerpBox(fullWorkspaceBox, workspaceBox, openProgress);
             } else {
-                const double sideExitProgress = overviewClamp01((rawOpenProgress - 0.30) / 0.70);
-                const double sideProgress = closingAnimationRunning
-                    ? sideExitProgress * sideExitProgress
-                    : overviewEaseOutQuart((rawOpenProgress - 0.16) / 0.84);
-                const double slideDistance = owner->m_transformedSize.x * (closingAnimationRunning ? 0.14 : 0.10);
+                const double sideProgress = overviewEaseOutQuart((rawOpenProgress - 0.16) / 0.84);
+                const double slideDistance = owner->m_transformedSize.x * 0.10;
                 CBox sideStartBox = workspaceBox;
                 sideStartBox.x += (directionFromTarget < 0 ? -slideDistance : slideDistance);
                 workspaceBox = overviewLerpBox(sideStartBox, workspaceBox, sideProgress);
