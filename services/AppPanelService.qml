@@ -1,6 +1,7 @@
 pragma Singleton
 
 import QtQuick
+import Quickshell
 import Quickshell.Io
 
 Item {
@@ -18,6 +19,10 @@ Item {
     property string configPath: ""
     property var appsById: ({})
     property string appsSignature: ""
+    property var iconCache: ({})
+    property var iconWarmupQueue: []
+    property int iconWarmupIndex: 0
+    property bool iconWarmupComplete: false
     property var launchingIds: ({})
     property var launchStartedAt: ({})
     property string pendingCommand: ""
@@ -51,15 +56,148 @@ Item {
         return result.join("\n");
     }
 
+    function searchTextForApp(app) {
+        if (!app)
+            return "";
+
+        var parts = [
+            app.name || "",
+            app.displayName || "",
+            app.genericName || "",
+            app.desktopId || "",
+            app.sourceDesktopId || "",
+            app.executable || "",
+            app.startupWmClass || ""
+        ];
+        var keys = app.matchKeys || [];
+        for (var i = 0; i < keys.length; i++)
+            parts.push(keys[i]);
+
+        return parts.join(" ").toLowerCase();
+    }
+
+    function iconKeyForApp(app) {
+        return String(app && (app.icon || app.iconName || "application-x-executable") || "").trim();
+    }
+
+    function enrichedApps(list) {
+        var result = [];
+        var source = list || [];
+        for (var i = 0; i < source.length; i++) {
+            var app = source[i] || {};
+            var next = {};
+            for (var key in app)
+                next[key] = app[key];
+            next.searchText = searchTextForApp(app);
+            next.iconCacheKey = iconKeyForApp(app);
+            result.push(next);
+        }
+        return result;
+    }
+
     function applyApps(nextApps) {
-        var list = nextApps || [];
+        var list = enrichedApps(nextApps || []);
         var signature = appListSignature(list);
-        if (signature === appsSignature)
+        if (signature === appsSignature) {
+            startIconWarmup(list);
             return;
+        }
 
         appsSignature = signature;
         apps = list;
         rebuildAppsById();
+        startIconWarmup(list);
+    }
+
+    function resolveIconUrl(value) {
+        var icon = String(value || "").trim();
+        if (!icon)
+            return "";
+        if (icon.indexOf("file://") === 0 || icon.indexOf("qrc:/") === 0 || icon.indexOf("http://") === 0 || icon.indexOf("https://") === 0)
+            return icon;
+        if (icon.charAt(0) === "/")
+            return "file://" + icon;
+
+        var themedPath = Quickshell.iconPath(icon, true);
+        if (themedPath && themedPath.length > 0 && themedPath.indexOf("image-missing") < 0) {
+            if (themedPath.indexOf("file://") === 0 || themedPath.indexOf("qrc:/") === 0)
+                return themedPath;
+            if (themedPath.charAt(0) === "/")
+                return "file://" + themedPath;
+            return themedPath;
+        }
+        return "";
+    }
+
+    function iconUrl(value) {
+        var icon = String(value || "").trim();
+        if (!icon)
+            return "";
+        if (iconCache[icon] !== undefined)
+            return iconCache[icon];
+
+        var next = {};
+        for (var key in iconCache)
+            next[key] = iconCache[key];
+        var resolved = resolveIconUrl(icon);
+        next[icon] = resolved;
+        iconCache = next;
+        return resolved;
+    }
+
+    function cachedIconUrl(value) {
+        var icon = String(value || "").trim();
+        if (!icon)
+            return "";
+        return iconCache[icon] !== undefined ? iconCache[icon] : "";
+    }
+
+    function startIconWarmup(list) {
+        var seen = {};
+        var queue = [];
+        var source = list || apps || [];
+        for (var i = 0; i < source.length; i++) {
+            var icon = iconKeyForApp(source[i]);
+            if (!icon || seen[icon])
+                continue;
+            seen[icon] = true;
+            if (iconCache[icon] === undefined)
+                queue.push(icon);
+        }
+
+        iconWarmupQueue = queue;
+        iconWarmupIndex = 0;
+        iconWarmupComplete = queue.length === 0;
+        if (queue.length > 0)
+            iconWarmupTimer.restart();
+        else
+            iconWarmupTimer.stop();
+    }
+
+    function warmupIconChunk() {
+        if (iconWarmupIndex >= iconWarmupQueue.length) {
+            iconWarmupComplete = true;
+            iconWarmupTimer.stop();
+            return;
+        }
+
+        var next = {};
+        for (var key in iconCache)
+            next[key] = iconCache[key];
+
+        var limit = Math.min(iconWarmupIndex + 5, iconWarmupQueue.length);
+        for (var i = iconWarmupIndex; i < limit; i++) {
+            var icon = iconWarmupQueue[i];
+            if (next[icon] === undefined)
+                next[icon] = resolveIconUrl(icon);
+        }
+        iconWarmupIndex = limit;
+        iconCache = next;
+
+        if (iconWarmupIndex >= iconWarmupQueue.length) {
+            iconWarmupComplete = true;
+            iconWarmupTimer.stop();
+        }
     }
 
     function isPinned(desktopId) {
@@ -300,6 +438,14 @@ Item {
     }
 
     Component.onCompleted: requestRefresh(false)
+
+    Timer {
+        id: iconWarmupTimer
+        interval: 24
+        repeat: true
+        running: false
+        onTriggered: root.warmupIconChunk()
+    }
 
     // Desktop files can appear while Quickshell is already running, for example
     // after installing a new application. Keep this periodic refresh cheap:

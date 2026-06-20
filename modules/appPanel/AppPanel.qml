@@ -654,22 +654,7 @@ Item {
     }
 
     function iconUrl(value) {
-        var icon = String(value || "").trim();
-        if (!icon)
-            return "";
-        if (icon.indexOf("file://") === 0 || icon.indexOf("qrc:/") === 0 || icon.indexOf("http://") === 0 || icon.indexOf("https://") === 0)
-            return icon;
-        if (icon.charAt(0) === "/")
-            return "file://" + icon;
-        var themedPath = Quickshell.iconPath(icon, true);
-        if (themedPath && themedPath.length > 0 && themedPath.indexOf("image-missing") < 0) {
-            if (themedPath.indexOf("file://") === 0 || themedPath.indexOf("qrc:/") === 0)
-                return themedPath;
-            if (themedPath.charAt(0) === "/")
-                return "file://" + themedPath;
-            return themedPath;
-        }
-        return "";
+        return Services.AppPanelService.cachedIconUrl(value);
     }
 
     function canDragItem(item) {

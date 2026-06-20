@@ -12,7 +12,6 @@ PanelWindow {
     readonly property int inputBottomMargin: 116
     property string query: ""
     property var filteredApps: []
-    property var iconCache: ({})
 
     anchors {
         top: true
@@ -39,34 +38,6 @@ PanelWindow {
         height: root.opened ? Math.max(0, root.height - root.inputTopMargin - root.inputBottomMargin) : 0
     }
 
-    function iconUrl(value) {
-        var icon = String(value || "").trim();
-        if (!icon)
-            return "";
-        if (iconCache[icon] !== undefined)
-            return iconCache[icon];
-
-        var resolved = "";
-        if (icon.indexOf("file://") === 0 || icon.indexOf("qrc:/") === 0)
-            resolved = icon;
-        else if (icon.charAt(0) === "/")
-            resolved = "file://" + icon;
-        else {
-            var themedPath = Quickshell.iconPath(icon, true);
-            if (themedPath && themedPath.length > 0 && themedPath.indexOf("image-missing") < 0) {
-                if (themedPath.indexOf("file://") === 0 || themedPath.indexOf("qrc:/") === 0)
-                    resolved = themedPath;
-                else if (themedPath.charAt(0) === "/")
-                    resolved = "file://" + themedPath;
-                else
-                    resolved = themedPath;
-            }
-        }
-
-        iconCache[icon] = resolved;
-        return resolved;
-    }
-
     function appDisplayName(app) {
         return String(app && (app.displayName || app.name || app.desktopId) || "Application").trim();
     }
@@ -74,6 +45,8 @@ PanelWindow {
     function appSearchText(app) {
         if (!app)
             return "";
+        if (app.searchText)
+            return String(app.searchText);
 
         var parts = [
             app.name || "",
@@ -142,6 +115,10 @@ PanelWindow {
         function onAppsChanged() {
             if (root.opened)
                 root.rebuildFilteredApps();
+        }
+        function onIconCacheChanged() {
+            if (root.opened)
+                appGrid.forceLayout();
         }
     }
 
@@ -242,7 +219,7 @@ PanelWindow {
 
             delegate: Item {
                 readonly property string displayName: root.appDisplayName(modelData)
-                readonly property string resolvedIcon: root.iconUrl(modelData.icon || modelData.iconName || "application-x-executable")
+                readonly property string resolvedIcon: Services.AppPanelService.cachedIconUrl(modelData.iconCacheKey || modelData.icon || modelData.iconName || "application-x-executable")
 
                 width: appGrid.cellWidth
                 height: appGrid.cellHeight
