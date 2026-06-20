@@ -13,7 +13,7 @@ CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / 
 PINS_FILE = CONFIG_DIR / "app-panel.json"
 RUNTIME_DIR = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / APP_NAME
 CACHE_FILE = RUNTIME_DIR / "desktop-apps-cache.json"
-CACHE_VERSION = 5
+CACHE_VERSION = 6
 
 DESKTOP_DIRS = []
 for raw_dir in [
@@ -28,7 +28,7 @@ for raw_dir in [
 
 FIELD_CODE_RE = re.compile(r"\s+%[fFuUdDnNickvm]")
 INLINE_FIELD_CODE_RE = re.compile(r"%[fFuUdDnNickvm]")
-LOCALE_SUFFIX_RE = re.compile(r"^([^\[]+)\[.+\]$")
+LOCALE_SUFFIX_RE = re.compile(r"^([^\[]+)\[([^\]]+)\]$")
 
 ICON_EXTS = (".svg", ".png", ".xpm", ".webp")
 ICON_DIRS = [
@@ -89,6 +89,38 @@ IGNORED_MATCH_TOKENS = {
 }
 
 
+def locale_candidates() -> List[str]:
+    result: List[str] = []
+
+    def add(value: str) -> None:
+        locale = (value or "").strip()
+        if not locale or locale.upper() == "C":
+            return
+        locale = locale.split(".", 1)[0].split("@", 1)[0]
+        if not locale or locale.upper() == "C":
+            return
+        candidates = [locale]
+        if "_" in locale:
+            candidates.append(locale.split("_", 1)[0])
+        for candidate in candidates:
+            if candidate and candidate not in result:
+                result.append(candidate)
+
+    for value in os.environ.get("LANGUAGE", "").split(":"):
+        add(value)
+    add(os.environ.get("LC_MESSAGES", ""))
+    add(os.environ.get("LANG", ""))
+
+    for fallback in ["en_US", "en"]:
+        if fallback not in result:
+            result.append(fallback)
+
+    return result
+
+
+LOCALE_CANDIDATES = locale_candidates()
+
+
 def warn(message: str) -> None:
     print(f"[app-panel] {message}", file=sys.stderr)
 
@@ -135,19 +167,42 @@ def read_desktop_file(path: Path) -> Optional[Dict[str, str]]:
             continue
 
         key, value = line.split("=", 1)
-        normalized = LOCALE_SUFFIX_RE.match(key)
-        if normalized:
-            key = normalized.group(1)
-        result.setdefault(key, value.strip())
+        value = value.strip()
+        if not value:
+            continue
+        result.setdefault(key, value)
 
     if result.get("Type") != "Application":
         return None
     if result.get("Hidden", "false").lower() == "true":
         return None
-    if not result.get("Name") or not result.get("Exec"):
+    if not localized_value(result, "Name") or not result.get("Exec"):
         return None
 
     return result
+
+
+def localized_value(entry: Dict[str, str], key: str) -> str:
+    for locale in LOCALE_CANDIDATES:
+        value = entry.get(f"{key}[{locale}]")
+        if value:
+            return value
+
+    base = entry.get(key, "")
+    if base:
+        return base
+
+    for fallback in ["en_US", "en"]:
+        value = entry.get(f"{key}[{fallback}]")
+        if value:
+            return value
+
+    prefix = f"{key}["
+    for candidate_key, value in entry.items():
+        if candidate_key.startswith(prefix) and value:
+            return value
+
+    return ""
 
 
 def sanitize_exec(exec_value: str) -> str:
@@ -234,8 +289,8 @@ def app_from_desktop(path: Path) -> Optional[Dict[str, object]]:
     icon_name = entry.get("Icon", "").strip()
     icon_path = find_icon(icon_name)
     startup_wm_class = entry.get("StartupWMClass", "").strip()
-    name = entry.get("Name", desktop_id.replace(".desktop", ""))
-    generic_name = entry.get("GenericName", "")
+    name = localized_value(entry, "Name") or desktop_id.replace(".desktop", "")
+    generic_name = localized_value(entry, "GenericName")
 
     tokens: List[str] = []
     add_desktop_id_tokens(tokens, desktop_id)
@@ -253,6 +308,7 @@ def app_from_desktop(path: Path) -> Optional[Dict[str, object]]:
         "desktopId": desktop_id,
         "desktopPath": str(path),
         "name": name,
+        "displayName": name,
         "genericName": generic_name,
         # Prefer a resolved file URI, but keep the theme icon name as a fallback.
         # QML resolves theme names through Quickshell.iconPath when needed.

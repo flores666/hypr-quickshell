@@ -91,6 +91,7 @@ public:
 
     void show();
     void hide();
+    void hideKeepingWorkspace(int workspaceID);
 
     // should be called active or not
     void draw();

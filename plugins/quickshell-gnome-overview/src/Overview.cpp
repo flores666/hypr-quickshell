@@ -590,6 +590,31 @@ void CHyprspaceWidget::hide() {
     g_pCompositor->scheduleFrameForMonitor(owner);
 }
 
+void CHyprspaceWidget::hideKeepingWorkspace(int workspaceID) {
+    const auto owner = getOwner();
+    if (!owner || !active)
+        return;
+
+    const int targetWorkspaceID = workspaceID > 0
+        ? workspaceID
+        : std::max(1, static_cast<int>(owner->activeWorkspaceID()));
+
+    workspaceSelectionAnimating = false;
+    closeAfterWorkspaceSelectionAnimation = false;
+    closeNotifiedForWorkspaceSelection = false;
+    workspaceSelectionFromID = 0;
+    workspaceSelectionToID = 0;
+    centeredWorkspaceID = targetWorkspaceID;
+
+    if (owner->activeWorkspaceID() != targetWorkspaceID)
+        activateWorkspaceForOverview(targetWorkspaceID);
+
+    notifyQuickshellOverviewState("close");
+    finishHide();
+    g_pHyprRenderer->damageMonitor(owner);
+    g_pCompositor->scheduleFrameForMonitor(owner);
+}
+
 double CHyprspaceWidget::overviewOpenProgress() const {
     constexpr double OVERVIEW_OPEN_ANIMATION_SECONDS = 0.24;
     constexpr double OVERVIEW_CLOSE_ANIMATION_SECONDS = 0.22;

@@ -8,8 +8,11 @@ PanelWindow {
     id: root
 
     readonly property bool opened: Services.ShellState.workspaceOverviewOpen && Services.ShellState.workspaceOverviewMode === "applications"
+    readonly property int inputTopMargin: 56
+    readonly property int inputBottomMargin: 116
     property string query: ""
     property var filteredApps: []
+    property var iconCache: ({})
 
     anchors {
         top: true
@@ -31,28 +34,41 @@ PanelWindow {
 
     mask: Region {
         x: 0
-        y: 0
+        y: root.opened ? root.inputTopMargin : 0
         width: root.opened ? root.width : 0
-        height: root.opened ? root.height : 0
+        height: root.opened ? Math.max(0, root.height - root.inputTopMargin - root.inputBottomMargin) : 0
     }
 
     function iconUrl(value) {
         var icon = String(value || "").trim();
         if (!icon)
             return "";
+        if (iconCache[icon] !== undefined)
+            return iconCache[icon];
+
+        var resolved = "";
         if (icon.indexOf("file://") === 0 || icon.indexOf("qrc:/") === 0)
-            return icon;
-        if (icon.charAt(0) === "/")
-            return "file://" + icon;
-        var themedPath = Quickshell.iconPath(icon, true);
-        if (themedPath && themedPath.length > 0 && themedPath.indexOf("image-missing") < 0) {
-            if (themedPath.indexOf("file://") === 0 || themedPath.indexOf("qrc:/") === 0)
-                return themedPath;
-            if (themedPath.charAt(0) === "/")
-                return "file://" + themedPath;
-            return themedPath;
+            resolved = icon;
+        else if (icon.charAt(0) === "/")
+            resolved = "file://" + icon;
+        else {
+            var themedPath = Quickshell.iconPath(icon, true);
+            if (themedPath && themedPath.length > 0 && themedPath.indexOf("image-missing") < 0) {
+                if (themedPath.indexOf("file://") === 0 || themedPath.indexOf("qrc:/") === 0)
+                    resolved = themedPath;
+                else if (themedPath.charAt(0) === "/")
+                    resolved = "file://" + themedPath;
+                else
+                    resolved = themedPath;
+            }
         }
-        return "";
+
+        iconCache[icon] = resolved;
+        return resolved;
+    }
+
+    function appDisplayName(app) {
+        return String(app && (app.displayName || app.name || app.desktopId) || "Application").trim();
     }
 
     function appSearchText(app) {
@@ -62,6 +78,7 @@ PanelWindow {
         var parts = [
             app.name || "",
             app.displayName || "",
+            app.genericName || "",
             app.desktopId || "",
             app.sourceDesktopId || "",
             app.executable || "",
@@ -83,6 +100,8 @@ PanelWindow {
             var app = apps[i] || {};
             if (!app.desktopId)
                 continue;
+            if (app.noDisplay || app.hidden)
+                continue;
             if (needle.length === 0 || appSearchText(app).indexOf(needle) >= 0)
                 result.push(app);
         }
@@ -102,7 +121,8 @@ PanelWindow {
         if (opened) {
             query = Services.ShellState.applicationsOverviewInitialQuery;
             Services.ShellState.setApplicationsOverviewInitialQuery("");
-            Services.AppPanelService.requestRefresh(false);
+            if (!Services.AppPanelService.ready)
+                Services.AppPanelService.requestRefresh(false);
             rebuildFilteredApps();
             search.forceActiveFocus();
             search.cursorPosition = search.text.length;
@@ -216,11 +236,14 @@ PanelWindow {
             cellHeight: 116
             clip: true
             reuseItems: true
-            cacheBuffer: 280
+            cacheBuffer: 0
             boundsBehavior: Flickable.StopAtBounds
             keyNavigationEnabled: true
 
             delegate: Item {
+                readonly property string displayName: root.appDisplayName(modelData)
+                readonly property string resolvedIcon: root.iconUrl(modelData.icon || modelData.iconName || "application-x-executable")
+
                 width: appGrid.cellWidth
                 height: appGrid.cellHeight
 
@@ -250,7 +273,7 @@ PanelWindow {
                             Image {
                                 id: appIcon
                                 anchors.fill: parent
-                                source: root.iconUrl(modelData.icon || modelData.iconName || "application-x-executable")
+                                source: resolvedIcon
                                 visible: source.toString().length > 0 && status !== Image.Error
                                 fillMode: Image.PreserveAspectFit
                                 asynchronous: true
@@ -267,7 +290,7 @@ PanelWindow {
 
                                 Text {
                                     anchors.centerIn: parent
-                                    text: String(modelData.name || "?").substring(0, 1).toUpperCase()
+                                    text: displayName.substring(0, 1).toUpperCase()
                                     color: "#f5f8fb"
                                     font.pixelSize: 24
                                     font.weight: Font.DemiBold
@@ -280,7 +303,7 @@ PanelWindow {
 
                         Text {
                             Layout.fillWidth: true
-                            text: modelData.name || modelData.displayName || "Application"
+                            text: displayName
                             color: "#f4f7fb"
                             horizontalAlignment: Text.AlignHCenter
                             maximumLineCount: 2

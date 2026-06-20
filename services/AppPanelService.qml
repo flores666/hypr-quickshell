@@ -130,8 +130,10 @@ Item {
 
     function requestRefresh(force) {
         if (refreshing || refreshProc.running) {
-            pendingRefresh = true;
-            pendingRefreshForce = pendingRefreshForce || !!force;
+            if (force) {
+                pendingRefresh = true;
+                pendingRefreshForce = true;
+            }
             return;
         }
         startRefresh(force);
@@ -300,15 +302,14 @@ Item {
     Component.onCompleted: requestRefresh(false)
 
     // Desktop files can appear while Quickshell is already running, for example
-    // after installing a new application. Use a forced refresh here: it is cheap
-    // now that icon lookup no longer scans icon themes recursively, and it avoids
-    // stale mtime/cache edge cases from package managers.
+    // after installing a new application. Keep this periodic refresh cheap:
+    // the Python helper uses its mtime cache and only reparses when needed.
     Timer {
         id: desktopAppsRefreshTimer
-        interval: 5000
+        interval: 60000
         repeat: true
         running: true
-        onTriggered: root.requestRefresh(true)
+        onTriggered: root.requestRefresh(false)
     }
 
     Timer {
