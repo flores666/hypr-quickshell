@@ -13,7 +13,7 @@ CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / 
 PINS_FILE = CONFIG_DIR / "app-panel.json"
 RUNTIME_DIR = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / APP_NAME
 CACHE_FILE = RUNTIME_DIR / "desktop-apps-cache.json"
-CACHE_VERSION = 6
+CACHE_VERSION = 7
 
 DESKTOP_DIRS = []
 for raw_dir in [
@@ -38,6 +38,7 @@ ICON_DIRS = [
     Path("/usr/local/share/icons"),
     Path("/usr/share/pixmaps"),
 ]
+ICON_INDEX: Optional[Dict[str, str]] = None
 
 DEFAULT_PIN_CANDIDATES = [
     ["firefox.desktop", "org.mozilla.firefox.desktop", "chromium.desktop", "google-chrome.desktop", "brave-browser.desktop"],
@@ -231,6 +232,106 @@ def file_uri(path: str) -> str:
         return ""
 
 
+def icon_size_score(path: Path) -> int:
+    score = 0
+    parts = [part.lower() for part in path.parts]
+    text = "/".join(parts)
+
+    for part in parts:
+        match = re.match(r"^(\d+)x(\d+)$", part)
+        if match:
+            size = max(int(match.group(1)), int(match.group(2)))
+            if size >= 256:
+                score += 240
+            elif size >= 128:
+                score += 220
+            elif size >= 64:
+                score += 200
+            elif size >= 48:
+                score += 180
+            elif size >= 32:
+                score += 120
+            else:
+                score += 40
+            break
+
+    if "apps" in parts:
+        score += 40
+    if "hicolor" in parts:
+        score += 25
+    if "scalable" in parts:
+        score += 10
+
+    suffix = path.suffix.lower()
+    if suffix == ".png":
+        score += 35
+    elif suffix == ".svg":
+        score += 25
+    elif suffix == ".webp":
+        score += 20
+    elif suffix == ".xpm":
+        score += 5
+
+    if "symbolic" in text:
+        score -= 80
+
+    return score
+
+
+def icon_index_keys(path: Path) -> List[str]:
+    stem = path.stem.strip()
+    if not stem:
+        return []
+
+    keys = [stem, stem.lower(), normalize_token(stem)]
+    result: List[str] = []
+    for key in keys:
+        if key and key not in result:
+            result.append(key)
+    return result
+
+
+def build_icon_index() -> Dict[str, str]:
+    global ICON_INDEX
+    if ICON_INDEX is not None:
+        return ICON_INDEX
+
+    scored: Dict[str, Tuple[int, str]] = {}
+
+    for root in ICON_DIRS:
+        root = root.expanduser()
+        if not root.exists():
+            continue
+
+        try:
+            if root.is_file():
+                candidates = [root]
+            else:
+                candidates = []
+                for dirpath, dirnames, filenames in os.walk(root):
+                    dirnames[:] = [name for name in dirnames if not name.startswith(".")]
+                    base = Path(dirpath)
+                    for filename in filenames:
+                        path = base / filename
+                        if path.suffix.lower() in ICON_EXTS:
+                            candidates.append(path)
+        except OSError:
+            continue
+
+        for path in candidates:
+            if not path.exists():
+                continue
+            score = icon_size_score(path)
+            resolved = str(path)
+            for key in icon_index_keys(path):
+                current = scored.get(key)
+                if current is None or score > current[0]:
+                    scored[key] = (score, resolved)
+
+    ICON_INDEX = {key: value for key, (_, value) in scored.items()}
+    return ICON_INDEX
+
+
 def find_icon(icon_name: str) -> str:
     icon = (icon_name or "").strip()
     if not icon:
@@ -245,15 +346,16 @@ def find_icon(icon_name: str) -> str:
     else:
         names = [icon + ext for ext in ICON_EXTS]
 
-    # Keep this deliberately cheap. Quickshell resolves themed icon names in
-    # QML, so the helper only handles explicit files and the flat pixmaps dir.
-    # A recursive scan under /usr/share/icons for every desktop file can pin a
-    # CPU core for minutes on large icon themes.
-    pixmaps = Path("/usr/share/pixmaps")
+    index = build_icon_index()
+    lookup_keys = [icon, icon.lower(), normalize_token(icon)]
     for name in names:
-        path = pixmaps / name
-        if path.exists():
-            return str(path)
+        stem = Path(name).stem
+        lookup_keys.extend([name, name.lower(), stem, stem.lower(), normalize_token(stem)])
+
+    for key in lookup_keys:
+        path = index.get(key)
+        if path:
+            return path
 
     return ""
 

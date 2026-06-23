@@ -49,6 +49,7 @@ Item {
                 app.desktopId || "",
                 app.name || "",
                 app.icon || "",
+                app.iconName || "",
                 app.command || "",
                 (app.matchKeys || []).join(",")
             ].join("|"));
@@ -77,7 +78,7 @@ Item {
     }
 
     function iconKeyForApp(app) {
-        return String(app && (app.icon || app.iconName || "application-x-executable") || "").trim();
+        return String(app && (app.iconName || app.icon || "application-x-executable") || "").trim();
     }
 
     function enrichedApps(list) {
@@ -90,6 +91,7 @@ Item {
                 next[key] = app[key];
             next.searchText = searchTextForApp(app);
             next.iconCacheKey = iconKeyForApp(app);
+            next.iconCacheFallback = String(app.icon || "").trim();
             result.push(next);
         }
         return result;
@@ -129,20 +131,25 @@ Item {
         return "";
     }
 
-    function iconUrl(value) {
+    function iconUrl(value, fallback) {
         var icon = String(value || "").trim();
-        if (!icon)
-            return "";
-        if (iconCache[icon] !== undefined)
-            return iconCache[icon];
+        var fallbackIcon = String(fallback || "").trim();
+        var resolved = "";
+        if (icon) {
+            if (iconCache[icon] !== undefined)
+                resolved = iconCache[icon];
+            else
+                resolved = resolveIconUrl(icon);
+        }
 
-        var next = {};
-        for (var key in iconCache)
-            next[key] = iconCache[key];
-        var resolved = resolveIconUrl(icon);
-        next[icon] = resolved;
-        iconCache = next;
-        return resolved;
+        // This function is used from Image.source bindings. It must be pure:
+        // mutating iconCache here creates a binding loop in QML. Cache writes
+        // are done only by the warmup timer.
+        if (resolved || !fallbackIcon || fallbackIcon === icon)
+            return resolved;
+        if (iconCache[fallbackIcon] !== undefined)
+            return iconCache[fallbackIcon];
+        return resolveIconUrl(fallbackIcon);
     }
 
     function cachedIconUrl(value) {
@@ -158,11 +165,16 @@ Item {
         var source = list || apps || [];
         for (var i = 0; i < source.length; i++) {
             var icon = iconKeyForApp(source[i]);
-            if (!icon || seen[icon])
-                continue;
-            seen[icon] = true;
-            if (iconCache[icon] === undefined)
-                queue.push(icon);
+            var fallbackIcon = String(source[i] && source[i].icon || "").trim();
+            var candidates = [icon, fallbackIcon];
+            for (var j = 0; j < candidates.length; j++) {
+                var candidate = candidates[j];
+                if (!candidate || seen[candidate])
+                    continue;
+                seen[candidate] = true;
+                if (iconCache[candidate] === undefined)
+                    queue.push(candidate);
+            }
         }
 
         iconWarmupQueue = queue;

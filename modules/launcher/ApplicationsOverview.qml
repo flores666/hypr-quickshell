@@ -328,11 +328,14 @@ Scope {
                     }
 
                     delegate: ApplicationTile {
+                        required property var modelData
+                        readonly property var appEntry: modelData || ({})
+
                         width: appGrid.cellWidth
                         height: appGrid.cellHeight
-                        app: modelData
-                        displayName: String(modelData && (modelData.displayName || modelData.name || modelData.desktopId) || "Application").trim()
-                        highlighted: content.hoveredAppKey.length > 0 && content.hoveredAppKey === String(modelData.desktopId || modelData.sourceDesktopId || "")
+                        app: appEntry
+                        displayName: String(appEntry.displayName || appEntry.name || appEntry.desktopId || "Application").trim()
+                        highlighted: content.hoveredAppKey.length > 0 && content.hoveredAppKey === String(appEntry.desktopId || appEntry.sourceDesktopId || "")
                         interactive: content.interactive
                         showVisuals: content.showVisuals
                         onHovered: function(appKey) { content.appHovered(appKey); }
@@ -434,13 +437,17 @@ Scope {
     component ApplicationTile: Item {
         id: tileRoot
 
-        required property var app
+        property var app: ({})
         required property string displayName
         property bool interactive: true
         property bool showVisuals: true
         property bool highlighted: false
-        readonly property string appKey: String(app.desktopId || app.sourceDesktopId || "")
-        readonly property string resolvedIcon: showVisuals ? Services.AppPanelService.iconUrl(app.iconCacheKey || app.icon || app.iconName || "application-x-executable") : ""
+        readonly property var safeApp: app || ({})
+        readonly property string appKey: String(safeApp.desktopId || safeApp.sourceDesktopId || "")
+        readonly property string resolvedIcon: showVisuals
+            ? Services.AppPanelService.iconUrl(safeApp.iconCacheKey || safeApp.iconName || safeApp.icon || "application-x-executable",
+                                               safeApp.iconCacheFallback || safeApp.icon || "")
+            : ""
 
         signal hovered(string appKey)
         signal unhovered(string appKey)
@@ -527,7 +534,7 @@ Scope {
                 cursorShape: Qt.PointingHandCursor
                 onEntered: tileRoot.hovered(tileRoot.appKey)
                 onExited: tileRoot.unhovered(tileRoot.appKey)
-                onClicked: tileRoot.launched(tileRoot.app)
+                onClicked: tileRoot.launched(tileRoot.safeApp)
             }
         }
     }

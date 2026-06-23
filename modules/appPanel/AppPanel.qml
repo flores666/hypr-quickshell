@@ -653,8 +653,8 @@ Item {
         }
     }
 
-    function iconUrl(value) {
-        return Services.AppPanelService.cachedIconUrl(value);
+    function iconUrl(value, fallback) {
+        return Services.AppPanelService.iconUrl(value, fallback);
     }
 
     function canDragItem(item) {
@@ -955,7 +955,8 @@ Item {
             sourceDesktopId: id,
             name: app.name || id || "Application",
             displayName: app.name || id || "Application",
-            icon: app.icon || "",
+            icon: app.iconName || app.icon || "",
+            iconFallback: app.icon || "",
             command: app.command || "",
             pinned: !!pinned,
             hasDesktop: true,
@@ -986,6 +987,7 @@ Item {
             name: displayName,
             displayName: displayName,
             icon: icon,
+            iconFallback: "",
             command: "",
             pinned: false,
             hasDesktop: !!entry,
@@ -1917,7 +1919,7 @@ Item {
                 anchors.centerIn: hoverBackground
                 width: 37
                 height: 37
-                source: root.iconUrl(modelData.icon)
+                source: root.iconUrl(modelData.icon, modelData.iconFallback)
                 visible: source.toString().length > 0 && status !== Image.Error
                 opacity: modelData.launching ? 0.58 : 0.94
                 fillMode: Image.PreserveAspectFit
