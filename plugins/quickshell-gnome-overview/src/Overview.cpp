@@ -4,7 +4,10 @@
 #include <hyprland/src/managers/EventManager.hpp>
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <string>
+
+extern std::function<void()> overviewAnimatedHideFinishedCallback;
 
 static void notifyQuickshellOverviewState(const char* state) {
     if (g_pEventManager)
@@ -17,6 +20,9 @@ CHyprspaceWidget::CHyprspaceWidget(uint64_t inOwnerID) {
     workspaceSelectionAnimating = false;
     closeAfterWorkspaceSelectionAnimation = false;
     closeNotifiedForWorkspaceSelection = false;
+    closeNotifyPendingForAnimatedHide = false;
+    releaseAfterCloseNotification = false;
+    applicationsModeResetPendingForAnimatedHide = false;
     applyingWorkspaceActivation = false;
     workspaceSelectionFromID = 0;
     workspaceSelectionToID = 0;
@@ -490,6 +496,9 @@ void CHyprspaceWidget::show() {
     workspaceSelectionAnimating = false;
     closeAfterWorkspaceSelectionAnimation = false;
     closeNotifiedForWorkspaceSelection = false;
+    closeNotifyPendingForAnimatedHide = false;
+    releaseAfterCloseNotification = false;
+    applicationsModeResetPendingForAnimatedHide = false;
     applyingWorkspaceActivation = false;
     workspaceSelectionFromID = 0;
     workspaceSelectionToID = 0;
@@ -517,13 +526,59 @@ void CHyprspaceWidget::show() {
     g_pCompositor->scheduleFrameForMonitor(owner);
 }
 
+void CHyprspaceWidget::startApplicationsTransitionFromOverview() {
+    auto owner = getOwner();
+    if (!owner)
+        return;
+
+    if (!active) {
+        show();
+        return;
+    }
+
+    constexpr double OVERVIEW_OPEN_ANIMATION_SECONDS = 0.24;
+    constexpr double APPLICATIONS_START_RAW_PROGRESS = 0.24;
+
+    closeOwnerSpecialWorkspace();
+    suppressWorkspaceTransitionAnimation();
+
+    overviewClosing = false;
+    workspaceSelectionAnimating = false;
+    closeAfterWorkspaceSelectionAnimation = false;
+    closeNotifiedForWorkspaceSelection = false;
+    closeNotifyPendingForAnimatedHide = false;
+    releaseAfterCloseNotification = false;
+    applicationsModeResetPendingForAnimatedHide = false;
+    applyingWorkspaceActivation = false;
+    workspaceSelectionFromID = 0;
+    workspaceSelectionToID = 0;
+    if (centeredWorkspaceID <= 0)
+        centeredWorkspaceID = std::max(1, static_cast<int>(owner->activeWorkspaceID()));
+    workspaceScrollAccumulator = 0.0;
+    workspaceHoverProgress.clear();
+    lastWorkspaceHoverFrameValid = false;
+
+    overviewAnimationStarted = true;
+    overviewAnimationStartedAt = std::chrono::steady_clock::now() - std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+        std::chrono::duration<double>(OVERVIEW_OPEN_ANIMATION_SECONDS * APPLICATIONS_START_RAW_PROGRESS));
+
+    setOverviewCursor();
+    g_pHyprRenderer->damageMonitor(owner);
+    g_pCompositor->scheduleFrameForMonitor(owner);
+}
+
 void CHyprspaceWidget::finishHide() {
     const int visibleWorkspaceID = centeredWorkspaceID;
+    const bool shouldNotifyClose = closeNotifyPendingForAnimatedHide;
+    const bool shouldResetApplicationsMode = applicationsModeResetPendingForAnimatedHide;
     active = false;
     overviewClosing = false;
     workspaceSelectionAnimating = false;
     closeAfterWorkspaceSelectionAnimation = false;
     closeNotifiedForWorkspaceSelection = false;
+    closeNotifyPendingForAnimatedHide = false;
+    releaseAfterCloseNotification = false;
+    applicationsModeResetPendingForAnimatedHide = false;
     applyingWorkspaceActivation = false;
     workspaceSelectionFromID = 0;
     workspaceSelectionToID = 0;
@@ -543,6 +598,41 @@ void CHyprspaceWidget::finishHide() {
     // shrinking preview can receive hover/focus while the overview is visible.
     g_pInputManager->refocus();
     g_pInputManager->simulateMouseMovement();
+
+    if (shouldNotifyClose) {
+        notifyQuickshellOverviewState("close");
+    }
+
+    if (shouldResetApplicationsMode) {
+        if (overviewAnimatedHideFinishedCallback)
+            overviewAnimatedHideFinishedCallback();
+    }
+}
+
+bool CHyprspaceWidget::holdFinalFrameForCloseNotification() {
+    if (!closeNotifyPendingForAnimatedHide && !releaseAfterCloseNotification)
+        return false;
+
+    auto owner = getOwner();
+    if (!owner)
+        return false;
+
+    const auto now = std::chrono::steady_clock::now();
+    if (closeNotifyPendingForAnimatedHide) {
+        closeNotifyPendingForAnimatedHide = false;
+        releaseAfterCloseNotification = true;
+        releaseAfterCloseNotificationStartedAt = now;
+        notifyQuickshellOverviewState("close");
+    }
+
+    constexpr auto CLOSE_RELEASE_HOLD = std::chrono::milliseconds(50);
+    if (now - releaseAfterCloseNotificationStartedAt < CLOSE_RELEASE_HOLD) {
+        g_pHyprRenderer->damageMonitor(owner);
+        g_pCompositor->scheduleFrameForMonitor(owner);
+        return true;
+    }
+
+    return false;
 }
 
 void CHyprspaceWidget::hide() {
@@ -599,18 +689,36 @@ void CHyprspaceWidget::hideKeepingWorkspace(int workspaceID) {
         ? workspaceID
         : std::max(1, static_cast<int>(owner->activeWorkspaceID()));
 
+    if (overviewClosing && releaseAfterCloseNotification) {
+        g_pHyprRenderer->damageMonitor(owner);
+        g_pCompositor->scheduleFrameForMonitor(owner);
+        return;
+    }
+
     workspaceSelectionAnimating = false;
     closeAfterWorkspaceSelectionAnimation = false;
     closeNotifiedForWorkspaceSelection = false;
+    closeNotifyPendingForAnimatedHide = true;
+    releaseAfterCloseNotification = false;
+    applicationsModeResetPendingForAnimatedHide = true;
     workspaceSelectionFromID = 0;
     workspaceSelectionToID = 0;
     centeredWorkspaceID = targetWorkspaceID;
 
+    if (!overviewClosing) {
+        overviewClosing = true;
+        overviewClosingStartedAt = std::chrono::steady_clock::now();
+        overviewAnimationStarted = false;
+        workspaceHoverProgress.clear();
+        lastWorkspaceHoverFrameValid = false;
+        workspaceScrollAccumulator = 0.0;
+    }
+
+    applyingWorkspaceActivation = true;
     if (owner->activeWorkspaceID() != targetWorkspaceID)
         activateWorkspaceForOverview(targetWorkspaceID);
+    applyingWorkspaceActivation = false;
 
-    notifyQuickshellOverviewState("close");
-    finishHide();
     g_pHyprRenderer->damageMonitor(owner);
     g_pCompositor->scheduleFrameForMonitor(owner);
 }

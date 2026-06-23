@@ -14,6 +14,7 @@
 #include <any>
 #include <chrono>
 #include <cmath>
+#include <functional>
 #include <optional>
 #include <string>
 #include "Overview.hpp"
@@ -77,9 +78,15 @@ std::shared_ptr<CHyprspaceWidget> getWidgetForMonitor(PHLMONITORREF pMonitor) {
 // used to enforce the layout
 void refreshWidgets() {
     for (auto& widget : g_overviewWidgets) {
-        if (widget != nullptr)
-            if (widget->isActive())
-                widget->show();
+        if (!widget || !widget->isActive())
+            continue;
+
+        const auto owner = widget->getOwner();
+        if (!owner)
+            continue;
+
+        g_pHyprRenderer->damageMonitor(owner);
+        g_pCompositor->scheduleFrameForMonitor(owner);
     }
 }
 
@@ -124,6 +131,11 @@ static int applicationsReturnWorkspaceID() {
         : activeWorkspaceIDFromCursor();
 }
 
+static void rememberApplicationsOriginWorkspace(PHLMONITORREF monitor) {
+    if (g_overviewApplicationsOriginWorkspaceID <= 0)
+        g_overviewApplicationsOriginWorkspaceID = activeWorkspaceIDForMonitor(monitor);
+}
+
 static void closeWidgetForCurrentOverviewMode(const std::shared_ptr<CHyprspaceWidget>& widget) {
     if (!widget || !widget->isActive())
         return;
@@ -137,6 +149,15 @@ static void closeWidgetForCurrentOverviewMode(const std::shared_ptr<CHyprspaceWi
 static void resetApplicationsOverviewMode() {
     g_overviewApplicationsMode = false;
     g_overviewApplicationsOriginWorkspaceID = 0;
+}
+
+std::function<void()> overviewAnimatedHideFinishedCallback = []() {
+    resetApplicationsOverviewMode();
+};
+
+static void resetApplicationsModeAfterCloseIfNeeded(bool wasApplicationsMode) {
+    if (!wasApplicationsMode)
+        resetApplicationsOverviewMode();
 }
 
 // for restoring dragged window's alpha value
@@ -226,7 +247,7 @@ static bool layerBoxShouldReceiveOverviewInput(const CBox& box, PHLMONITORREF mo
 }
 
 static bool isApplicationsOverviewInputRegion(PHLMONITORREF monitor, const Vector2D& coords) {
-    if (!monitor)
+    if (!monitor || !g_overviewApplicationsMode)
         return false;
 
     // Keep this in sync with ApplicationsOverview.qml input margins. The
@@ -264,8 +285,11 @@ static bool isCoordsOverInteractiveLayer(PHLMONITORREF monitor, const Vector2D& 
             const bool quickshellLayer = isQuickshellLayerNamespace(layer->m_namespace);
             if (layerIndex == 0 && !quickshellLayer)
                 continue;
-            const bool applicationsLayer = layer->m_namespace == "quickshell:applications";
-            const bool allowMonitorSizedOverlay = applicationsLayer && isApplicationsOverviewInputRegion(monitor, coords);
+            if (g_overviewApplicationsMode && layer->m_namespace == "quickshell:applications")
+                continue;
+
+            const bool applicationsInputLayer = g_overviewApplicationsMode && layer->m_namespace == "quickshell:applications-input";
+            const bool allowMonitorSizedOverlay = applicationsInputLayer && isApplicationsOverviewInputRegion(monitor, coords);
 
             const CBox realBox = {layer->m_realPosition->value(), layer->m_realSize->value()};
             const auto logicalBox = layer->logicalBox();
@@ -301,8 +325,9 @@ static void toggleOverviewForCurrentMonitor() {
         return;
 
     if (widget->isActive()) {
+        const bool wasApplicationsMode = g_overviewApplicationsMode;
         closeWidgetForCurrentOverviewMode(widget);
-        resetApplicationsOverviewMode();
+        resetApplicationsModeAfterCloseIfNeeded(wasApplicationsMode);
     } else {
         resetApplicationsOverviewMode();
         widget->show();
@@ -462,6 +487,11 @@ void onWorkspaceChange(PHLWORKSPACE pWorkspace) {
 
     auto widget = getWidgetForMonitor(g_pCompositor->getMonitorFromID(pWorkspace->m_monitor->m_id));
     if (widget != nullptr && widget->isActive()) {
+        if (g_overviewApplicationsMode) {
+            widget->hideKeepingWorkspace(static_cast<int>(pWorkspace->m_id));
+            return;
+        }
+
         // If a workspace switch comes from outside the overview while it is
         // open (for example a Hyprland bind that was not cancelled), do not
         // hard-reset the strip. Animate the overview ribbon to the new target
@@ -617,6 +647,8 @@ void onKeyPress(const IKeyboard::SKeyEvent& event, SCallbackInfo& info) {
             if (!initialQuery.empty() && static_cast<unsigned char>(initialQuery[0]) >= 0x20) {
                 g_overviewApplicationsMode = true;
                 g_overviewApplicationsOriginWorkspaceID = activeWorkspaceIDFromCursor();
+                if (const auto widget = getActiveWidgetForMonitor(g_pCompositor->getMonitorFromCursor()))
+                    widget->startApplicationsTransitionFromOverview();
                 notifyQuickshellOverviewState("applications:" + initialQuery);
                 info.cancelled = true;
                 return;
@@ -626,6 +658,12 @@ void onKeyPress(const IKeyboard::SKeyEvent& event, SCallbackInfo& info) {
         const int shortcutWorkspaceID = workspaceNumberFromKeysym(keysym);
         if (shortcutWorkspaceID > 0 && g_mainModDown) {
             const auto widget = getActiveWidgetForMonitor(g_pCompositor->getMonitorFromCursor());
+            if (widget && g_overviewApplicationsMode) {
+                widget->hideKeepingWorkspace(shortcutWorkspaceID);
+                g_mainModCancelled = true;
+                info.cancelled = true;
+                return;
+            }
             if (widget && widget->activateWorkspaceInOverview(shortcutWorkspaceID)) {
                 g_mainModCancelled = true;
                 info.cancelled = true;
@@ -682,6 +720,7 @@ void onKeyPress(const IKeyboard::SKeyEvent& event, SCallbackInfo& info) {
 
             if (pressed && keysym == cfgExitKeysym) {
                 bool overviewActive = false;
+                const bool wasApplicationsMode = g_overviewApplicationsMode;
                 for (auto& widget : g_overviewWidgets) {
                     if (widget != nullptr && widget->isActive()) {
                         closeWidgetForCurrentOverviewMode(widget);
@@ -689,7 +728,7 @@ void onKeyPress(const IKeyboard::SKeyEvent& event, SCallbackInfo& info) {
                     }
                 }
                 if (overviewActive)
-                    resetApplicationsOverviewMode();
+                    resetApplicationsModeAfterCloseIfNeeded(wasApplicationsMode);
                 if (overviewActive)
                     info.cancelled = true;
                 return;
@@ -759,7 +798,7 @@ static SDispatchResult dispatchToggleOverview(std::string arg) {
                         if (widget->isActive())
                             closeWidgetForCurrentOverviewMode(widget);
                 }
-                resetApplicationsOverviewMode();
+                resetApplicationsModeAfterCloseIfNeeded(g_overviewApplicationsMode);
             }
             else {
                 resetApplicationsOverviewMode();
@@ -771,8 +810,9 @@ static SDispatchResult dispatchToggleOverview(std::string arg) {
             }
         }
         else if (widget->isActive()) {
+            const bool wasApplicationsMode = g_overviewApplicationsMode;
             closeWidgetForCurrentOverviewMode(widget);
-            resetApplicationsOverviewMode();
+            resetApplicationsModeAfterCloseIfNeeded(wasApplicationsMode);
         } else {
             resetApplicationsOverviewMode();
             widget->show();
@@ -815,40 +855,83 @@ static SDispatchResult dispatchOpenOverview(std::string arg) {
 }
 
 static SDispatchResult dispatchApplicationsOverview(std::string arg) {
+    if (g_overviewApplicationsMode && isAnyOverviewActive()) {
+        const int returnWorkspaceID = applicationsReturnWorkspaceID();
+        if (arg.contains("all")) {
+            for (auto& widget : g_overviewWidgets) {
+                if (widget && widget->isActive())
+                    widget->hideKeepingWorkspace(returnWorkspaceID);
+            }
+        } else {
+            auto currentMonitor = g_pCompositor->getMonitorFromCursor();
+            auto widget = getWidgetForMonitor(currentMonitor);
+            if (widget && widget->isActive())
+                widget->hideKeepingWorkspace(returnWorkspaceID);
+        }
+        return SDispatchResult{};
+    }
+
     g_overviewApplicationsMode = true;
-    g_overviewApplicationsOriginWorkspaceID = activeWorkspaceIDFromCursor();
+    g_overviewApplicationsOriginWorkspaceID = parseWorkspaceIDArg(arg);
+    bool fromActiveOverview = false;
 
     if (arg.contains("all")) {
         for (auto& widget : g_overviewWidgets) {
-            if (widget && !widget->isActive())
+            if (!widget)
+                continue;
+            if (widget->isActive()) {
+                fromActiveOverview = true;
+                widget->startApplicationsTransitionFromOverview();
+            } else {
                 widget->show();
+            }
+            rememberApplicationsOriginWorkspace(widget->getOwner());
         }
     } else {
         auto currentMonitor = g_pCompositor->getMonitorFromCursor();
         auto widget = getWidgetForMonitor(currentMonitor);
-        if (widget && !widget->isActive())
-            widget->show();
+        if (widget) {
+            if (widget->isActive()) {
+                fromActiveOverview = true;
+                widget->startApplicationsTransitionFromOverview();
+            } else {
+                widget->show();
+            }
+            rememberApplicationsOriginWorkspace(widget->getOwner());
+        }
     }
 
-    notifyQuickshellOverviewState("applications");
+    if (g_overviewApplicationsOriginWorkspaceID <= 0)
+        g_overviewApplicationsOriginWorkspaceID = activeWorkspaceIDFromCursor();
+
+    notifyQuickshellOverviewState(fromActiveOverview ? "applications-from-overview" : "applications");
     return SDispatchResult{};
 }
 
 static SDispatchResult dispatchCloseOverview(std::string arg) {
+    const bool wasApplicationsMode = g_overviewApplicationsMode;
+    bool closedAny = false;
     if (arg.contains("all")) {
         for (auto& widget : g_overviewWidgets) {
-            if (widget && widget->isActive())
+            if (widget && widget->isActive()) {
                 closeWidgetForCurrentOverviewMode(widget);
+                closedAny = true;
+            }
         }
     }
     else {
         auto currentMonitor = g_pCompositor->getMonitorFromCursor();
         auto widget = getWidgetForMonitor(currentMonitor);
         if (widget)
-            if (widget->isActive())
+            if (widget->isActive()) {
                 closeWidgetForCurrentOverviewMode(widget);
+                closedAny = true;
+            }
     }
-    resetApplicationsOverviewMode();
+    if (closedAny)
+        resetApplicationsModeAfterCloseIfNeeded(wasApplicationsMode);
+    else
+        resetApplicationsOverviewMode();
     return SDispatchResult{};
 }
 
@@ -859,8 +942,12 @@ static SDispatchResult dispatchSelectOverview(std::string arg) {
 
     auto currentMonitor = g_pCompositor->getMonitorFromCursor();
     auto widget = getWidgetForMonitor(currentMonitor);
-    if (widget && widget->isActive())
-        widget->selectWorkspaceInOverview(workspaceID);
+    if (widget && widget->isActive()) {
+        if (g_overviewApplicationsMode)
+            widget->hideKeepingWorkspace(workspaceID);
+        else
+            widget->selectWorkspaceInOverview(workspaceID);
+    }
 
     return SDispatchResult{};
 }

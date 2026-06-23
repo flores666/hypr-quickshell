@@ -125,6 +125,12 @@ static double overviewEaseInOutCubic(double value) {
     return 1.0 - (inv * inv * inv) / 2.0;
 }
 
+static double overviewSmoothStep(double edge0, double edge1, double value) {
+    const double range = std::max(0.0001, edge1 - edge0);
+    const double t = overviewClamp01((value - edge0) / range);
+    return t * t * (3.0 - 2.0 * t);
+}
+
 static double overviewLerp(double from, double to, double progress) {
     return from + (to - from) * progress;
 }
@@ -159,6 +165,180 @@ static void renderOverviewBackdrop(PHLMONITOR owner, const CBox& monitorClip, co
             renderRect(fullscreenDim, CHyprColor(0.02, 0.025, 0.032, dimAlpha));
         }
     }
+}
+
+static CBox overviewApplicationCardBox(PHLMONITOR owner, double openProgress) {
+    if (!owner)
+        return CBox{0, 0, 1, 1};
+
+    constexpr double CARD_PHASE_END = 0.48;
+    const double cardProgress = overviewEaseInOutCubic(openProgress / CARD_PHASE_END);
+    const double liftProgress = overviewEaseInOutCubic((openProgress - CARD_PHASE_END) / (1.0 - CARD_PHASE_END));
+
+    const CBox fullDesktopBox = CBox{0, 0, owner->m_transformedSize.x, owner->m_transformedSize.y};
+    const double margin = std::max<double>(8.0, Config::workspaceMargin * owner->m_scale);
+    const double reservedBottom = std::max<double>(0.0, Config::reservedArea * owner->m_scale);
+    const double availableW = owner->m_transformedSize.x;
+    const double availableH = std::max<double>(120.0, owner->m_transformedSize.y - reservedBottom);
+    const double topReservedPixels = overviewTopReservedPixels(owner);
+    const double previewSourceTopInset = std::max<double>(0.0, topReservedPixels - 1.0);
+    const double previewSourceH = std::max<double>(120.0, owner->m_transformedSize.y - previewSourceTopInset);
+    const double centerPreviewScale = std::min<double>(
+        0.64,
+        std::min((availableH - margin * 2.0) / std::max<double>(previewSourceH, 1.0),
+                 (availableW - margin * 2.0) / (std::max<double>(owner->m_transformedSize.x, 1.0) * 1.08)));
+
+    const CBox overviewCardBox = CBox{
+        (availableW - owner->m_transformedSize.x * centerPreviewScale) * 0.5,
+        std::max<double>(margin, (availableH - previewSourceH * centerPreviewScale) * 0.5),
+        owner->m_transformedSize.x * centerPreviewScale,
+        previewSourceH * centerPreviewScale,
+    };
+
+    const double liftDistance = overviewCardBox.y + overviewCardBox.h + std::max<double>(42.0, owner->m_transformedSize.y * 0.08);
+    CBox liftedCardBox = overviewCardBox;
+    liftedCardBox.y -= liftDistance;
+
+    const CBox cardBox = overviewLerpBox(fullDesktopBox, overviewCardBox, cardProgress);
+    return overviewPixelSnappedBox(overviewLerpBox(cardBox, liftedCardBox, liftProgress));
+}
+
+static CBox overviewApplicationsLayerBox(PHLMONITOR owner, double openProgress) {
+    if (!owner)
+        return CBox{0, 0, 1, 1};
+
+    constexpr double CARD_PHASE_END = 0.48;
+    const double liftProgress = overviewEaseInOutCubic((openProgress - CARD_PHASE_END) / (1.0 - CARD_PHASE_END));
+    const double riseOffset = std::max<double>(240.0, owner->m_transformedSize.y * 0.42);
+    const double y = overviewLerp(riseOffset, 0.0, liftProgress);
+
+    return CBox{0, y, owner->m_transformedSize.x, owner->m_transformedSize.y};
+}
+
+static bool applicationsLayerReady(PHLMONITOR owner) {
+    if (!owner)
+        return false;
+
+    for (size_t layerIndex = 0; layerIndex < 4; ++layerIndex) {
+        for (auto& weakLayer : owner->m_layerSurfaceLayers[layerIndex]) {
+            const auto layer = weakLayer.lock();
+            if (!layer)
+                continue;
+            if (layer->m_namespace != "quickshell:applications")
+                continue;
+            if (!layer->m_mapped || layer->m_readyToDelete || !layer->m_layerSurface || !layer->wlSurface() || !layer->wlSurface()->resource())
+                continue;
+
+            const Vector2D layerSize = layer->m_realSize->value() * owner->m_scale;
+            if (!(layerSize.x > 1.0 && layerSize.y > 1.0))
+                continue;
+
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static bool renderApplicationsLayerBelowOverviewCard(PHLMONITOR owner, const CBox& monitorClip, double openProgress) {
+    if (!owner)
+        return false;
+
+    for (size_t layerIndex = 0; layerIndex < 4; ++layerIndex) {
+        for (auto& weakLayer : owner->m_layerSurfaceLayers[layerIndex]) {
+            const auto layer = weakLayer.lock();
+            if (!layer)
+                continue;
+            if (layer->m_namespace != "quickshell:applications")
+                continue;
+            if (!layer->m_mapped || layer->m_readyToDelete || !layer->m_layerSurface || !layer->wlSurface() || !layer->wlSurface()->resource())
+                continue;
+
+            const Vector2D layerSize = layer->m_realSize->value() * owner->m_scale;
+            if (!(layerSize.x > 1.0 && layerSize.y > 1.0))
+                continue;
+
+            const CBox layerBox = overviewApplicationsLayerBox(owner, openProgress);
+            renderLayerSurfaceTextureStub(layer, layerBox, monitorClip, 1.0F);
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static void renderApplicationsDesktopCard(PHLMONITOR owner, PHLWORKSPACE workspace, const CBox& monitorClip, const Time::steady_tp& time, double openProgress) {
+    if (!owner || !workspace)
+        return;
+
+    const CBox workspaceBox = overviewApplicationCardBox(owner, openProgress);
+    if (!overviewBoxesIntersect(workspaceBox, monitorClip))
+        return;
+
+    const double previewScale = workspaceBox.w / std::max<double>(owner->m_transformedSize.x, 1.0);
+    const double monitorScaleForPreview = previewScale * owner->m_scale;
+    const double topReservedPixels = overviewTopReservedPixels(owner);
+    const double previewSourceTopInset = std::max<double>(0.0, topReservedPixels - 1.0) * overviewClamp01(openProgress);
+    const int rounding = static_cast<int>(std::round(overviewWorkspaceRounding(owner) * overviewClamp01(openProgress)));
+    const float fadeProgress = static_cast<float>(overviewSmoothStep(0.62, 1.0, openProgress));
+    const float blurProgress = static_cast<float>(overviewSmoothStep(0.54, 0.92, openProgress));
+    const float alpha = std::clamp(1.0F - fadeProgress, 0.0F, 1.0F);
+    if (alpha <= 0.001F)
+        return;
+
+    std::vector<SOverviewWindowPreview> visibleWindows;
+    for (auto& w : g_pCompositor->m_windows) {
+        if (!w || !w->m_isMapped || !w->m_workspace || w->m_workspace != workspace)
+            continue;
+
+        const double wX = workspaceBox.x + ((w->m_realPosition->value().x - owner->m_position.x) * monitorScaleForPreview);
+        const double wY = workspaceBox.y + ((w->m_realPosition->value().y - owner->m_position.y) * monitorScaleForPreview) - (previewSourceTopInset * previewScale);
+        const double wW = w->m_realSize->value().x * monitorScaleForPreview;
+        const double wH = w->m_realSize->value().y * monitorScaleForPreview;
+        if (!(wW > 1.0 && wH > 1.0))
+            continue;
+
+        const CBox windowBox = CBox{wX, wY, wW, wH};
+        if (!overviewBoxesIntersect(windowBox, workspaceBox))
+            continue;
+
+        const bool coversWorkspace = wX <= workspaceBox.x + 1.0 &&
+            wY <= workspaceBox.y + 1.0 &&
+            wX + wW >= workspaceBox.x + workspaceBox.w - 1.0 &&
+            wY + wH >= workspaceBox.y + workspaceBox.h - 1.0;
+        const bool overlapsWorkspaceCorner = overviewBoxOverlapsWorkspaceCorner(windowBox, workspaceBox, rounding);
+        visibleWindows.push_back({w, windowBox, coversWorkspace, overlapsWorkspaceCorner});
+    }
+
+    renderWorkspacePreviewShadow(owner, workspaceBox, rounding, alpha);
+
+    const bool fullCoverWindowVisible = std::any_of(visibleWindows.begin(), visibleWindows.end(), [](const SOverviewWindowPreview& windowPreview) {
+        return windowPreview.coversWorkspace;
+    });
+
+    if (!fullCoverWindowVisible) {
+        const bool backgroundRendered = renderWorkspaceBackgroundTexture(owner, workspaceBox, workspaceBox, alpha, rounding, 2.0F);
+        CHyprColor tintColor = Config::workspaceActiveBackground;
+        const float tintProgress = static_cast<float>(overviewClamp01(openProgress));
+        tintColor.a = backgroundRendered
+            ? std::max<float>(tintColor.a * alpha * tintProgress, 0.10F * alpha * tintProgress)
+            : std::max<float>(tintColor.a * alpha * tintProgress, 0.22F * alpha * tintProgress);
+        if (tintColor.a > 0.001F)
+            renderRect(workspaceBox, tintColor, rounding, 2.0F);
+    }
+
+    for (const auto& windowPreview : visibleWindows)
+        renderWindowStub(windowPreview.window, owner, workspace, windowPreview.box, workspaceBox, time, alpha, -1, 2.0F);
+
+    if (!Config::disableBlur && blurProgress > 0.001F) {
+        const float blurAlpha = std::clamp(0.46F * blurProgress * std::max(alpha, 0.24F), 0.0F, 0.46F);
+        renderRectWithBlur(workspaceBox, CHyprColor(0.02, 0.025, 0.032, blurAlpha), rounding, 2.0F);
+    }
+
+    if (std::any_of(visibleWindows.begin(), visibleWindows.end(), [](const SOverviewWindowPreview& windowPreview) {
+            return windowPreview.overlapsWorkspaceCorner;
+        }))
+        renderOverviewCornerMask(owner, workspaceBox, alpha, rounding, 0.28F);
 }
 
 static bool isPointerOverInteractiveLayerForOverview(PHLMONITOR pMonitor, const Vector2D& coords) {
@@ -212,11 +392,15 @@ void CHyprspaceWidget::draw() {
     const bool selectionAnimationRunning = isSelectingWorkspace();
     const bool selectionCloseMorphRunning = workspaceSelectionCloseMorphActive();
     const double selectionProgress = selectionAnimationRunning ? workspaceSelectionProgress() : 1.0;
-    const double rawOpenProgress = selectionCloseMorphRunning ? (1.0 - selectionProgress) : overviewOpenProgress();
+    double rawOpenProgress = selectionCloseMorphRunning ? (1.0 - selectionProgress) : overviewOpenProgress();
     if (isClosing() && rawOpenProgress <= 0.001) {
-        finishHide();
-        g_pHyprRenderer->damageMonitor(owner);
-        return;
+        if (holdFinalFrameForCloseNotification()) {
+            rawOpenProgress = 0.0;
+        } else {
+            finishHide();
+            g_pHyprRenderer->damageMonitor(owner);
+            return;
+        }
     }
 
     const bool closingAnimationRunning = isClosing() || selectionCloseMorphRunning;
@@ -574,15 +758,26 @@ void CHyprspaceWidget::drawApplicationsBackground() {
     if (!owner)
         return;
 
+    if (!isClosing() && !applicationsLayerReady(owner)) {
+        overviewAnimationStartedAt = std::chrono::steady_clock::now();
+        g_pHyprRenderer->damageMonitor(owner);
+        g_pCompositor->scheduleFrameForMonitor(owner);
+        return;
+    }
+
     const CBox monitorClip = {{0, 0}, owner->m_transformedSize};
     const auto time = Time::steadyNow();
     const bool selectionCloseMorphRunning = workspaceSelectionCloseMorphActive();
     const double selectionProgress = isSelectingWorkspace() ? workspaceSelectionProgress() : 1.0;
-    const double rawOpenProgress = selectionCloseMorphRunning ? (1.0 - selectionProgress) : overviewOpenProgress();
+    double rawOpenProgress = selectionCloseMorphRunning ? (1.0 - selectionProgress) : overviewOpenProgress();
     if (isClosing() && rawOpenProgress <= 0.001) {
-        finishHide();
-        g_pHyprRenderer->damageMonitor(owner);
-        return;
+        if (holdFinalFrameForCloseNotification()) {
+            rawOpenProgress = 0.0;
+        } else {
+            finishHide();
+            g_pHyprRenderer->damageMonitor(owner);
+            return;
+        }
     }
 
     const bool closingAnimationRunning = isClosing() || selectionCloseMorphRunning;
@@ -594,9 +789,18 @@ void CHyprspaceWidget::drawApplicationsBackground() {
     g_pHyprRenderer->m_renderData.clipBox = monitorClip;
 
     // GNOME Applications is not a popup over workspace previews. It is the
-    // second overview mode: keep the same fullscreen backdrop, but do not draw
-    // workspace thumbnails, window previews, preview shadows or corner masks.
+    // second overview mode. Render the applications layer inside the plugin,
+    // below the shrinking desktop card, so both surfaces animate as one scene.
     renderOverviewBackdrop(owner, monitorClip, time, openProgress, 0.28);
+    renderApplicationsLayerBelowOverviewCard(owner, monitorClip, openProgress);
+
+    const int workspaceID = centeredWorkspaceID > 0
+        ? centeredWorkspaceID
+        : std::max(1, static_cast<int>(owner->activeWorkspaceID()));
+    PHLWORKSPACE workspace = g_pCompositor->getWorkspaceByID(workspaceID);
+    if (!workspace)
+        workspace = owner->m_activeWorkspace;
+    renderApplicationsDesktopCard(owner, workspace, monitorClip, time, openProgress);
 
     if (morphAnimationRunning) {
         g_pHyprRenderer->damageMonitor(owner);

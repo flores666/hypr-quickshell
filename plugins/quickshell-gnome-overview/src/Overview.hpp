@@ -56,6 +56,10 @@ class CHyprspaceWidget {
     bool workspaceSelectionAnimating = false;
     bool closeAfterWorkspaceSelectionAnimation = false;
     bool closeNotifiedForWorkspaceSelection = false;
+    bool closeNotifyPendingForAnimatedHide = false;
+    bool releaseAfterCloseNotification = false;
+    std::chrono::steady_clock::time_point releaseAfterCloseNotificationStartedAt;
+    bool applicationsModeResetPendingForAnimatedHide = false;
     bool applyingWorkspaceActivation = false;
     int workspaceSelectionFromID = 0;
     int workspaceSelectionToID = 0;
@@ -64,7 +68,6 @@ class CHyprspaceWidget {
     double workspaceSelectionProgress() const;
     bool workspaceSelectionCloseMorphActive() const;
     double visualCenterWorkspaceIndex(const std::vector<int>& ids) const;
-    bool isClosing() const;
     bool isSelectingWorkspace() const;
     int maxOccupiedWorkspaceID() const;
     int maxSelectableWorkspaceID() const;
@@ -76,6 +79,7 @@ class CHyprspaceWidget {
     void warpWorkspaceTransitionState(int visibleWorkspaceID);
     void activateWorkspaceForOverview(int targetWorkspaceID);
     void finishHide();
+    bool holdFinalFrameForCloseNotification();
     bool switchOverviewWorkspaceBy(int direction);
     bool startWorkspaceSelectionAnimation(int targetWorkspaceID, bool closeAfterAnimation);
     void finishWorkspaceSelectionAnimation();
@@ -88,8 +92,10 @@ public:
 
     PHLMONITOR getOwner() const;
     bool isActive();
+    bool isClosing() const;
 
     void show();
+    void startApplicationsTransitionFromOverview();
     void hide();
     void hideKeepingWorkspace(int workspaceID);
 
