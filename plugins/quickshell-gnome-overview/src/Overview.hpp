@@ -93,6 +93,7 @@ public:
     PHLMONITOR getOwner() const;
     bool isActive();
     bool isClosing() const;
+    bool isApplyingWorkspaceActivation() const;
 
     void show();
     void startApplicationsTransitionFromOverview();

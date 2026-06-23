@@ -449,13 +449,19 @@ Item {
                 var overviewState = String(event.data || "").trim();
                 if (overviewState === "open") {
                     Services.ShellState.setActiveSpecialWorkspace("");
+                    Services.ShellState.setApplicationsOverviewFromWorkspaceOverview(false);
                     if (Services.ShellState.workspaceOverviewMode !== "applications")
                         Services.ShellState.setWorkspaceOverviewMode("workspaces");
                     Services.ShellState.setWorkspaceOverviewOpen(true);
-                } else if (overviewState === "applications" || overviewState.indexOf("applications:") === 0) {
+                } else if (overviewState === "applications" || overviewState === "applications-from-overview" || overviewState.indexOf("applications:") === 0) {
                     var initialQuery = overviewState.indexOf("applications:") === 0 ? overviewState.substring(13) : "";
+                    var fromWorkspaceOverview = overviewState === "applications-from-overview"
+                            || (overviewState.indexOf("applications:") === 0
+                                && Services.ShellState.workspaceOverviewOpen
+                                && Services.ShellState.workspaceOverviewMode === "workspaces");
                     Services.ShellState.setActiveSpecialWorkspace("");
                     Services.ShellState.setApplicationsOverviewInitialQuery(initialQuery);
+                    Services.ShellState.setApplicationsOverviewFromWorkspaceOverview(fromWorkspaceOverview);
                     Services.ShellState.setWorkspaceOverviewMode("applications");
                     Services.ShellState.setWorkspaceOverviewOpen(true);
                 } else if (overviewState === "close")

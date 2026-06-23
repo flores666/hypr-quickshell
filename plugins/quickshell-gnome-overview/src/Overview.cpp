@@ -715,9 +715,11 @@ void CHyprspaceWidget::hideKeepingWorkspace(int workspaceID) {
     }
 
     applyingWorkspaceActivation = true;
+    suppressWorkspaceTransitionAnimation();
+    warpWorkspaceTransitionState(targetWorkspaceID);
     if (owner->activeWorkspaceID() != targetWorkspaceID)
         activateWorkspaceForOverview(targetWorkspaceID);
-    applyingWorkspaceActivation = false;
+    warpWorkspaceTransitionState(targetWorkspaceID);
 
     g_pHyprRenderer->damageMonitor(owner);
     g_pCompositor->scheduleFrameForMonitor(owner);
@@ -741,6 +743,10 @@ double CHyprspaceWidget::overviewOpenProgress() const {
 
 bool CHyprspaceWidget::isClosing() const {
     return overviewClosing;
+}
+
+bool CHyprspaceWidget::isApplyingWorkspaceActivation() const {
+    return applyingWorkspaceActivation;
 }
 
 bool CHyprspaceWidget::isActive() {

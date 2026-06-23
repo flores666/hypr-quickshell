@@ -90,15 +90,16 @@ QtObject {
     function openApplicationsOverview() {
         closeActiveSpecialWorkspace()
         Services.ShellState.setApplicationsOverviewInitialQuery("")
-        Services.ShellState.setWorkspaceOverviewMode("applications")
-        if (nativeOverviewDispatch("applications"))
+        var returnWorkspace = Math.max(1, Math.floor(Number(Services.ShellState.activeWorkspace || 1)))
+        if (!nativeOverviewDispatch("applications", String(returnWorkspace))) {
+            Services.ShellState.setWorkspaceOverviewMode("applications")
             Services.ShellState.setWorkspaceOverviewOpen(true)
+        }
     }
 
     function toggleApplicationsOverview() {
         if (Services.ShellState.workspaceOverviewOpen && Services.ShellState.workspaceOverviewMode === "applications") {
-            Services.ShellState.setWorkspaceOverviewMode("workspaces")
-            nativeOverviewDispatch("open")
+            closeWorkspaceOverview()
             return
         }
 

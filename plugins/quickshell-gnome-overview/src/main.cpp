@@ -487,6 +487,9 @@ void onWorkspaceChange(PHLWORKSPACE pWorkspace) {
 
     auto widget = getWidgetForMonitor(g_pCompositor->getMonitorFromID(pWorkspace->m_monitor->m_id));
     if (widget != nullptr && widget->isActive()) {
+        if (widget->isApplyingWorkspaceActivation())
+            return;
+
         if (g_overviewApplicationsMode) {
             widget->hideKeepingWorkspace(static_cast<int>(pWorkspace->m_id));
             return;
