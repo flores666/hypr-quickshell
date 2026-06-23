@@ -108,10 +108,32 @@ static std::chrono::steady_clock::time_point g_mainModLastAxisSwitch = std::chro
 static constexpr auto MAIN_MOD_AXIS_SWITCH_MIN_INTERVAL = std::chrono::milliseconds(120);
 static bool g_overviewApplicationsMode = false;
 static int g_overviewApplicationsOriginWorkspaceID = 0;
+static int g_overviewPointerRefreshFrames = 0;
+static std::chrono::steady_clock::time_point g_mainModLastSafeRelease = std::chrono::steady_clock::now() - std::chrono::seconds(2);
+static constexpr auto MAIN_MOD_DOUBLE_PRESS_INTERVAL = std::chrono::milliseconds(360);
+
+static bool isAnyOverviewActive();
 
 static void notifyQuickshellOverviewState(const std::string& state) {
     if (g_pEventManager)
         g_pEventManager->postEvent(SHyprIPCEvent{"quickshelloverview", state});
+}
+
+static void queueOverviewPointerRefresh(int frames = 4) {
+    g_overviewPointerRefreshFrames = std::max(g_overviewPointerRefreshFrames, frames);
+}
+
+static void refreshOverviewPointerFocusIfQueued() {
+    if (g_overviewPointerRefreshFrames <= 0)
+        return;
+    if (!isAnyOverviewActive()) {
+        g_overviewPointerRefreshFrames = 0;
+        return;
+    }
+
+    --g_overviewPointerRefreshFrames;
+    g_pInputManager->refocus();
+    g_pInputManager->simulateMouseMovement();
 }
 
 static int activeWorkspaceIDForMonitor(PHLMONITORREF monitor) {
@@ -149,6 +171,21 @@ static void closeWidgetForCurrentOverviewMode(const std::shared_ptr<CHyprspaceWi
 static void resetApplicationsOverviewMode() {
     g_overviewApplicationsMode = false;
     g_overviewApplicationsOriginWorkspaceID = 0;
+}
+
+static void showWorkspaceOverviewFromApplications(const std::shared_ptr<CHyprspaceWidget>& widget) {
+    if (!widget || !widget->isActive())
+        return;
+
+    resetApplicationsOverviewMode();
+    notifyQuickshellOverviewState("open");
+    queueOverviewPointerRefresh();
+
+    const auto owner = widget->getOwner();
+    if (owner) {
+        g_pHyprRenderer->damageMonitor(owner);
+        g_pCompositor->scheduleFrameForMonitor(owner);
+    }
 }
 
 std::function<void()> overviewAnimatedHideFinishedCallback = []() {
@@ -325,12 +362,18 @@ static void toggleOverviewForCurrentMonitor() {
         return;
 
     if (widget->isActive()) {
+        if (g_overviewApplicationsMode) {
+            showWorkspaceOverviewFromApplications(widget);
+            return;
+        }
+
         const bool wasApplicationsMode = g_overviewApplicationsMode;
         closeWidgetForCurrentOverviewMode(widget);
         resetApplicationsModeAfterCloseIfNeeded(wasApplicationsMode);
     } else {
         resetApplicationsOverviewMode();
         widget->show();
+        queueOverviewPointerRefresh();
     }
 }
 
@@ -341,6 +384,7 @@ static void openOverviewForMonitor(PHLMONITORREF monitor) {
 
     resetApplicationsOverviewMode();
     widget->show();
+    queueOverviewPointerRefresh();
 }
 
 static bool isPointInHotCorner(PHLMONITORREF monitor, const Vector2D& coords) {
@@ -461,6 +505,8 @@ static bool isConfiguredMainMod(xkb_keysym_t keysym) {
 
 void onRender(eRenderStage renderStage) {
     if (renderStage == eRenderStage::RENDER_PRE) {
+        refreshOverviewPointerFocusIfQueued();
+
         if (g_layoutNeedsRefresh) {
             refreshWidgets();
             g_layoutNeedsRefresh = false;
@@ -631,6 +677,22 @@ void onSwipeEnd(const IPointer::SSwipeEndEvent& event, SCallbackInfo& info) {
         info.cancelled = true;
 }
 
+static bool startApplicationsFromActiveOverview(const std::string& initialQuery = "") {
+    if (g_overviewApplicationsMode)
+        return false;
+
+    const auto widget = getActiveWidgetForMonitor(g_pCompositor->getMonitorFromCursor());
+    if (!widget)
+        return false;
+
+    g_overviewApplicationsMode = true;
+    g_overviewApplicationsOriginWorkspaceID = activeWorkspaceIDFromCursor();
+    widget->startApplicationsTransitionFromOverview();
+    notifyQuickshellOverviewState(initialQuery.empty() ? "applications-from-overview" : "applications:" + initialQuery);
+    queueOverviewPointerRefresh();
+    return true;
+}
+
 // Close overview with configurable key and implement safe GNOME-like mainMod toggle.
 void onKeyPress(const IKeyboard::SKeyEvent& event, SCallbackInfo& info) {
     const SP<IKeyboard> keyboard = g_pSeatManager->m_keyboard.lock();
@@ -648,13 +710,10 @@ void onKeyPress(const IKeyboard::SKeyEvent& event, SCallbackInfo& info) {
             xkb_keysym_to_utf8(keysym, searchText, sizeof(searchText));
             const std::string initialQuery = searchText;
             if (!initialQuery.empty() && static_cast<unsigned char>(initialQuery[0]) >= 0x20) {
-                g_overviewApplicationsMode = true;
-                g_overviewApplicationsOriginWorkspaceID = activeWorkspaceIDFromCursor();
-                if (const auto widget = getActiveWidgetForMonitor(g_pCompositor->getMonitorFromCursor()))
-                    widget->startApplicationsTransitionFromOverview();
-                notifyQuickshellOverviewState("applications:" + initialQuery);
-                info.cancelled = true;
-                return;
+                if (startApplicationsFromActiveOverview(initialQuery)) {
+                    info.cancelled = true;
+                    return;
+                }
             }
         }
 
@@ -700,7 +759,19 @@ void onKeyPress(const IKeyboard::SKeyEvent& event, SCallbackInfo& info) {
             g_mainModAxisAccumulator = 0.0;
 
             if (safeSinglePress) {
-                toggleOverviewForCurrentMonitor();
+                const auto now = std::chrono::steady_clock::now();
+                const bool doubleMainModPress = now - g_mainModLastSafeRelease <= MAIN_MOD_DOUBLE_PRESS_INTERVAL;
+
+                if (g_overviewApplicationsMode && isAnyOverviewActive()) {
+                    if (const auto widget = getActiveWidgetForMonitor(g_pCompositor->getMonitorFromCursor()))
+                        showWorkspaceOverviewFromApplications(widget);
+                } else if (doubleMainModPress && isAnyOverviewActive() && !g_overviewApplicationsMode) {
+                    startApplicationsFromActiveOverview();
+                } else {
+                    toggleOverviewForCurrentMonitor();
+                }
+
+                g_mainModLastSafeRelease = now;
                 info.cancelled = true;
             } else if (isAnyOverviewActive()) {
                 info.cancelled = true;
@@ -711,8 +782,6 @@ void onKeyPress(const IKeyboard::SKeyEvent& event, SCallbackInfo& info) {
         // Any other key while mainMod is held means it was a shortcut or layout switch.
         // Do not open overview on mainMod release.
         g_mainModCancelled = true;
-        if (isAnyOverviewActive())
-            info.cancelled = true;
     }
 
     auto* pExitKeyCfg = HyprlandAPI::getConfigValue(pHandle, "plugin:overview:exitKey");
@@ -742,7 +811,7 @@ void onKeyPress(const IKeyboard::SKeyEvent& event, SCallbackInfo& info) {
     // While live overview is visible, do not let text input fall through to the
     // focused client underneath. This still keeps the explicit overview shortcuts
     // above working, but normal typing no longer edits the hidden application.
-    if (isAnyOverviewActive() && !g_overviewApplicationsMode)
+    if (isAnyOverviewActive() && !g_overviewApplicationsMode && !g_mainModDown)
         info.cancelled = true;
 }
 
@@ -810,6 +879,7 @@ static SDispatchResult dispatchToggleOverview(std::string arg) {
                         if (!widget->isActive())
                             widget->show();
                 }
+                queueOverviewPointerRefresh();
             }
         }
         else if (widget->isActive()) {
@@ -819,6 +889,7 @@ static SDispatchResult dispatchToggleOverview(std::string arg) {
         } else {
             resetApplicationsOverviewMode();
             widget->show();
+            queueOverviewPointerRefresh();
         }
     }
     return SDispatchResult{};
@@ -852,8 +923,10 @@ static SDispatchResult dispatchOpenOverview(std::string arg) {
             }
         }
     }
-    if (opened)
+    if (opened) {
         notifyQuickshellOverviewState("open");
+        queueOverviewPointerRefresh();
+    }
     return SDispatchResult{};
 }
 
@@ -908,6 +981,7 @@ static SDispatchResult dispatchApplicationsOverview(std::string arg) {
         g_overviewApplicationsOriginWorkspaceID = activeWorkspaceIDFromCursor();
 
     notifyQuickshellOverviewState(fromActiveOverview ? "applications-from-overview" : "applications");
+    queueOverviewPointerRefresh();
     return SDispatchResult{};
 }
 
@@ -1124,8 +1198,16 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE inHandle) {
     g_pRenderHook = Event::bus()->m_events.render.stage.listen([](eRenderStage stage) { onRender(stage); });
 
     // refresh on layer change
-    g_pOpenLayerHook = Event::bus()->m_events.layer.opened.listen([](PHLLS) { g_layoutNeedsRefresh = true; });
-    g_pCloseLayerHook = Event::bus()->m_events.layer.closed.listen([](PHLLS) { g_layoutNeedsRefresh = true; });
+    g_pOpenLayerHook = Event::bus()->m_events.layer.opened.listen([](PHLLS layer) {
+        g_layoutNeedsRefresh = true;
+        if (layer && isAnyOverviewActive() && isQuickshellLayerNamespace(layer->m_namespace))
+            queueOverviewPointerRefresh(6);
+    });
+    g_pCloseLayerHook = Event::bus()->m_events.layer.closed.listen([](PHLLS layer) {
+        g_layoutNeedsRefresh = true;
+        if (layer && isAnyOverviewActive() && isQuickshellLayerNamespace(layer->m_namespace))
+            queueOverviewPointerRefresh(3);
+    });
 
 
     g_pMouseMoveHook = listenCancellable<Vector2D>(Event::bus()->m_events.input.mouse.move, onMouseMove);

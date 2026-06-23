@@ -537,7 +537,7 @@ void CHyprspaceWidget::startApplicationsTransitionFromOverview() {
     }
 
     constexpr double OVERVIEW_OPEN_ANIMATION_SECONDS = 0.24;
-    constexpr double APPLICATIONS_START_RAW_PROGRESS = 0.24;
+    constexpr double APPLICATIONS_START_RAW_PROGRESS = 0.48;
 
     closeOwnerSpecialWorkspace();
     suppressWorkspaceTransitionAnimation();

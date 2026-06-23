@@ -259,11 +259,6 @@ static bool renderApplicationsLayerBelowOverviewCard(PHLMONITOR owner, const CBo
                 continue;
 
             const CBox layerBox = overviewApplicationsLayerBox(owner, openProgress);
-            if (!Config::disableBlur) {
-                const float panelBlurAlpha = static_cast<float>(std::clamp(0.32 * overviewSmoothStep(0.0, 0.72, openProgress), 0.0, 0.32));
-                if (panelBlurAlpha > 0.001F)
-                    renderRectWithBlur(layerBox, CHyprColor(0.02, 0.025, 0.032, panelBlurAlpha));
-            }
             renderLayerSurfaceTextureStub(layer, layerBox, monitorClip, 1.0F);
             return true;
         }
