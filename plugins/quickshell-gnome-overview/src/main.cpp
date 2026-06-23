@@ -177,19 +177,17 @@ static void showWorkspaceOverviewFromApplications(const std::shared_ptr<CHyprspa
     if (!widget || !widget->isActive())
         return;
 
-    resetApplicationsOverviewMode();
-    notifyQuickshellOverviewState("open");
-    queueOverviewPointerRefresh();
-
-    const auto owner = widget->getOwner();
-    if (owner) {
-        g_pHyprRenderer->damageMonitor(owner);
-        g_pCompositor->scheduleFrameForMonitor(owner);
-    }
+    widget->startApplicationsReturnToOverview();
 }
 
 std::function<void()> overviewAnimatedHideFinishedCallback = []() {
     resetApplicationsOverviewMode();
+};
+
+std::function<void()> applicationsReturnToOverviewFinishedCallback = []() {
+    resetApplicationsOverviewMode();
+    notifyQuickshellOverviewState("open");
+    queueOverviewPointerRefresh();
 };
 
 static void resetApplicationsModeAfterCloseIfNeeded(bool wasApplicationsMode) {

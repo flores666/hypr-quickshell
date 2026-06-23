@@ -60,6 +60,10 @@ class CHyprspaceWidget {
     bool releaseAfterCloseNotification = false;
     std::chrono::steady_clock::time_point releaseAfterCloseNotificationStartedAt;
     bool applicationsModeResetPendingForAnimatedHide = false;
+    bool applicationsTransitionStartedFromOverview = false;
+    bool applicationsLayerReadyForTransition = false;
+    bool applicationsReturningToOverview = false;
+    std::chrono::steady_clock::time_point applicationsReturnStartedAt;
     bool applyingWorkspaceActivation = false;
     int workspaceSelectionFromID = 0;
     int workspaceSelectionToID = 0;
@@ -83,6 +87,7 @@ class CHyprspaceWidget {
     bool switchOverviewWorkspaceBy(int direction);
     bool startWorkspaceSelectionAnimation(int targetWorkspaceID, bool closeAfterAnimation);
     void finishWorkspaceSelectionAnimation();
+    double applicationsReturnProgress() const;
     void setOverviewCursor();
 
 public:
@@ -97,6 +102,7 @@ public:
 
     void show();
     void startApplicationsTransitionFromOverview();
+    void startApplicationsReturnToOverview();
     void hide();
     void hideKeepingWorkspace(int workspaceID);
 

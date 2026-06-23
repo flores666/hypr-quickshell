@@ -23,6 +23,9 @@ CHyprspaceWidget::CHyprspaceWidget(uint64_t inOwnerID) {
     closeNotifyPendingForAnimatedHide = false;
     releaseAfterCloseNotification = false;
     applicationsModeResetPendingForAnimatedHide = false;
+    applicationsTransitionStartedFromOverview = false;
+    applicationsLayerReadyForTransition = false;
+    applicationsReturningToOverview = false;
     applyingWorkspaceActivation = false;
     workspaceSelectionFromID = 0;
     workspaceSelectionToID = 0;
@@ -499,6 +502,9 @@ void CHyprspaceWidget::show() {
     closeNotifyPendingForAnimatedHide = false;
     releaseAfterCloseNotification = false;
     applicationsModeResetPendingForAnimatedHide = false;
+    applicationsTransitionStartedFromOverview = false;
+    applicationsLayerReadyForTransition = false;
+    applicationsReturningToOverview = false;
     applyingWorkspaceActivation = false;
     workspaceSelectionFromID = 0;
     workspaceSelectionToID = 0;
@@ -532,12 +538,14 @@ void CHyprspaceWidget::startApplicationsTransitionFromOverview() {
         return;
 
     if (!active) {
+        applicationsTransitionStartedFromOverview = false;
+        applicationsLayerReadyForTransition = false;
         show();
         return;
     }
 
     constexpr double OVERVIEW_OPEN_ANIMATION_SECONDS = 0.24;
-    constexpr double APPLICATIONS_START_RAW_PROGRESS = 0.48;
+    constexpr double APPLICATIONS_PREVIEW_RAW_PROGRESS = 0.19585484828218835;
 
     closeOwnerSpecialWorkspace();
     suppressWorkspaceTransitionAnimation();
@@ -549,6 +557,9 @@ void CHyprspaceWidget::startApplicationsTransitionFromOverview() {
     closeNotifyPendingForAnimatedHide = false;
     releaseAfterCloseNotification = false;
     applicationsModeResetPendingForAnimatedHide = false;
+    applicationsTransitionStartedFromOverview = true;
+    applicationsLayerReadyForTransition = false;
+    applicationsReturningToOverview = false;
     applyingWorkspaceActivation = false;
     workspaceSelectionFromID = 0;
     workspaceSelectionToID = 0;
@@ -560,7 +571,50 @@ void CHyprspaceWidget::startApplicationsTransitionFromOverview() {
 
     overviewAnimationStarted = true;
     overviewAnimationStartedAt = std::chrono::steady_clock::now() - std::chrono::duration_cast<std::chrono::steady_clock::duration>(
-        std::chrono::duration<double>(OVERVIEW_OPEN_ANIMATION_SECONDS * APPLICATIONS_START_RAW_PROGRESS));
+        std::chrono::duration<double>(OVERVIEW_OPEN_ANIMATION_SECONDS * APPLICATIONS_PREVIEW_RAW_PROGRESS));
+
+    setOverviewCursor();
+    g_pHyprRenderer->damageMonitor(owner);
+    g_pCompositor->scheduleFrameForMonitor(owner);
+}
+
+double CHyprspaceWidget::applicationsReturnProgress() const {
+    if (!applicationsReturningToOverview)
+        return 1.0;
+
+    constexpr double APPLICATIONS_RETURN_SECONDS = 0.28;
+    const double elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - applicationsReturnStartedAt).count();
+    return std::clamp(elapsed / APPLICATIONS_RETURN_SECONDS, 0.0, 1.0);
+}
+
+void CHyprspaceWidget::startApplicationsReturnToOverview() {
+    auto owner = getOwner();
+    if (!owner || !active)
+        return;
+
+    closeOwnerSpecialWorkspace();
+    suppressWorkspaceTransitionAnimation();
+
+    overviewClosing = false;
+    workspaceSelectionAnimating = false;
+    closeAfterWorkspaceSelectionAnimation = false;
+    closeNotifiedForWorkspaceSelection = false;
+    closeNotifyPendingForAnimatedHide = false;
+    releaseAfterCloseNotification = false;
+    applicationsModeResetPendingForAnimatedHide = false;
+    applicationsTransitionStartedFromOverview = true;
+    applicationsLayerReadyForTransition = true;
+    applicationsReturningToOverview = true;
+    applicationsReturnStartedAt = std::chrono::steady_clock::now();
+    applyingWorkspaceActivation = false;
+    workspaceSelectionFromID = 0;
+    workspaceSelectionToID = 0;
+    if (centeredWorkspaceID <= 0)
+        centeredWorkspaceID = std::max(1, static_cast<int>(owner->activeWorkspaceID()));
+    workspaceScrollAccumulator = 0.0;
+    workspaceHoverProgress.clear();
+    lastWorkspaceHoverFrameValid = false;
+    overviewAnimationStarted = true;
 
     setOverviewCursor();
     g_pHyprRenderer->damageMonitor(owner);
@@ -579,6 +633,9 @@ void CHyprspaceWidget::finishHide() {
     closeNotifyPendingForAnimatedHide = false;
     releaseAfterCloseNotification = false;
     applicationsModeResetPendingForAnimatedHide = false;
+    applicationsTransitionStartedFromOverview = false;
+    applicationsLayerReadyForTransition = false;
+    applicationsReturningToOverview = false;
     applyingWorkspaceActivation = false;
     workspaceSelectionFromID = 0;
     workspaceSelectionToID = 0;
@@ -703,6 +760,7 @@ void CHyprspaceWidget::hideKeepingWorkspace(int workspaceID) {
     applicationsModeResetPendingForAnimatedHide = true;
     workspaceSelectionFromID = 0;
     workspaceSelectionToID = 0;
+    applicationsReturningToOverview = false;
     centeredWorkspaceID = targetWorkspaceID;
 
     if (!overviewClosing) {
