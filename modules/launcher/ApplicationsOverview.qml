@@ -19,13 +19,15 @@ Scope {
     readonly property real horizontalMargin: Math.max(52, Math.round(visualWindow.width * 0.08))
     readonly property real applicationsRiseProgress: smoothStep(desktopCardPhaseEnd, 1.0, animationProgress)
     readonly property bool renderActive: overviewActive || closingVisualActive || animationProgress > 0.001
-    readonly property bool inputVisualsActive: false
+    readonly property bool inputVisualsActive: inputActive
     property real animationProgress: 0
     property bool animationBehaviorEnabled: true
     property bool closingVisualActive: false
+    property bool suppressGridContentYUpdates: false
     property string query: ""
     property string hoveredAppKey: ""
     property var filteredApps: []
+    property real gridContentY: 0
 
     function clamp01(value) {
         return Math.max(0, Math.min(1, Number(value || 0)));
@@ -85,20 +87,54 @@ Scope {
         Services.ShellActions.closeWorkspaceOverview();
     }
 
+    function setGridContentY(value) {
+        if (suppressGridContentYUpdates)
+            return;
+
+        var next = Math.max(0, Number(value || 0));
+        if (Math.abs(gridContentY - next) > 0.5)
+            gridContentY = next;
+    }
+
+    function applyGridContentY(value) {
+        var next = Math.max(0, Number(value || 0));
+        if (visualContent && visualContent.gridView)
+            visualContent.gridView.contentY = next;
+        if (inputContent && inputContent.gridView)
+            inputContent.gridView.contentY = next;
+    }
+
+    function resetGridContentY() {
+        suppressGridContentYUpdates = true;
+        gridContentY = 0;
+        applyGridContentY(0);
+        Qt.callLater(function() {
+            root.applyGridContentY(0);
+            root.suppressGridContentYUpdates = false;
+        });
+    }
+
     function startOpenAnimation() {
         closeAnimationKickTimer.stop();
         closeCleanupTimer.stop();
         closingVisualActive = false;
+        resetGridContentY();
         animationBehaviorEnabled = false;
         animationProgress = Services.ShellState.applicationsOverviewFromWorkspaceOverview ? desktopCardPhaseEnd + 0.04 : 0;
         animationBehaviorEnabled = true;
         animationKickTimer.restart();
+        Qt.callLater(function() {
+            if (root.overviewActive && !root.closingVisualActive)
+                root.resetGridContentY();
+        });
     }
 
     function startCloseAnimation() {
         animationKickTimer.stop();
         closeCleanupTimer.stop();
         hoveredAppKey = "";
+        suppressGridContentYUpdates = false;
+        setGridContentY(inputContent.gridView.contentY);
         closingVisualActive = true;
         animationBehaviorEnabled = false;
         animationProgress = clamp01(animationProgress);
@@ -114,7 +150,7 @@ Scope {
         query = "";
         hoveredAppKey = "";
         filteredApps = [];
-        inputContent.gridView.contentY = 0;
+        resetGridContentY();
     }
 
     onOverviewActiveChanged: {
@@ -139,9 +175,11 @@ Scope {
 
     onInputActiveChanged: {
         if (inputActive) {
+            resetGridContentY();
             Qt.callLater(function() {
                 if (!root.inputActive)
                     return;
+                root.resetGridContentY();
                 inputContent.searchField.forceActiveFocus();
                 inputContent.searchField.cursorPosition = inputContent.searchField.text.length;
             });
@@ -239,11 +277,11 @@ Scope {
         ApplicationsContent {
             id: visualContent
             anchors.fill: parent
-            opacity: 1
+            opacity: root.inputVisualsActive ? 0 : 1
             interactive: false
             showVisuals: true
             gridModel: root.visualLayerActive ? root.filteredApps : []
-            externalContentY: inputContent.gridView.contentY
+            externalContentY: root.gridContentY
             windowHeight: visualWindow.height
             riseProgress: root.applicationsRiseProgress
             horizontalMargin: root.horizontalMargin
@@ -269,7 +307,7 @@ Scope {
         surfaceFormat.opaque: false
 
         WlrLayershell.namespace: "quickshell:applications-input"
-        WlrLayershell.layer: WlrLayer.Top
+        WlrLayershell.layer: WlrLayer.Overlay
         exclusiveZone: 0
         exclusionMode: ExclusionMode.Ignore
 
@@ -293,13 +331,15 @@ Scope {
             id: inputContent
             anchors.fill: parent
             interactive: root.inputActive
-            showVisuals: false
+            showVisuals: root.inputVisualsActive
             gridModel: root.renderActive ? root.filteredApps : []
             windowHeight: inputWindow.height
             riseProgress: root.applicationsRiseProgress
             horizontalMargin: root.horizontalMargin
+            externalContentY: root.gridContentY
             queryText: root.query
             hoveredAppKey: root.hoveredAppKey
+            onContentYEdited: function(value) { root.setGridContentY(value); }
             onQueryEdited: function(text) { root.query = text; }
             onAppHovered: function(appKey) { root.hoveredAppKey = appKey; }
             onAppUnhovered: function(appKey) {
@@ -329,6 +369,7 @@ Scope {
         signal appHovered(string appKey)
         signal appUnhovered(string appKey)
         signal appLaunched(var app)
+        signal contentYEdited(real value)
 
         Item {
             anchors.fill: parent
@@ -376,6 +417,11 @@ Scope {
                         property: "contentY"
                         value: content.externalContentY
                         when: !content.interactive
+                    }
+
+                    onContentYChanged: {
+                        if (content.interactive)
+                            content.contentYEdited(contentY);
                     }
 
                     delegate: ApplicationTile {
