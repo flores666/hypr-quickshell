@@ -25,6 +25,7 @@ CHyprspaceWidget::CHyprspaceWidget(uint64_t inOwnerID) {
     applicationsModeResetPendingForAnimatedHide = false;
     applicationsTransitionStartedFromOverview = false;
     applicationsLayerReadyForTransition = false;
+    applicationsLayerHiddenForClose = false;
     applicationsReturningToOverview = false;
     applyingWorkspaceActivation = false;
     workspaceSelectionFromID = 0;
@@ -504,6 +505,7 @@ void CHyprspaceWidget::show() {
     applicationsModeResetPendingForAnimatedHide = false;
     applicationsTransitionStartedFromOverview = false;
     applicationsLayerReadyForTransition = false;
+    applicationsLayerHiddenForClose = false;
     applicationsReturningToOverview = false;
     applyingWorkspaceActivation = false;
     workspaceSelectionFromID = 0;
@@ -540,6 +542,7 @@ void CHyprspaceWidget::startApplicationsTransitionFromOverview() {
     if (!active) {
         applicationsTransitionStartedFromOverview = false;
         applicationsLayerReadyForTransition = false;
+        applicationsLayerHiddenForClose = false;
         show();
         return;
     }
@@ -559,6 +562,7 @@ void CHyprspaceWidget::startApplicationsTransitionFromOverview() {
     applicationsModeResetPendingForAnimatedHide = false;
     applicationsTransitionStartedFromOverview = true;
     applicationsLayerReadyForTransition = false;
+    applicationsLayerHiddenForClose = false;
     applicationsReturningToOverview = false;
     applyingWorkspaceActivation = false;
     workspaceSelectionFromID = 0;
@@ -582,7 +586,7 @@ double CHyprspaceWidget::applicationsReturnProgress() const {
     if (!applicationsReturningToOverview)
         return 1.0;
 
-    constexpr double APPLICATIONS_RETURN_SECONDS = 0.28;
+    constexpr double APPLICATIONS_RETURN_SECONDS = 0.22;
     const double elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - applicationsReturnStartedAt).count();
     return std::clamp(elapsed / APPLICATIONS_RETURN_SECONDS, 0.0, 1.0);
 }
@@ -604,8 +608,10 @@ void CHyprspaceWidget::startApplicationsReturnToOverview() {
     applicationsModeResetPendingForAnimatedHide = false;
     applicationsTransitionStartedFromOverview = true;
     applicationsLayerReadyForTransition = true;
+    applicationsLayerHiddenForClose = false;
     applicationsReturningToOverview = true;
     applicationsReturnStartedAt = std::chrono::steady_clock::now();
+    notifyQuickshellOverviewState("applications-closing");
     applyingWorkspaceActivation = false;
     workspaceSelectionFromID = 0;
     workspaceSelectionToID = 0;
@@ -635,6 +641,7 @@ void CHyprspaceWidget::finishHide() {
     applicationsModeResetPendingForAnimatedHide = false;
     applicationsTransitionStartedFromOverview = false;
     applicationsLayerReadyForTransition = false;
+    applicationsLayerHiddenForClose = false;
     applicationsReturningToOverview = false;
     applyingWorkspaceActivation = false;
     workspaceSelectionFromID = 0;
@@ -761,6 +768,7 @@ void CHyprspaceWidget::hideKeepingWorkspace(int workspaceID) {
     workspaceSelectionFromID = 0;
     workspaceSelectionToID = 0;
     applicationsReturningToOverview = false;
+    applicationsLayerHiddenForClose = false;
     centeredWorkspaceID = targetWorkspaceID;
 
     if (!overviewClosing) {
@@ -770,6 +778,7 @@ void CHyprspaceWidget::hideKeepingWorkspace(int workspaceID) {
         workspaceHoverProgress.clear();
         lastWorkspaceHoverFrameValid = false;
         workspaceScrollAccumulator = 0.0;
+        notifyQuickshellOverviewState("applications-closing");
     }
 
     applyingWorkspaceActivation = true;

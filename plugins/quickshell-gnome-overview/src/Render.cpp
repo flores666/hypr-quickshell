@@ -3,6 +3,7 @@
 #include "OverviewCornerMask.hpp"
 #include "OverviewRenderHelpers.hpp"
 #include "OverviewShadow.hpp"
+#include <hyprland/src/managers/EventManager.hpp>
 #include <algorithm>
 #include <cmath>
 #include <functional>
@@ -14,6 +15,10 @@
 
 extern std::function<void()> applicationsReturnToOverviewFinishedCallback;
 
+static void notifyQuickshellApplicationsLayerHidden() {
+    if (g_pEventManager)
+        g_pEventManager->postEvent(SHyprIPCEvent{"quickshelloverview", "applications-layer-hidden"});
+}
 
 static bool isQuickshellLayerNamespaceForOverview(const std::string& ns) {
     return ns.starts_with("quickshell") || ns.starts_with("quickshell:");
@@ -965,6 +970,13 @@ void CHyprspaceWidget::drawApplicationsBackground() {
     const double openProgress = closingAnimationRunning
         ? overviewEaseInOutCubic(rawOpenProgress)
         : overviewEaseOutCubic(rawOpenProgress);
+
+    constexpr double CARD_PHASE_END = 0.48;
+    const bool leavingApplicationsMode = isClosing() || applicationsReturningToOverview;
+    if (leavingApplicationsMode && !applicationsLayerHiddenForClose && openProgress <= CARD_PHASE_END) {
+        applicationsLayerHiddenForClose = true;
+        notifyQuickshellApplicationsLayerHidden();
+    }
 
     g_pHyprRenderer->m_renderData.clipBox = monitorClip;
 

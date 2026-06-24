@@ -7,14 +7,19 @@ import "../../services" as Services
 Scope {
     id: root
 
-    readonly property bool opened: Services.ShellState.workspaceOverviewOpen && Services.ShellState.workspaceOverviewMode === "applications"
+    readonly property bool overviewActive: Services.ShellState.workspaceOverviewOpen && Services.ShellState.workspaceOverviewMode === "applications"
+    readonly property bool closeRequested: Services.ShellState.applicationsOverviewClosing
+    readonly property bool inputActive: overviewActive && !closeRequested && !closingVisualActive
+    readonly property bool visualLayerActive: renderActive && !Services.ShellState.applicationsOverviewVisualLayerHidden
     readonly property int inputTopMargin: 56
     readonly property int inputBottomMargin: 116
     readonly property real desktopCardPhaseEnd: 0.48
+    readonly property int closeAnimationDuration: 220
+    readonly property int closeCleanupDelay: closeAnimationDuration
     readonly property real horizontalMargin: Math.max(52, Math.round(visualWindow.width * 0.08))
     readonly property real applicationsRiseProgress: smoothStep(desktopCardPhaseEnd, 1.0, animationProgress)
-    readonly property bool renderActive: opened || closingVisualActive || animationProgress > 0.001
-    readonly property bool inputVisualsActive: opened && animationProgress >= 0.995
+    readonly property bool renderActive: overviewActive || closingVisualActive || animationProgress > 0.001
+    readonly property bool inputVisualsActive: inputActive && animationProgress >= 0.995
     property real animationProgress: 0
     property bool animationBehaviorEnabled: true
     property bool closingVisualActive: false
@@ -81,6 +86,7 @@ Scope {
     }
 
     function startOpenAnimation() {
+        closeAnimationKickTimer.stop();
         closeCleanupTimer.stop();
         closingVisualActive = false;
         animationBehaviorEnabled = false;
@@ -89,8 +95,18 @@ Scope {
         animationKickTimer.restart();
     }
 
+    function startCloseAnimation() {
+        animationKickTimer.stop();
+        closeCleanupTimer.stop();
+        closingVisualActive = true;
+        animationBehaviorEnabled = false;
+        animationProgress = clamp01(animationProgress);
+        animationBehaviorEnabled = true;
+        closeAnimationKickTimer.restart();
+    }
+
     function finishCloseAnimation() {
-        if (opened)
+        if (overviewActive || closeRequested)
             return;
 
         closingVisualActive = false;
@@ -100,8 +116,8 @@ Scope {
         inputContent.gridView.contentY = 0;
     }
 
-    onOpenedChanged: {
-        if (opened) {
+    onOverviewActiveChanged: {
+        if (overviewActive) {
             query = Services.ShellState.applicationsOverviewInitialQuery;
             Services.ShellState.setApplicationsOverviewInitialQuery("");
             if (!Services.AppPanelService.ready)
@@ -113,22 +129,37 @@ Scope {
                 inputContent.searchField.cursorPosition = inputContent.searchField.text.length;
             });
         } else {
-            animationKickTimer.stop();
-            closingVisualActive = true;
-            animationBehaviorEnabled = true;
+            if (closingVisualActive) {
+                if (animationProgress <= 0.001)
+                    finishCloseAnimation();
+                else
+                    closeCleanupTimer.restart();
+            } else {
+                startCloseAnimation();
+            }
+        }
+    }
+
+    onCloseRequestedChanged: {
+        if (closeRequested && overviewActive) {
+            startCloseAnimation();
+        } else if (!overviewActive && closingVisualActive) {
+            closeAnimationKickTimer.stop();
+            closeCleanupTimer.stop();
+            animationBehaviorEnabled = false;
             animationProgress = 0;
-            closeCleanupTimer.restart();
+            finishCloseAnimation();
         }
     }
 
     onQueryChanged: {
-        if (opened)
+        if (overviewActive && !closingVisualActive)
             rebuildFilteredApps();
     }
 
     Behavior on animationProgress {
         enabled: root.animationBehaviorEnabled
-        NumberAnimation { duration: root.opened ? 360 : 240; easing.type: Easing.OutCubic }
+        NumberAnimation { duration: root.closingVisualActive || root.closeRequested ? root.closeAnimationDuration : 360; easing.type: Easing.OutCubic }
     }
 
     Timer {
@@ -139,8 +170,18 @@ Scope {
     }
 
     Timer {
+        id: closeAnimationKickTimer
+        interval: 0
+        repeat: false
+        onTriggered: {
+            root.animationProgress = 0;
+            closeCleanupTimer.restart();
+        }
+    }
+
+    Timer {
         id: closeCleanupTimer
-        interval: 260
+        interval: root.closeCleanupDelay
         repeat: false
         onTriggered: root.finishCloseAnimation()
     }
@@ -148,11 +189,11 @@ Scope {
     Connections {
         target: Services.AppPanelService
         function onAppsChanged() {
-            if (root.opened)
+            if (root.overviewActive && !root.closingVisualActive)
                 root.rebuildFilteredApps();
         }
         function onIconCacheChanged() {
-            if (root.opened) {
+            if (root.overviewActive && !root.closingVisualActive) {
                 visualContent.gridView.forceLayout();
                 inputContent.gridView.forceLayout();
             }
@@ -169,7 +210,7 @@ Scope {
             right: true
         }
 
-        visible: root.renderActive
+        visible: root.visualLayerActive
         focusable: false
         implicitHeight: Screen.height
         color: "transparent"
@@ -193,7 +234,7 @@ Scope {
             opacity: root.inputVisualsActive ? 0 : 1
             interactive: false
             showVisuals: true
-            gridModel: root.renderActive ? root.filteredApps : []
+            gridModel: root.visualLayerActive ? root.filteredApps : []
             externalContentY: inputContent.gridView.contentY
             windowHeight: visualWindow.height
             riseProgress: root.applicationsRiseProgress
@@ -213,8 +254,8 @@ Scope {
             right: true
         }
 
-        visible: root.opened
-        focusable: root.opened
+        visible: root.inputActive
+        focusable: root.inputActive
         implicitHeight: Screen.height
         color: "transparent"
         surfaceFormat.opaque: false
@@ -226,9 +267,9 @@ Scope {
 
         mask: Region {
             x: 0
-            y: root.opened ? root.inputTopMargin : 0
-            width: root.opened ? inputWindow.width : 0
-            height: root.opened ? Math.max(0, inputWindow.height - root.inputTopMargin - root.inputBottomMargin) : 0
+            y: root.inputActive ? root.inputTopMargin : 0
+            width: root.inputActive ? inputWindow.width : 0
+            height: root.inputActive ? Math.max(0, inputWindow.height - root.inputTopMargin - root.inputBottomMargin) : 0
         }
 
         MouseArea {
@@ -243,9 +284,9 @@ Scope {
         ApplicationsContent {
             id: inputContent
             anchors.fill: parent
-            interactive: true
+            interactive: root.inputActive
             showVisuals: root.inputVisualsActive
-            gridModel: root.opened ? root.filteredApps : []
+            gridModel: root.renderActive ? root.filteredApps : []
             windowHeight: inputWindow.height
             riseProgress: root.applicationsRiseProgress
             horizontalMargin: root.horizontalMargin

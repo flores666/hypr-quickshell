@@ -449,8 +449,9 @@ Item {
                 var overviewState = String(event.data || "").trim();
                 if (overviewState === "open") {
                     Services.ShellState.setActiveSpecialWorkspace("");
-                    Services.ShellState.setApplicationsOverviewFromWorkspaceOverview(false);
                     Services.ShellState.setWorkspaceOverviewMode("workspaces");
+                    Services.ShellState.setApplicationsOverviewClosing(false);
+                    Services.ShellState.setApplicationsOverviewFromWorkspaceOverview(false);
                     Services.ShellState.setWorkspaceOverviewOpen(true);
                 } else if (overviewState === "applications" || overviewState === "applications-from-overview" || overviewState.indexOf("applications:") === 0) {
                     var initialQuery = overviewState.indexOf("applications:") === 0 ? overviewState.substring(13) : "";
@@ -459,10 +460,17 @@ Item {
                                 && Services.ShellState.workspaceOverviewOpen
                                 && Services.ShellState.workspaceOverviewMode === "workspaces");
                     Services.ShellState.setActiveSpecialWorkspace("");
+                    Services.ShellState.setApplicationsOverviewClosing(false);
+                    Services.ShellState.setApplicationsOverviewVisualLayerHidden(false);
                     Services.ShellState.setApplicationsOverviewInitialQuery(initialQuery);
                     Services.ShellState.setApplicationsOverviewFromWorkspaceOverview(fromWorkspaceOverview);
                     Services.ShellState.setWorkspaceOverviewMode("applications");
                     Services.ShellState.setWorkspaceOverviewOpen(true);
+                } else if (overviewState === "applications-closing") {
+                    if (Services.ShellState.workspaceOverviewOpen && Services.ShellState.workspaceOverviewMode === "applications")
+                        Services.ShellState.setApplicationsOverviewClosing(true);
+                } else if (overviewState === "applications-layer-hidden") {
+                    Services.ShellState.setApplicationsOverviewVisualLayerHidden(true);
                 } else if (overviewState === "close")
                     Services.ShellState.setWorkspaceOverviewOpen(false);
                 return;
