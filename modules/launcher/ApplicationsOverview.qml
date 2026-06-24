@@ -14,6 +14,7 @@ Scope {
     readonly property real horizontalMargin: Math.max(52, Math.round(visualWindow.width * 0.08))
     readonly property real applicationsRiseProgress: smoothStep(desktopCardPhaseEnd, 1.0, animationProgress)
     readonly property bool renderActive: opened || closingVisualActive || animationProgress > 0.001
+    readonly property bool inputVisualsActive: opened && animationProgress >= 0.995
     property real animationProgress: 0
     property bool animationBehaviorEnabled: true
     property bool closingVisualActive: false
@@ -163,10 +164,10 @@ Scope {
 
         anchors {
             top: true
+            bottom: true
             left: true
             right: true
         }
-        margins.top: Screen.height + 64
 
         visible: root.renderActive
         focusable: false
@@ -189,6 +190,7 @@ Scope {
         ApplicationsContent {
             id: visualContent
             anchors.fill: parent
+            opacity: root.inputVisualsActive ? 0 : 1
             interactive: false
             showVisuals: true
             gridModel: root.renderActive ? root.filteredApps : []
@@ -242,7 +244,7 @@ Scope {
             id: inputContent
             anchors.fill: parent
             interactive: true
-            showVisuals: false
+            showVisuals: root.inputVisualsActive
             gridModel: root.opened ? root.filteredApps : []
             windowHeight: inputWindow.height
             riseProgress: root.applicationsRiseProgress
@@ -282,8 +284,8 @@ Scope {
         Item {
             anchors.fill: parent
             opacity: 1
-            y: content.showVisuals ? 0 : Math.round((1 - content.riseProgress) * Math.max(240, content.windowHeight * 0.42))
-            scale: content.showVisuals ? 1 : 0.985 + content.riseProgress * 0.015
+            y: 0
+            scale: 1
 
             ColumnLayout {
                 anchors {
@@ -444,10 +446,9 @@ Scope {
         property bool highlighted: false
         readonly property var safeApp: app || ({})
         readonly property string appKey: String(safeApp.desktopId || safeApp.sourceDesktopId || "")
-        readonly property string resolvedIcon: showVisuals
-            ? Services.AppPanelService.iconUrl(safeApp.iconCacheKey || safeApp.iconName || safeApp.icon || "application-x-executable",
-                                               safeApp.iconCacheFallback || safeApp.icon || "")
-            : ""
+        readonly property bool inputHoverActive: interactive && (appMouse.pressed || appMouse.containsMouse || highlighted)
+        readonly property string resolvedIcon: Services.AppPanelService.iconUrl(safeApp.iconCacheKey || safeApp.iconName || safeApp.icon || "application-x-executable",
+                                                                                safeApp.iconCacheFallback || safeApp.icon || "")
 
         signal hovered(string appKey)
         signal unhovered(string appKey)
@@ -459,12 +460,12 @@ Scope {
             width: 96
             height: 104
             radius: 22
-            color: showVisuals ? (appMouse.pressed ? "#26ffffff" : (highlighted || appMouse.containsMouse ? "#18ffffff" : "transparent")) : "transparent"
+            color: tileRoot.showVisuals && tileRoot.inputHoverActive ? (appMouse.pressed ? "#26ffffff" : "#18ffffff") : "transparent"
             antialiasing: true
 
             Behavior on color {
-                enabled: tileRoot.showVisuals
-                ColorAnimation { duration: 120; easing.type: Easing.OutCubic }
+                enabled: tileRoot.interactive && tileRoot.showVisuals
+                ColorAnimation { duration: 55; easing.type: Easing.OutCubic }
             }
 
             ColumnLayout {

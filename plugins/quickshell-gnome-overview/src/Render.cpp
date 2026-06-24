@@ -244,7 +244,7 @@ static bool applicationsLayerReady(PHLMONITOR owner) {
     return false;
 }
 
-static bool renderApplicationsLayerBelowOverviewCard(PHLMONITOR owner, const CBox& monitorClip, double openProgress) {
+static bool renderApplicationsLayerBelowOverviewCard(PHLMONITOR owner, const CBox& monitorClip, const Time::steady_tp& time, double openProgress) {
     if (!owner)
         return false;
 
@@ -263,7 +263,7 @@ static bool renderApplicationsLayerBelowOverviewCard(PHLMONITOR owner, const CBo
                 continue;
 
             const CBox layerBox = overviewApplicationsLayerBox(owner, openProgress);
-            renderLayerSurfaceTextureStub(layer, layerBox, monitorClip, 1.0F);
+            renderLayerSurfaceStub(layer, owner, layerBox, monitorClip, time, 1.0F);
             return true;
         }
     }
@@ -972,7 +972,7 @@ void CHyprspaceWidget::drawApplicationsBackground() {
     // second overview mode. Render the applications layer inside the plugin,
     // below the shrinking desktop card, so both surfaces animate as one scene.
     renderOverviewBackdrop(owner, monitorClip, time, openProgress, 0.28);
-    renderApplicationsLayerBelowOverviewCard(owner, monitorClip, openProgress);
+    renderApplicationsLayerBelowOverviewCard(owner, monitorClip, time, openProgress);
 
     if ((applicationsTransitionStartedFromOverview || applicationsReturningToOverview) && !isClosing()) {
         const auto workspaces = overviewWorkspaceIds();
