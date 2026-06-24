@@ -9,7 +9,7 @@ Scope {
 
     readonly property bool overviewActive: Services.ShellState.workspaceOverviewOpen && Services.ShellState.workspaceOverviewMode === "applications"
     readonly property bool closeRequested: Services.ShellState.applicationsOverviewClosing
-    readonly property bool inputActive: overviewActive && !closeRequested && !closingVisualActive
+    readonly property bool inputActive: overviewActive && Services.ShellState.applicationsOverviewVisualLayerSettled && !closeRequested && !closingVisualActive
     readonly property bool visualLayerActive: renderActive && !Services.ShellState.applicationsOverviewVisualLayerHidden
     readonly property int inputTopMargin: 56
     readonly property int inputBottomMargin: 116
@@ -19,7 +19,7 @@ Scope {
     readonly property real horizontalMargin: Math.max(52, Math.round(visualWindow.width * 0.08))
     readonly property real applicationsRiseProgress: smoothStep(desktopCardPhaseEnd, 1.0, animationProgress)
     readonly property bool renderActive: overviewActive || closingVisualActive || animationProgress > 0.001
-    readonly property bool inputVisualsActive: inputActive && animationProgress >= 0.995
+    readonly property bool inputVisualsActive: false
     property real animationProgress: 0
     property bool animationBehaviorEnabled: true
     property bool closingVisualActive: false
@@ -98,6 +98,7 @@ Scope {
     function startCloseAnimation() {
         animationKickTimer.stop();
         closeCleanupTimer.stop();
+        hoveredAppKey = "";
         closingVisualActive = true;
         animationBehaviorEnabled = false;
         animationProgress = clamp01(animationProgress);
@@ -124,10 +125,6 @@ Scope {
                 Services.AppPanelService.requestRefresh(false);
             rebuildFilteredApps();
             startOpenAnimation();
-            Qt.callLater(function() {
-                inputContent.searchField.forceActiveFocus();
-                inputContent.searchField.cursorPosition = inputContent.searchField.text.length;
-            });
         } else {
             if (closingVisualActive) {
                 if (animationProgress <= 0.001)
@@ -137,6 +134,17 @@ Scope {
             } else {
                 startCloseAnimation();
             }
+        }
+    }
+
+    onInputActiveChanged: {
+        if (inputActive) {
+            Qt.callLater(function() {
+                if (!root.inputActive)
+                    return;
+                inputContent.searchField.forceActiveFocus();
+                inputContent.searchField.cursorPosition = inputContent.searchField.text.length;
+            });
         }
     }
 
@@ -231,7 +239,7 @@ Scope {
         ApplicationsContent {
             id: visualContent
             anchors.fill: parent
-            opacity: root.inputVisualsActive ? 0 : 1
+            opacity: 1
             interactive: false
             showVisuals: true
             gridModel: root.visualLayerActive ? root.filteredApps : []
@@ -285,7 +293,7 @@ Scope {
             id: inputContent
             anchors.fill: parent
             interactive: root.inputActive
-            showVisuals: root.inputVisualsActive
+            showVisuals: false
             gridModel: root.renderActive ? root.filteredApps : []
             windowHeight: inputWindow.height
             riseProgress: root.applicationsRiseProgress
@@ -487,7 +495,7 @@ Scope {
         property bool highlighted: false
         readonly property var safeApp: app || ({})
         readonly property string appKey: String(safeApp.desktopId || safeApp.sourceDesktopId || "")
-        readonly property bool inputHoverActive: interactive && (appMouse.pressed || appMouse.containsMouse || highlighted)
+        readonly property bool inputHoverActive: (interactive && (appMouse.pressed || appMouse.containsMouse)) || highlighted
         readonly property string resolvedIcon: Services.AppPanelService.iconUrl(safeApp.iconCacheKey || safeApp.iconName || safeApp.icon || "application-x-executable",
                                                                                 safeApp.iconCacheFallback || safeApp.icon || "")
 
@@ -505,7 +513,7 @@ Scope {
             antialiasing: true
 
             Behavior on color {
-                enabled: tileRoot.interactive && tileRoot.showVisuals
+                enabled: tileRoot.showVisuals
                 ColorAnimation { duration: 55; easing.type: Easing.OutCubic }
             }
 

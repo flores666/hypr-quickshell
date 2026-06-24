@@ -63,6 +63,7 @@ class CHyprspaceWidget {
     bool applicationsTransitionStartedFromOverview = false;
     bool applicationsLayerReadyForTransition = false;
     bool applicationsLayerHiddenForClose = false;
+    bool applicationsLayerSettledNotified = false;
     bool applicationsReturningToOverview = false;
     std::chrono::steady_clock::time_point applicationsReturnStartedAt;
     bool applyingWorkspaceActivation = false;

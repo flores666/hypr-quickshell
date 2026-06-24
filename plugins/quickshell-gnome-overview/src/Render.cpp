@@ -15,9 +15,9 @@
 
 extern std::function<void()> applicationsReturnToOverviewFinishedCallback;
 
-static void notifyQuickshellApplicationsLayerHidden() {
+static void notifyQuickshellApplicationsState(const char* state) {
     if (g_pEventManager)
-        g_pEventManager->postEvent(SHyprIPCEvent{"quickshelloverview", "applications-layer-hidden"});
+        g_pEventManager->postEvent(SHyprIPCEvent{"quickshelloverview", state});
 }
 
 static bool isQuickshellLayerNamespaceForOverview(const std::string& ns) {
@@ -975,7 +975,12 @@ void CHyprspaceWidget::drawApplicationsBackground() {
     const bool leavingApplicationsMode = isClosing() || applicationsReturningToOverview;
     if (leavingApplicationsMode && !applicationsLayerHiddenForClose && openProgress <= CARD_PHASE_END) {
         applicationsLayerHiddenForClose = true;
-        notifyQuickshellApplicationsLayerHidden();
+        notifyQuickshellApplicationsState("applications-layer-hidden");
+    }
+
+    if (!leavingApplicationsMode && applicationLayerReady && !applicationsLayerSettledNotified && openProgress >= 0.999) {
+        applicationsLayerSettledNotified = true;
+        notifyQuickshellApplicationsState("applications-layer-settled");
     }
 
     g_pHyprRenderer->m_renderData.clipBox = monitorClip;

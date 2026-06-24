@@ -26,6 +26,7 @@ CHyprspaceWidget::CHyprspaceWidget(uint64_t inOwnerID) {
     applicationsTransitionStartedFromOverview = false;
     applicationsLayerReadyForTransition = false;
     applicationsLayerHiddenForClose = false;
+    applicationsLayerSettledNotified = false;
     applicationsReturningToOverview = false;
     applyingWorkspaceActivation = false;
     workspaceSelectionFromID = 0;
@@ -506,6 +507,7 @@ void CHyprspaceWidget::show() {
     applicationsTransitionStartedFromOverview = false;
     applicationsLayerReadyForTransition = false;
     applicationsLayerHiddenForClose = false;
+    applicationsLayerSettledNotified = false;
     applicationsReturningToOverview = false;
     applyingWorkspaceActivation = false;
     workspaceSelectionFromID = 0;
@@ -543,6 +545,7 @@ void CHyprspaceWidget::startApplicationsTransitionFromOverview() {
         applicationsTransitionStartedFromOverview = false;
         applicationsLayerReadyForTransition = false;
         applicationsLayerHiddenForClose = false;
+        applicationsLayerSettledNotified = false;
         show();
         return;
     }
@@ -563,6 +566,7 @@ void CHyprspaceWidget::startApplicationsTransitionFromOverview() {
     applicationsTransitionStartedFromOverview = true;
     applicationsLayerReadyForTransition = false;
     applicationsLayerHiddenForClose = false;
+    applicationsLayerSettledNotified = false;
     applicationsReturningToOverview = false;
     applyingWorkspaceActivation = false;
     workspaceSelectionFromID = 0;
@@ -609,6 +613,7 @@ void CHyprspaceWidget::startApplicationsReturnToOverview() {
     applicationsTransitionStartedFromOverview = true;
     applicationsLayerReadyForTransition = true;
     applicationsLayerHiddenForClose = false;
+    applicationsLayerSettledNotified = false;
     applicationsReturningToOverview = true;
     applicationsReturnStartedAt = std::chrono::steady_clock::now();
     notifyQuickshellOverviewState("applications-closing");
@@ -642,6 +647,7 @@ void CHyprspaceWidget::finishHide() {
     applicationsTransitionStartedFromOverview = false;
     applicationsLayerReadyForTransition = false;
     applicationsLayerHiddenForClose = false;
+    applicationsLayerSettledNotified = false;
     applicationsReturningToOverview = false;
     applyingWorkspaceActivation = false;
     workspaceSelectionFromID = 0;
@@ -769,6 +775,7 @@ void CHyprspaceWidget::hideKeepingWorkspace(int workspaceID) {
     workspaceSelectionToID = 0;
     applicationsReturningToOverview = false;
     applicationsLayerHiddenForClose = false;
+    applicationsLayerSettledNotified = false;
     centeredWorkspaceID = targetWorkspaceID;
 
     if (!overviewClosing) {
