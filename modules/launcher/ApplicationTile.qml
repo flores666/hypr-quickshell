@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Layouts
 import "../../services" as Services
 
 Item {
@@ -12,10 +11,24 @@ Item {
     property bool selected: false
     property bool hidePointerCursor: false
     property var pointerMovedCallback: null
+    property bool hoverNotified: false
 
     readonly property var safeApp: app || ({})
     readonly property string appKey: String(safeApp.desktopId || safeApp.sourceDesktopId || "")
     readonly property bool activeVisual: root.showVisuals && (root.selected || (root.interactive && appMouse.pressed))
+    readonly property bool pointerInsideTile: appMouse.containsMouse || appCursorSuppressionLayer.containsMouse
+    readonly property bool labelOverflowing: textLabel.truncated || textLabel.implicitHeight > textLabel.height + 0.5
+    readonly property int tileWidth: 96
+    readonly property int tileHeight: 104
+    readonly property int iconSize: 54
+    readonly property int iconTop: 12
+    readonly property int labelTop: 72
+    readonly property int labelHeight: 28
+    readonly property int labelSidePadding: 8
+    readonly property real tooltipSourceX: Math.round((width - tileWidth) / 2)
+    readonly property real tooltipSourceY: Math.round((height - tileHeight) / 2)
+    readonly property real tooltipSourceWidth: tileWidth
+    readonly property real tooltipSourceHeight: tileHeight
     readonly property var iconCacheRef: Services.AppPanelService.iconCache
     readonly property string resolvedIcon: (iconCacheRef, Services.AppPanelService.iconUrl(safeApp.iconCacheKey || safeApp.iconName || safeApp.icon || "application-x-executable",
                                                                                           safeApp.iconCacheFallback || safeApp.icon || ""))
@@ -26,21 +39,55 @@ Item {
     signal contextRequested(var app, real localX, real localY)
     signal launched(var app)
 
+    onPointerInsideTileChanged: {
+        if (!pointerInsideTile)
+            markUnhovered(root.appKey);
+    }
+
+    onInteractiveChanged: {
+        if (!interactive)
+            markUnhovered(root.appKey);
+    }
+
+    onVisibleChanged: {
+        if (!visible)
+            markUnhovered(root.appKey);
+    }
+
+    onAppKeyChanged: {
+        markUnhovered("");
+    }
+
     function notifyPointerMoved() {
         if (root.pointerMovedCallback)
             root.pointerMovedCallback();
     }
 
+    function markHovered() {
+        if (!root.interactive || root.appKey.length === 0)
+            return;
+
+        root.hoverNotified = true;
+        root.hovered(root.appKey);
+    }
+
+    function markUnhovered(appKey) {
+        var key = String(appKey || "");
+        root.hoverNotified = false;
+        root.unhovered(key);
+    }
+
     Rectangle {
         id: tile
         anchors.centerIn: parent
-        width: 96
-        height: 104
+        width: root.tileWidth
+        height: root.tileHeight
         radius: 22
         color: root.activeVisual ? (appMouse.pressed ? "#26ffffff" : "#18ffffff") : "transparent"
         border.width: root.activeVisual ? 1 : 0
         border.color: root.activeVisual ? "#36ffffff" : "transparent"
         antialiasing: true
+        clip: false
 
         Behavior on color {
             enabled: root.showVisuals
@@ -52,16 +99,17 @@ Item {
             ColorAnimation { duration: 55; easing.type: Easing.OutCubic }
         }
 
-        ColumnLayout {
+        Item {
+            id: visualContent
             anchors.fill: parent
-            anchors.margins: 8
-            spacing: 7
             visible: root.showVisuals
 
             Item {
-                Layout.alignment: Qt.AlignHCenter
-                Layout.preferredWidth: 54
-                Layout.preferredHeight: 54
+                id: iconSlot
+                x: Math.round((parent.width - root.iconSize) / 2)
+                y: root.iconTop
+                width: root.iconSize
+                height: root.iconSize
 
                 Image {
                     id: appIcon
@@ -95,10 +143,15 @@ Item {
             }
 
             Text {
-                Layout.fillWidth: true
+                id: textLabel
+                x: root.labelSidePadding
+                y: root.labelTop
+                width: parent.width - root.labelSidePadding * 2
+                height: root.labelHeight
                 text: root.displayName
                 color: "#f4f7fb"
                 horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignTop
                 maximumLineCount: 2
                 wrapMode: Text.WordWrap
                 elide: Text.ElideRight
@@ -108,6 +161,7 @@ Item {
                 font.hintingPreference: Font.PreferFullHinting
                 font.kerning: false
             }
+
         }
 
         MouseArea {
@@ -118,12 +172,12 @@ Item {
             acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
             cursorShape: root.hidePointerCursor ? Qt.BlankCursor : Qt.PointingHandCursor
 
-            onEntered: root.hovered(root.appKey)
+            onEntered: root.markHovered()
             onPositionChanged: {
                 root.notifyPointerMoved();
-                root.hovered(root.appKey);
+                root.markHovered();
             }
-            onExited: root.unhovered(root.appKey)
+            onExited: root.markUnhovered(root.appKey)
 
             onPressed: function(mouse) {
                 root.pressed(root.safeApp, mouse.button, tile.x + mouse.x, tile.y + mouse.y);
@@ -149,14 +203,14 @@ Item {
             preventStealing: true
             cursorShape: Qt.BlankCursor
 
-            onEntered: root.hovered(root.appKey)
+            onEntered: root.markHovered()
 
             onPositionChanged: {
                 root.notifyPointerMoved();
-                root.hovered(root.appKey);
+                root.markHovered();
             }
 
-            onExited: root.unhovered(root.appKey)
+            onExited: root.markUnhovered(root.appKey)
 
             onPressed: function(mouse) {
                 mouse.accepted = true;

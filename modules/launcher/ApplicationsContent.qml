@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import "../../components" as Components
 
 Item {
     id: root
@@ -12,6 +13,15 @@ Item {
     property string selectedAppKey: ""
     property bool hidePointerCursor: false
     property var pointerMovedCallback: null
+    property bool overflowTooltipVisible: false
+    property string overflowTooltipText: ""
+    property string overflowTooltipAppKey: ""
+    property real overflowTooltipSourceX: 0
+    property real overflowTooltipSourceY: 0
+    property real overflowTooltipSourceWidth: 0
+    property real overflowTooltipSourceHeight: 0
+    property var overflowTooltipSourceItem: null
+    property bool overflowTooltipPlacementAnimationEnabled: false
     property var sectionRows: []
     property int sectionRowsVersion: 0
     property real externalContentY: 0
@@ -45,6 +55,18 @@ Item {
     signal hiddenSectionToggleRequested()
     signal contentYEdited(real value)
 
+    onHidePointerCursorChanged: {
+        if (hidePointerCursor)
+            hideOverflowTooltip();
+    }
+
+    onInteractiveChanged: {
+        if (!interactive)
+            hideOverflowTooltip();
+    }
+
+    onSectionRowsVersionChanged: hideOverflowTooltip()
+
     function forceSearchFocus() {
         searchBox.forceSearchFocus();
     }
@@ -57,6 +79,134 @@ Item {
 
     function interactiveCursorShape(defaultShape) {
         return root.hidePointerCursor ? Qt.BlankCursor : defaultShape;
+    }
+
+    function hideOverflowTooltip(appKey) {
+        var key = String(appKey || "");
+        if (key.length > 0 && key !== root.overflowTooltipAppKey)
+            return;
+
+        overflowTooltipPlacementAnimationArmTimer.stop();
+        root.overflowTooltipPlacementAnimationEnabled = false;
+        root.overflowTooltipVisible = false;
+        root.overflowTooltipText = "";
+        root.overflowTooltipAppKey = "";
+        root.overflowTooltipSourceItem = null;
+    }
+
+    function tooltipLocalSourceX(item) {
+        var value = 0;
+        try {
+            value = Number(item.tooltipSourceX || 0);
+        } catch (e) {
+            value = 0;
+        }
+        return isFinite(value) ? value : 0;
+    }
+
+    function tooltipLocalSourceY(item) {
+        var value = 0;
+        try {
+            value = Number(item.tooltipSourceY || 0);
+        } catch (e) {
+            value = 0;
+        }
+        return isFinite(value) ? value : 0;
+    }
+
+    function tooltipSourceWidth(item) {
+        var value = 0;
+        try {
+            value = Number(item.tooltipSourceWidth || item.width || root.tileWidth);
+        } catch (e) {
+            value = root.tileWidth;
+        }
+        return Math.max(1, isFinite(value) ? value : root.tileWidth);
+    }
+
+    function tooltipSourceHeight(item) {
+        var value = 0;
+        try {
+            value = Number(item.tooltipSourceHeight || item.height || root.tileHeight);
+        } catch (e) {
+            value = root.tileHeight;
+        }
+        return Math.max(1, isFinite(value) ? value : root.tileHeight);
+    }
+
+    function sourceItemStillHovered(item) {
+        if (!item)
+            return false;
+
+        try {
+            return Boolean(item.visible) && Boolean(item.pointerInsideTile);
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function showOverflowTooltipForItem(item, appKey, text, overflowing) {
+        var key = String(appKey || "");
+        var label = String(text || "").trim();
+        if (!root.interactive || !root.showVisuals || root.hidePointerCursor || !overflowing || !item || key.length === 0 || label.length === 0) {
+            hideOverflowTooltip();
+            return;
+        }
+
+        var localX = tooltipLocalSourceX(item);
+        var localY = tooltipLocalSourceY(item);
+        var point = null;
+        try {
+            point = item.mapToItem(root, localX, localY);
+        } catch (e) {
+            hideOverflowTooltip();
+            return;
+        }
+
+        var sameSource = root.overflowTooltipVisible && root.overflowTooltipAppKey === key && root.overflowTooltipSourceItem === item;
+        if (!sameSource) {
+            overflowTooltipPlacementAnimationArmTimer.stop();
+            root.overflowTooltipPlacementAnimationEnabled = false;
+            root.overflowTooltipVisible = false;
+        }
+
+        root.overflowTooltipSourceX = Number(point.x || 0);
+        root.overflowTooltipSourceY = Number(point.y || 0);
+        root.overflowTooltipSourceWidth = tooltipSourceWidth(item);
+        root.overflowTooltipSourceHeight = tooltipSourceHeight(item);
+        root.overflowTooltipText = label;
+        root.overflowTooltipAppKey = key;
+        root.overflowTooltipSourceItem = item;
+        root.overflowTooltipVisible = true;
+
+        if (sameSource)
+            root.overflowTooltipPlacementAnimationEnabled = true;
+        else
+            overflowTooltipPlacementAnimationArmTimer.restart();
+    }
+
+    function updateOverflowTooltipPlacement() {
+        if (!root.overflowTooltipVisible || !root.overflowTooltipSourceItem)
+            return;
+
+        var item = root.overflowTooltipSourceItem;
+        if (!sourceItemStillHovered(item)) {
+            hideOverflowTooltip();
+            return;
+        }
+
+        var point = null;
+        try {
+            point = item.mapToItem(root, tooltipLocalSourceX(item), tooltipLocalSourceY(item));
+        } catch (e) {
+            hideOverflowTooltip();
+            return;
+        }
+
+        root.overflowTooltipSourceX = Number(point.x || 0);
+        root.overflowTooltipSourceY = Number(point.y || 0);
+        root.overflowTooltipSourceWidth = tooltipSourceWidth(item);
+        root.overflowTooltipSourceHeight = tooltipSourceHeight(item);
     }
 
     function forceContentY(value) {
@@ -303,6 +453,7 @@ Item {
                 }
 
                 onContentYChanged: {
+                    root.updateOverflowTooltipPlacement();
                     if (root.interactive && !root.syncContentY)
                         root.contentYEdited(contentY);
                 }
@@ -423,6 +574,7 @@ Item {
                                 onPositionChanged: root.notifyPointerMoved()
                                 onClicked: function(mouse) {
                                     mouse.accepted = true;
+                                    root.hideOverflowTooltip();
                                     root.hiddenSectionToggleRequested();
                                 }
                             }
@@ -459,9 +611,19 @@ Item {
                                         interactive: root.interactive
                                         showVisuals: root.showVisuals
                                         hidePointerCursor: root.hidePointerCursor
-                                        onHovered: function(appKey) { root.appHovered(appKey); }
-                                        onUnhovered: function(appKey) { root.appUnhovered(appKey); }
-                                        pointerMovedCallback: function() { root.notifyPointerMoved(); }
+                                        onHovered: function(appKey) {
+                                            root.appHovered(appKey);
+                                            root.showOverflowTooltipForItem(appTile, appKey, appTile.displayName, appTile.labelOverflowing);
+                                        }
+                                        onUnhovered: function(appKey) {
+                                            root.hideOverflowTooltip(appKey);
+                                            root.appUnhovered(appKey);
+                                        }
+                                        pointerMovedCallback: function() {
+                                            root.notifyPointerMoved();
+                                            if (root.overflowTooltipAppKey === appCell.appKey)
+                                                root.showOverflowTooltipForItem(appTile, appCell.appKey, appTile.displayName, appTile.labelOverflowing);
+                                        }
                                         onPressed: function(app, button, localX, localY) { root.appPressed(app, button); }
                                         onContextRequested: function(app, localX, localY) {
                                             var point = appTile.mapToItem(root, localX, localY);
@@ -477,6 +639,146 @@ Item {
             }
         }
     }
+
+    Timer {
+        id: overflowTooltipPlacementAnimationArmTimer
+        interval: 1
+        repeat: false
+        onTriggered: {
+            if (root.overflowTooltipVisible)
+                root.overflowTooltipPlacementAnimationEnabled = true;
+        }
+    }
+
+    Timer {
+        id: overflowTooltipHoverValidationTimer
+        interval: 80
+        repeat: true
+        running: root.overflowTooltipVisible
+        onTriggered: {
+            if (!root.sourceItemStillHovered(root.overflowTooltipSourceItem)) {
+                root.hideOverflowTooltip();
+                return;
+            }
+
+            root.updateOverflowTooltipPlacement();
+        }
+    }
+
+    Item {
+        id: overflowTooltipLayer
+        anchors.fill: parent
+        z: 9000
+        visible: root.overflowTooltipVisible && root.showVisuals && !root.hidePointerCursor
+        enabled: false
+
+        Item {
+            id: overflowTooltipBubble
+            readonly property real safeMargin: 8
+            readonly property real sourceGap: 2
+            readonly property string placementMode: {
+                var above = root.overflowTooltipSourceY - safeMargin - sourceGap;
+                var below = root.height - safeMargin - (root.overflowTooltipSourceY + root.overflowTooltipSourceHeight) - sourceGap;
+                var right = root.width - safeMargin - (root.overflowTooltipSourceX + root.overflowTooltipSourceWidth) - sourceGap;
+                var left = root.overflowTooltipSourceX - safeMargin - sourceGap;
+
+                if (above >= height)
+                    return "above";
+                if (below >= height)
+                    return "below";
+                if (right >= width)
+                    return "right";
+                if (left >= width)
+                    return "left";
+                return above >= below ? "above" : "below";
+            }
+
+            function clamped(value, minValue, maxValue) {
+                return Math.max(minValue, Math.min(maxValue, value));
+            }
+
+            function computedX() {
+                if (placementMode === "right")
+                    return root.overflowTooltipSourceX + root.overflowTooltipSourceWidth + sourceGap;
+                if (placementMode === "left")
+                    return root.overflowTooltipSourceX - width - sourceGap;
+
+                var centered = root.overflowTooltipSourceX + (root.overflowTooltipSourceWidth - width) / 2;
+                return clamped(centered, safeMargin, Math.max(safeMargin, root.width - width - safeMargin));
+            }
+
+            function computedY() {
+                if (placementMode === "above")
+                    return root.overflowTooltipSourceY - height - sourceGap;
+                if (placementMode === "below")
+                    return root.overflowTooltipSourceY + root.overflowTooltipSourceHeight + sourceGap;
+
+                var centered = root.overflowTooltipSourceY + (root.overflowTooltipSourceHeight - height) / 2;
+                return clamped(centered, safeMargin, Math.max(safeMargin, root.height - height - safeMargin));
+            }
+
+            visible: overflowTooltipLayer.visible
+            opacity: visible ? 1 : 0
+            x: Math.round(computedX())
+            y: Math.round(computedY())
+            width: Math.max(64, Math.min(280, overflowTooltipLabel.implicitWidth + 18))
+            height: Math.max(28, Math.min(74, overflowTooltipLabel.implicitHeight + 12))
+            scale: visible ? 1.0 : 0.972
+            transformOrigin: placementMode === "above" ? Item.Bottom : Item.Top
+            layer.enabled: opacity > 0.001 && opacity < 0.999
+            layer.smooth: true
+
+            Behavior on opacity {
+                NumberAnimation { duration: 85; easing.type: Easing.OutCubic }
+            }
+
+            Behavior on y {
+                enabled: root.overflowTooltipPlacementAnimationEnabled
+                NumberAnimation { duration: 85; easing.type: Easing.OutCubic }
+            }
+
+            Behavior on x {
+                enabled: root.overflowTooltipPlacementAnimationEnabled
+                NumberAnimation { duration: 85; easing.type: Easing.OutCubic }
+            }
+
+            Behavior on scale {
+                NumberAnimation { duration: 85; easing.type: Easing.OutCubic }
+            }
+
+            Components.GlassPanel {
+                anchors.fill: parent
+                radiusSize: 11
+                glassColor: "#b006080c"
+                clip: true
+                antialiasing: true
+            }
+
+            Text {
+                id: overflowTooltipLabel
+                anchors {
+                    fill: parent
+                    leftMargin: 9
+                    rightMargin: 9
+                    topMargin: 5
+                    bottomMargin: 5
+                }
+                text: root.overflowTooltipText
+                color: "#eef3f8"
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                wrapMode: Text.WordWrap
+                maximumLineCount: 3
+                elide: Text.ElideRight
+                font.pixelSize: 12
+                font.weight: Font.Medium
+                renderType: Text.NativeRendering
+                font.hintingPreference: Font.PreferFullHinting
+                font.kerning: false
+            }
+        }
+    }
+
     WheelHandler {
         id: contentWheelHandler
         enabled: root.interactive
