@@ -418,8 +418,8 @@ Item {
             ApplicationsSearchBox {
                 id: searchBox
                 Layout.alignment: Qt.AlignHCenter
-                Layout.preferredWidth: Math.min(560, parent.width)
-                Layout.preferredHeight: 48
+                Layout.preferredWidth: Math.min(340, parent.width)
+                Layout.preferredHeight: 36
                 interactive: root.interactive
                 showVisuals: root.showVisuals
                 queryText: root.queryText

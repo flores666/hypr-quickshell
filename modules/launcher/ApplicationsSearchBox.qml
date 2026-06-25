@@ -1,7 +1,8 @@
 import QtQuick
+import "../../components" as Components
 import "../../services" as Services
 
-Rectangle {
+Item {
     id: root
 
     required property bool interactive
@@ -10,6 +11,13 @@ Rectangle {
     property bool hidePointerCursor: false
     property var pointerMovedCallback: null
     property alias inputField: searchInput
+
+    readonly property int horizontalPadding: 14
+    readonly property int iconSize: 15
+    readonly property int iconWidth: 18
+    readonly property int textLeftInset: 42
+    readonly property int textRightInset: 15
+    readonly property int searchFontSize: 12
 
     signal queryEdited(string text)
     signal moveSelectionRequested(string direction)
@@ -28,11 +36,16 @@ Rectangle {
         searchInput.cursorPosition = searchInput.text.length;
     }
 
-    radius: 24
-    color: showVisuals ? "#da111821" : "transparent"
-    border.width: showVisuals ? 1 : 0
-    border.color: "#22ffffff"
-    antialiasing: true
+    opacity: showVisuals ? 1 : 0
+    visible: showVisuals || interactive
+
+    Components.GlassPanel {
+        id: searchBackground
+        anchors.fill: parent
+        radiusSize: Math.round(height / 2)
+        glassColor: "#b006080c"
+        antialiasing: true
+    }
 
     HoverHandler {
         enabled: root.interactive
@@ -40,17 +53,40 @@ Rectangle {
         onPointChanged: root.notifyPointerMoved()
     }
 
-    Text {
+    Item {
+        id: searchIcon
         anchors.left: parent.left
-        anchors.leftMargin: 20
+        anchors.leftMargin: root.horizontalPadding
         anchors.verticalCenter: parent.verticalCenter
+        width: root.iconWidth
+        height: root.iconWidth
         visible: root.showVisuals
-        text: "⌕"
-        color: "#b8c3cf"
-        font.pixelSize: 18
-        renderType: Text.NativeRendering
-        font.hintingPreference: Font.PreferFullHinting
-        font.kerning: false
+        opacity: 0.9
+
+        Rectangle {
+            id: searchIconRing
+            width: root.iconSize - 4
+            height: width
+            x: 1
+            y: 1
+            radius: width / 2
+            color: "transparent"
+            border.width: 2
+            border.color: "#b8c3cf"
+            antialiasing: true
+        }
+
+        Rectangle {
+            width: Math.max(6, Math.round(root.iconSize * 0.42))
+            height: 2
+            x: searchIconRing.x + searchIconRing.width - 1
+            y: searchIconRing.y + searchIconRing.height - 1
+            radius: 1
+            color: "#b8c3cf"
+            antialiasing: true
+            transformOrigin: Item.Left
+            rotation: 45
+        }
     }
 
     Text {
@@ -58,13 +94,13 @@ Rectangle {
             left: parent.left
             right: parent.right
             verticalCenter: parent.verticalCenter
-            leftMargin: 52
-            rightMargin: 22
+            leftMargin: root.textLeftInset
+            rightMargin: root.textRightInset
         }
         visible: root.showVisuals && !root.interactive
         text: root.queryText.length > 0 ? root.queryText : "Search applications"
         color: root.queryText.length > 0 ? "#f5f8fb" : "#7f8b96"
-        font.pixelSize: 16
+        font.pixelSize: root.searchFontSize
         elide: Text.ElideRight
         verticalAlignment: Text.AlignVCenter
         renderType: Text.NativeRendering
@@ -78,8 +114,8 @@ Rectangle {
             left: parent.left
             right: parent.right
             verticalCenter: parent.verticalCenter
-            leftMargin: 52
-            rightMargin: 22
+            leftMargin: root.textLeftInset
+            rightMargin: root.textRightInset
         }
         visible: root.interactive
         opacity: root.showVisuals ? 1 : 0
@@ -88,7 +124,7 @@ Rectangle {
         color: "#f5f8fb"
         selectionColor: "#55ffffff"
         selectedTextColor: "#0b1018"
-        font.pixelSize: 16
+        font.pixelSize: root.searchFontSize
         renderType: Text.NativeRendering
         font.hintingPreference: Font.PreferFullHinting
         font.kerning: false
