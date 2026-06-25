@@ -343,16 +343,8 @@ PopupWindow {
     Shortcut {
         sequence: "Esc"
         context: Qt.ApplicationShortcut
-        enabled: root.targetVisible
-        onActivated: {
-            if (root.confirmActionName.length > 0) {
-                root.cancelSystemActionConfirm();
-            } else if (root.detailMode.length > 0) {
-                root.closeDetailPopup();
-            } else if (root.controller) {
-                root.controller.closePopup();
-            }
-        }
+        enabled: Services.ShellState.shellPopupOpen
+        onActivated: Services.ShellState.requestCloseShellPopups()
     }
 
     Timer {

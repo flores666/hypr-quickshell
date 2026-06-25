@@ -36,6 +36,7 @@ QtObject {
     property string activeSpecialWorkspaceName: ""
     property string focusedAddress: ""
     property int closeTopbarPopupsNonce: 0
+    property int closeAppDockPopupsNonce: 0
     property bool topbarPopupOpen: false
     property bool appDockPopupOpen: false
     readonly property bool shellPopupOpen: topbarPopupOpen || appDockPopupOpen
@@ -43,6 +44,15 @@ QtObject {
 
     function requestCloseTopbarPopups() {
         closeTopbarPopupsNonce += 1;
+    }
+
+    function requestCloseAppDockPopups() {
+        closeAppDockPopupsNonce += 1;
+    }
+
+    function requestCloseShellPopups() {
+        closeTopbarPopupsNonce += 1;
+        closeAppDockPopupsNonce += 1;
     }
 
     function setTopbarPopupOpen(value) {

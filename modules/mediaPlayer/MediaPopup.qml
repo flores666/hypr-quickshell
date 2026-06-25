@@ -3,6 +3,7 @@ import QtQuick
 import QtQuick.Layouts
 import Qt5Compat.GraphicalEffects
 import "../../components" as Components
+import "../../services" as Services
 
 PopupWindow {
     id: root
@@ -35,11 +36,8 @@ PopupWindow {
     Shortcut {
         sequence: "Esc"
         context: Qt.ApplicationShortcut
-        enabled: root.targetVisible
-        onActivated: {
-            if (root.controller)
-                root.controller.closePopup();
-        }
+        enabled: Services.ShellState.shellPopupOpen
+        onActivated: Services.ShellState.requestCloseShellPopups()
     }
 
     Components.AnimatedPopupState {

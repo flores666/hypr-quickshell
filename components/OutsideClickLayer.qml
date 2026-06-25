@@ -1,5 +1,6 @@
 import Quickshell
 import QtQuick
+import "../services" as Services
 
 Item {
     id: root
@@ -27,6 +28,7 @@ Item {
     readonly property real dockBelowHeight: Math.max(1, -dockPopupBottomY)
 
     function closeFromOutside(mouse) {
+        Services.ShellState.requestCloseShellPopups();
         if (controller)
             controller.closePopup();
 
@@ -45,7 +47,7 @@ Item {
 
         MouseArea {
             anchors.fill: parent
-            acceptedButtons: Qt.LeftButton
+            acceptedButtons: Qt.AllButtons
             cursorShape: Qt.ArrowCursor
             onPressed: function(mouse) { root.closeFromOutside(mouse); }
             onClicked: function(mouse) { mouse.accepted = false; }
@@ -65,7 +67,7 @@ Item {
 
         MouseArea {
             anchors.fill: parent
-            acceptedButtons: Qt.LeftButton
+            acceptedButtons: Qt.AllButtons
             cursorShape: Qt.ArrowCursor
             onPressed: function(mouse) { root.closeFromOutside(mouse); }
             onClicked: function(mouse) { mouse.accepted = false; }
@@ -85,7 +87,7 @@ Item {
 
         MouseArea {
             anchors.fill: parent
-            acceptedButtons: Qt.LeftButton
+            acceptedButtons: Qt.AllButtons
             cursorShape: Qt.ArrowCursor
             onPressed: function(mouse) { root.closeFromOutside(mouse); }
             onClicked: function(mouse) { mouse.accepted = false; }
@@ -105,7 +107,7 @@ Item {
 
         MouseArea {
             anchors.fill: parent
-            acceptedButtons: Qt.LeftButton
+            acceptedButtons: Qt.AllButtons
             cursorShape: Qt.ArrowCursor
             onPressed: function(mouse) { root.closeFromOutside(mouse); }
             onClicked: function(mouse) { mouse.accepted = false; }
@@ -125,7 +127,7 @@ Item {
 
         MouseArea {
             anchors.fill: parent
-            acceptedButtons: Qt.LeftButton
+            acceptedButtons: Qt.AllButtons
             cursorShape: Qt.ArrowCursor
             onPressed: function(mouse) { root.closeFromOutside(mouse); }
             onClicked: function(mouse) { mouse.accepted = false; }
@@ -145,7 +147,7 @@ Item {
 
         MouseArea {
             anchors.fill: parent
-            acceptedButtons: Qt.LeftButton
+            acceptedButtons: Qt.AllButtons
             cursorShape: Qt.ArrowCursor
             onPressed: function(mouse) { root.closeFromOutside(mouse); }
             onClicked: function(mouse) { mouse.accepted = false; }

@@ -3,6 +3,7 @@ import QtQuick
 import QtQuick.Layouts
 import QtCore
 import "../../components" as Components
+import "../../services" as Services
 
 Item {
     id: root
@@ -81,6 +82,7 @@ Item {
     }
 
     function togglePopup() {
+        Services.ShellState.requestCloseAppDockPopups();
         if (popupOpen)
             closePopup();
         else
@@ -130,7 +132,7 @@ Item {
             id: clockMouse
             anchors.fill: parent
             hoverEnabled: true
-            acceptedButtons: Qt.LeftButton
+            acceptedButtons: Qt.AllButtons
             cursorShape: root.pointerReady ? Qt.PointingHandCursor : Qt.ArrowCursor
 
             onEntered: {
@@ -144,7 +146,10 @@ Item {
             }
 
             onClicked: function(mouse) {
-                root.togglePopup();
+                if (mouse.button === Qt.LeftButton)
+                    root.togglePopup();
+                else
+                    Services.ShellState.requestCloseShellPopups();
                 mouse.accepted = true;
             }
         }
@@ -175,8 +180,8 @@ Item {
         Shortcut {
             sequence: "Esc"
             context: Qt.ApplicationShortcut
-            enabled: root.popupOpen
-            onActivated: root.closePopup()
+            enabled: Services.ShellState.shellPopupOpen
+            onActivated: Services.ShellState.requestCloseShellPopups()
         }
 
         Components.AnimatedPopupState {

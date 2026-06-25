@@ -1,6 +1,7 @@
 import Quickshell.Services.Mpris
 import QtQuick
 import "../../components" as Components
+import "../../services" as Services
 
 Item {
     id: root
@@ -360,7 +361,28 @@ Item {
         popupOpen = false;
     }
 
+    function closeStalePlayerIfNoSources() {
+        Services.ShellState.requestCloseShellPopups();
+        if (playersList().length > 0)
+            return;
+
+        activePlayer = null;
+        lastActivePlayerKey = "";
+        currentTrackId = "";
+        currentTitle = "";
+        currentArtist = "";
+        currentAlbum = "";
+        currentCoverSource = "";
+        currentCoverFallbackSource = "";
+        currentPosition = 0;
+        currentLength = 0;
+        clearPendingSeek();
+        closePopup();
+        coverNonce++;
+    }
+
     function togglePopup() {
+        Services.ShellState.requestCloseAppDockPopups();
         if (popupOpen)
             closePopup();
         else
@@ -462,6 +484,7 @@ Item {
         accentStrongColor: root.accentStrongColor
         mutedTextColor: root.mutedTextColor
         onClicked: root.togglePopup()
+        onCloseRequested: root.closeStalePlayerIfNoSources()
     }
 
     Components.OutsideClickLayer {

@@ -831,6 +831,7 @@ Scope {
         }
     }
 
+
     PanelWindow {
         id: visualWindow
 

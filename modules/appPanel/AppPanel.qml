@@ -17,6 +17,7 @@ Item {
     property bool bottomDock: false
     readonly property real popupGap: 2
     readonly property bool popupOpen: contextOpen || workspaceMenuOpen || contextSwitchPending || contextRenderVisible
+    readonly property bool shellPopupOpen: popupOpen || tooltipOpen
     property bool contextOpen: false
     property bool contextRenderVisible: false
     property bool contextSwitchPending: false
@@ -67,6 +68,20 @@ Item {
     clip: true
 
     Components.AnimationTokens { id: motion }
+
+    Connections {
+        target: Services.ShellState
+        function onCloseAppDockPopupsNonceChanged() {
+            root.closePopup();
+        }
+    }
+
+    Shortcut {
+        sequence: "Esc"
+        context: Qt.ApplicationShortcut
+        enabled: Services.ShellState.shellPopupOpen
+        onActivated: Services.ShellState.requestCloseShellPopups()
+    }
 
     HoverHandler {
         id: rootHover
@@ -1568,6 +1583,7 @@ Item {
         workspaceMenuHovered = false;
         contextOpenDelay.stop();
         workspaceMenuCloseTimer.stop();
+        hideTooltip();
     }
 
     Timer {
@@ -1993,7 +2009,8 @@ Item {
                 cursorShape: Qt.PointingHandCursor
 
                 onEntered: {
-                    hoverDelayTimer.restart();
+                    hoverDelayTimer.stop();
+                    appDelegate.hoverActive = !root.draggingItem;
                     root.showTooltipFor(modelData, root.delegateCenterX(appDelegate));
                 }
                 onExited: {
@@ -2090,8 +2107,8 @@ Item {
         Shortcut {
             sequence: "Esc"
             context: Qt.ApplicationShortcut
-            enabled: root.contextOpen
-            onActivated: root.closePopup()
+            enabled: Services.ShellState.shellPopupOpen
+            onActivated: Services.ShellState.requestCloseShellPopups()
         }
 
         Components.AnimatedPopupState {

@@ -4,7 +4,7 @@ import Quickshell.Hyprland
 import QtQuick
 import "../../components" as Components
 import "../calendar" as Calendar
-import "../media-player" as Media
+import "../mediaPlayer" as Media
 import "../workspaces" as Workspaces
 import "../systemStatus" as SystemStatus
 import "../keyboardLayout" as KeyboardLayout
@@ -45,6 +45,10 @@ PanelWindow {
         systemStatus.closePopup();
     }
 
+    function closeAllShellPopups() {
+        Services.ShellState.requestCloseShellPopups();
+    }
+
     function closePopupsFromOutside() {
         if (anyPopupOpen())
             closePopups();
@@ -82,8 +86,8 @@ PanelWindow {
     Shortcut {
         sequence: "Esc"
         context: Qt.ApplicationShortcut
-        enabled: root.anyPopupOpen()
-        onActivated: root.closePopups()
+        enabled: Services.ShellState.shellPopupOpen
+        onActivated: root.closeAllShellPopups()
     }
 
     Components.GlassPanel {
@@ -107,9 +111,9 @@ PanelWindow {
 
         MouseArea {
             anchors.fill: parent
-            acceptedButtons: Qt.LeftButton
+            acceptedButtons: Qt.AllButtons
             cursorShape: Qt.ArrowCursor
-            onClicked: root.closePopups()
+            onPressed: root.closeAllShellPopups()
         }
 
         Workspaces.SpecialWorkspaceButton {
@@ -148,6 +152,7 @@ PanelWindow {
             panelHeight: root.implicitHeight
             popupBaseX: barContent.x + x
             onPopupOpened: {
+                Services.ShellState.requestCloseAppDockPopups();
                 mediaPlayer.closePopup();
                 keyboardLayout.closePopup();
                 systemStatus.closePopup();
@@ -167,6 +172,7 @@ PanelWindow {
             panelHeight: root.implicitHeight
             popupBaseX: barContent.x + x
             onPopupOpened: {
+                Services.ShellState.requestCloseAppDockPopups();
                 calendar.closePopup();
                 keyboardLayout.closePopup();
                 systemStatus.closePopup();
@@ -186,6 +192,7 @@ PanelWindow {
             panelHeight: root.implicitHeight
             popupBaseX: barContent.x + x
             onPopupOpened: {
+                Services.ShellState.requestCloseAppDockPopups();
                 calendar.closePopup();
                 mediaPlayer.closePopup();
                 systemStatus.closePopup();
@@ -204,6 +211,7 @@ PanelWindow {
             panelHeight: root.implicitHeight
             popupBaseX: barContent.x + x
             onPopupOpened: {
+                Services.ShellState.requestCloseAppDockPopups();
                 calendar.closePopup();
                 mediaPlayer.closePopup();
                 keyboardLayout.closePopup();

@@ -12,12 +12,12 @@ Item {
     property var pointerMovedCallback: null
     property alias inputField: searchInput
 
-    readonly property int horizontalPadding: 14
-    readonly property int iconSize: 15
-    readonly property int iconWidth: 18
-    readonly property int textLeftInset: 42
-    readonly property int textRightInset: 15
-    readonly property int searchFontSize: 12
+    readonly property int horizontalPadding: 16
+    readonly property int iconSize: 18
+    readonly property int iconWidth: 20
+    readonly property int textLeftInset: 46
+    readonly property int textRightInset: 18
+    readonly property int searchFontSize: 13
 
     signal queryEdited(string text)
     signal moveSelectionRequested(string direction)
@@ -129,6 +129,7 @@ Item {
         font.hintingPreference: Font.PreferFullHinting
         font.kerning: false
         clip: true
+        cursorVisible: root.interactive && searchInput.activeFocus
 
         onTextEdited: root.queryEdited(text)
 

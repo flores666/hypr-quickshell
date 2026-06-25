@@ -36,11 +36,8 @@ PopupWindow {
     Shortcut {
         sequence: "Esc"
         context: Qt.ApplicationShortcut
-        enabled: root.targetVisible
-        onActivated: {
-            if (root.controller)
-                root.controller.closePopup();
-        }
+        enabled: Services.ShellState.shellPopupOpen
+        onActivated: Services.ShellState.requestCloseShellPopups()
     }
 
     onTargetVisibleChanged: {

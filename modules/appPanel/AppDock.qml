@@ -105,7 +105,7 @@ PanelWindow {
         }
     }
 
-    Component.onCompleted: Services.ShellState.setAppDockPopupOpen(appPanel.popupOpen)
+    Component.onCompleted: Services.ShellState.setAppDockPopupOpen(appPanel.shellPopupOpen)
     Component.onDestruction: Services.ShellState.setAppDockPopupOpen(false)
 
 
@@ -213,8 +213,11 @@ PanelWindow {
             }
 
             onPopupOpened: root.showDock()
+            onShellPopupOpenChanged: {
+                Services.ShellState.setAppDockPopupOpen(shellPopupOpen);
+            }
+
             onPopupOpenChanged: {
-                Services.ShellState.setAppDockPopupOpen(popupOpen);
                 if (popupOpen) {
                     root.popupGraceActive = false;
                     popupGraceTimer.stop();

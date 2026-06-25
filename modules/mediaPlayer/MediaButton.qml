@@ -19,6 +19,7 @@ Rectangle {
     readonly property bool renderVisible: playerActive || reveal > 0.001
 
     signal clicked()
+    signal closeRequested()
 
     implicitWidth: Math.round(270 * reveal)
     implicitHeight: 24
@@ -108,7 +109,7 @@ Rectangle {
         anchors.fill: parent
         hoverEnabled: root.renderVisible
         enabled: root.renderVisible && root.reveal > 0.72
-        acceptedButtons: Qt.LeftButton
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
         cursorShape: root.pointerReady ? Qt.PointingHandCursor : Qt.ArrowCursor
         z: 2
 
@@ -123,7 +124,10 @@ Rectangle {
         }
 
         onClicked: function (mouse) {
-            root.clicked();
+            if (mouse.button === Qt.RightButton)
+                root.closeRequested();
+            else
+                root.clicked();
             mouse.accepted = true;
         }
     }

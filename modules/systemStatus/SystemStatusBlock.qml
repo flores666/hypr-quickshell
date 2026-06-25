@@ -91,6 +91,7 @@ Item {
     }
 
     function togglePopup() {
+        Services.ShellState.requestCloseAppDockPopups();
         if (popupOpen)
             closePopup();
         else
@@ -162,7 +163,7 @@ Item {
             id: systemMouse
             anchors.fill: parent
             hoverEnabled: true
-            acceptedButtons: Qt.LeftButton
+            acceptedButtons: Qt.AllButtons
             cursorShape: root.pointerReady ? Qt.PointingHandCursor : Qt.ArrowCursor
 
             onEntered: {
@@ -176,7 +177,10 @@ Item {
             }
 
             onClicked: function(mouse) {
-                root.togglePopup();
+                if (mouse.button === Qt.LeftButton)
+                    root.togglePopup();
+                else
+                    Services.ShellState.requestCloseShellPopups();
                 mouse.accepted = true;
             }
         }
