@@ -262,6 +262,15 @@ QtObject {
             workspaces = result;
     }
 
+    function resetApplicationsOverviewRuntimeState(resetHiddenLayer) {
+        applicationsOverviewInitialQuery = "";
+        applicationsOverviewFromWorkspaceOverview = false;
+        applicationsOverviewClosing = false;
+        applicationsOverviewVisualLayerSettled = false;
+        if (resetHiddenLayer)
+            applicationsOverviewVisualLayerHidden = false;
+    }
+
     function setWorkspaceOverviewOpen(value) {
         var next = !!value;
         if (workspaceOverviewOpen === next)
@@ -269,10 +278,9 @@ QtObject {
         workspaceOverviewOpen = next;
         if (!next) {
             workspaceOverviewMode = "workspaces";
-            applicationsOverviewInitialQuery = "";
-            applicationsOverviewFromWorkspaceOverview = false;
-            applicationsOverviewClosing = false;
-            applicationsOverviewVisualLayerSettled = false;
+            // Keep applicationsOverviewVisualLayerHidden as-is while QML finishes
+            // the reverse animation. It is cleared on the next applications open.
+            resetApplicationsOverviewRuntimeState(false);
         }
     }
 
@@ -300,20 +308,16 @@ QtObject {
         var next = !!value;
         if (applicationsOverviewClosing !== next)
             applicationsOverviewClosing = next;
-        if (next)
-            applicationsOverviewVisualLayerSettled = false;
     }
 
     function setApplicationsOverviewVisualLayerHidden(value) {
         var next = !!value;
         if (applicationsOverviewVisualLayerHidden !== next)
             applicationsOverviewVisualLayerHidden = next;
-        if (next)
-            applicationsOverviewVisualLayerSettled = false;
     }
 
     function setApplicationsOverviewVisualLayerSettled(value) {
-        var next = !!value && !applicationsOverviewVisualLayerHidden;
+        var next = !!value;
         if (applicationsOverviewVisualLayerSettled !== next)
             applicationsOverviewVisualLayerSettled = next;
     }

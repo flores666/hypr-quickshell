@@ -315,6 +315,83 @@ Item {
     }
 
 
+    function canAcceptApplicationsLayerHidden() {
+        return Services.ShellState.applicationsOverviewClosing
+                || !Services.ShellState.workspaceOverviewOpen
+                || Services.ShellState.workspaceOverviewMode !== "applications";
+    }
+
+    function canAcceptApplicationsLayerSettled() {
+        return Services.ShellState.workspaceOverviewOpen
+                && Services.ShellState.workspaceOverviewMode === "applications"
+                && !Services.ShellState.applicationsOverviewClosing;
+    }
+
+    function openWorkspaceOverviewFromPlugin() {
+        Services.ShellState.setActiveSpecialWorkspace("");
+        Services.ShellState.setWorkspaceOverviewMode("workspaces");
+        Services.ShellState.setApplicationsOverviewClosing(false);
+        Services.ShellState.setApplicationsOverviewFromWorkspaceOverview(false);
+        Services.ShellState.setApplicationsOverviewVisualLayerSettled(false);
+        Services.ShellState.setWorkspaceOverviewOpen(true);
+    }
+
+    function openApplicationsOverviewFromPlugin(overviewState) {
+        var initialQuery = overviewState.indexOf("applications:") === 0 ? overviewState.substring(13) : "";
+        var fromWorkspaceOverview = overviewState === "applications-from-overview"
+                || (overviewState.indexOf("applications:") === 0
+                    && Services.ShellState.workspaceOverviewOpen
+                    && Services.ShellState.workspaceOverviewMode === "workspaces");
+
+        Services.ShellState.setActiveSpecialWorkspace("");
+        Services.ShellState.setApplicationsOverviewClosing(false);
+        Services.ShellState.setApplicationsOverviewVisualLayerHidden(false);
+        Services.ShellState.setApplicationsOverviewVisualLayerSettled(false);
+        Services.ShellState.setApplicationsOverviewInitialQuery(initialQuery);
+        Services.ShellState.setApplicationsOverviewFromWorkspaceOverview(fromWorkspaceOverview);
+        Services.ShellState.setWorkspaceOverviewMode("applications");
+        Services.ShellState.setWorkspaceOverviewOpen(true);
+    }
+
+    function beginApplicationsCloseFromPlugin() {
+        if (Services.ShellState.workspaceOverviewOpen && Services.ShellState.workspaceOverviewMode === "applications") {
+            Services.ShellState.setApplicationsOverviewVisualLayerSettled(false);
+            Services.ShellState.setApplicationsOverviewClosing(true);
+        }
+    }
+
+    function handleOverviewPluginEvent(overviewState) {
+        if (overviewState === "open") {
+            openWorkspaceOverviewFromPlugin();
+            return;
+        }
+
+        if (overviewState === "applications" || overviewState === "applications-from-overview" || overviewState.indexOf("applications:") === 0) {
+            openApplicationsOverviewFromPlugin(overviewState);
+            return;
+        }
+
+        if (overviewState === "applications-closing") {
+            beginApplicationsCloseFromPlugin();
+            return;
+        }
+
+        if (overviewState === "applications-layer-hidden") {
+            if (canAcceptApplicationsLayerHidden())
+                Services.ShellState.setApplicationsOverviewVisualLayerHidden(true);
+            return;
+        }
+
+        if (overviewState === "applications-layer-settled") {
+            if (canAcceptApplicationsLayerSettled())
+                Services.ShellState.setApplicationsOverviewVisualLayerSettled(true);
+            return;
+        }
+
+        if (overviewState === "close")
+            Services.ShellState.setWorkspaceOverviewOpen(false);
+    }
+
     function updateMonitors(jsonText) {
         var monitors = [];
         try {
@@ -446,48 +523,7 @@ Item {
                 return;
 
             if (event.name === "quickshelloverview") {
-                var overviewState = String(event.data || "").trim();
-                if (overviewState === "open") {
-                    Services.ShellState.setActiveSpecialWorkspace("");
-                    Services.ShellState.setWorkspaceOverviewMode("workspaces");
-                    Services.ShellState.setApplicationsOverviewClosing(false);
-                    Services.ShellState.setApplicationsOverviewFromWorkspaceOverview(false);
-                    Services.ShellState.setApplicationsOverviewVisualLayerSettled(false);
-                    Services.ShellState.setWorkspaceOverviewOpen(true);
-                } else if (overviewState === "applications" || overviewState === "applications-from-overview" || overviewState.indexOf("applications:") === 0) {
-                    var initialQuery = overviewState.indexOf("applications:") === 0 ? overviewState.substring(13) : "";
-                    var fromWorkspaceOverview = overviewState === "applications-from-overview"
-                            || (overviewState.indexOf("applications:") === 0
-                                && Services.ShellState.workspaceOverviewOpen
-                                && Services.ShellState.workspaceOverviewMode === "workspaces");
-                    Services.ShellState.setActiveSpecialWorkspace("");
-                    Services.ShellState.setApplicationsOverviewClosing(false);
-                    Services.ShellState.setApplicationsOverviewVisualLayerHidden(false);
-                    Services.ShellState.setApplicationsOverviewVisualLayerSettled(false);
-                    Services.ShellState.setApplicationsOverviewInitialQuery(initialQuery);
-                    Services.ShellState.setApplicationsOverviewFromWorkspaceOverview(fromWorkspaceOverview);
-                    Services.ShellState.setWorkspaceOverviewMode("applications");
-                    Services.ShellState.setWorkspaceOverviewOpen(true);
-                } else if (overviewState === "applications-closing") {
-                    if (Services.ShellState.workspaceOverviewOpen && Services.ShellState.workspaceOverviewMode === "applications") {
-                        Services.ShellState.setApplicationsOverviewVisualLayerSettled(false);
-                        Services.ShellState.setApplicationsOverviewClosing(true);
-                    }
-                } else if (overviewState === "applications-layer-hidden") {
-                    if (Services.ShellState.applicationsOverviewClosing) {
-                        Services.ShellState.setApplicationsOverviewVisualLayerSettled(false);
-                        Services.ShellState.setApplicationsOverviewVisualLayerHidden(true);
-                    }
-                } else if (overviewState === "applications-layer-settled") {
-                    if (Services.ShellState.workspaceOverviewOpen
-                            && Services.ShellState.workspaceOverviewMode === "applications"
-                            && !Services.ShellState.applicationsOverviewClosing
-                            && !Services.ShellState.applicationsOverviewVisualLayerHidden)
-                        Services.ShellState.setApplicationsOverviewVisualLayerSettled(true);
-                } else if (overviewState === "close") {
-                    Services.ShellState.setApplicationsOverviewVisualLayerSettled(false);
-                    Services.ShellState.setWorkspaceOverviewOpen(false);
-                }
+                service.handleOverviewPluginEvent(String(event.data || "").trim());
                 return;
             }
 
@@ -502,11 +538,13 @@ Item {
                     Services.ShellActions.closeActiveSpecialWorkspace();
             }
 
-            if (service.hyprEventNeedsClientRefresh(event.name))
+            var needsClientRefresh = service.hyprEventNeedsClientRefresh(event.name);
+            var needsMonitorRefresh = service.hyprEventNeedsMonitorRefresh(event.name);
+            if (needsClientRefresh)
                 service.queueRefreshClients();
-            if (service.hyprEventNeedsMonitorRefresh(event.name))
+            if (needsMonitorRefresh)
                 service.queueRefreshMonitors();
-            if (service.hyprEventNeedsClientRefresh(event.name) || service.hyprEventNeedsMonitorRefresh(event.name))
+            if (needsClientRefresh || needsMonitorRefresh)
                 service.queueRefreshWorkspaces();
         }
 

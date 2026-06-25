@@ -92,6 +92,10 @@ QtObject {
         Services.ShellState.setApplicationsOverviewInitialQuery("")
         var returnWorkspace = Math.max(1, Math.floor(Number(Services.ShellState.activeWorkspace || 1)))
         if (!nativeOverviewDispatch("applications", String(returnWorkspace))) {
+            Services.ShellState.setApplicationsOverviewClosing(false)
+            Services.ShellState.setApplicationsOverviewVisualLayerHidden(false)
+            Services.ShellState.setApplicationsOverviewVisualLayerSettled(false)
+            Services.ShellState.setApplicationsOverviewFromWorkspaceOverview(false)
             Services.ShellState.setWorkspaceOverviewMode("applications")
             Services.ShellState.setWorkspaceOverviewOpen(true)
         }
