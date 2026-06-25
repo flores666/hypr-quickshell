@@ -22,7 +22,8 @@ Scope {
     readonly property bool panelVisuallySettled: applicationsRiseProgress >= 0.998
     readonly property bool closingHandoffActive: closingVisualActive && panelVisuallySettled && !Services.ShellState.applicationsOverviewVisualLayerHidden
     readonly property bool renderActive: overviewActive || closingVisualActive || animationProgress > 0.001
-    readonly property bool inputCaptureActive: renderActive
+    readonly property bool inputCaptureActive: overviewActive || closingVisualActive
+    readonly property int inputPanelMaskHeight: Math.max(0, inputWindow.height - inputBottomMargin)
     readonly property bool visualLayerActive: renderActive && !Services.ShellState.applicationsOverviewVisualLayerHidden
     readonly property bool inputVisualsActive: inputActive || closingHandoffActive
     readonly property bool searchActive: normalizedQuery().length > 0
@@ -56,6 +57,10 @@ Scope {
     property var contextActions: []
     property real contextMenuX: 0
     property real contextMenuY: 0
+    property bool preserveViewportOnNextRebuild: false
+    property bool viewportMutationActive: false
+    property real preservedViewportY: 0
+    property bool suppressEnsureVisible: false
 
     function clamp01(value) {
         return Math.max(0, Math.min(1, Number(value || 0)));
@@ -206,7 +211,7 @@ Scope {
         selectionSource = "none";
     }
 
-    function selectAppByKey(key, source) {
+    function selectAppByKey(key, source, ensureVisible) {
         var normalizedKey = String(key || "");
         if (normalizedKey.length === 0 || selectableIndexOf(normalizedKey) < 0) {
             clearSelection();
@@ -214,7 +219,7 @@ Scope {
         }
         selectedAppKey = normalizedKey;
         selectionSource = source || "pointer";
-        if (inputContent)
+        if (ensureVisible && !suppressEnsureVisible && inputContent)
             inputContent.ensureAppVisible(selectedAppKey);
     }
 
@@ -223,13 +228,12 @@ Scope {
             clearSelection();
             return;
         }
-        selectAppByKey(appKey(selectableApps[0]), "search");
+        selectAppByKey(appKey(selectableApps[0]), "search", true);
     }
 
     function reconcileSelection(resetToFirst) {
         if (!searchActive) {
-            if (selectionSource === "search" || selectedAppKey.length === 0 || selectableIndexOf(selectedAppKey) < 0)
-                clearSelection();
+            clearSelection();
             return;
         }
 
@@ -266,7 +270,7 @@ Scope {
             current = delta > 0 ? -1 : selectableApps.length;
 
         var next = Math.max(0, Math.min(selectableApps.length - 1, current + delta));
-        selectAppByKey(appKey(selectableApps[next]), "search");
+        selectAppByKey(appKey(selectableApps[next]), "search", true);
     }
 
     function activateSelection() {
@@ -286,6 +290,10 @@ Scope {
         var groups = {};
         var rows = [];
         var flat = [];
+        var preserveViewport = preserveViewportOnNextRebuild || viewportMutationActive;
+        var viewportY = preserveViewport ? preservedViewportY : gridContentY;
+
+        preserveViewportOnNextRebuild = false;
 
         for (var d = 0; d < categoryDefinitions.length; d++)
             groups[categoryDefinitions[d].code] = [];
@@ -329,7 +337,15 @@ Scope {
         sectionRows = rows;
         selectableApps = flat;
         sectionRowsVersion += 1;
-        reconcileSelection(Boolean(resetSelectionToFirst));
+
+        suppressEnsureVisible = preserveViewport;
+        reconcileSelection(Boolean(resetSelectionToFirst) && !preserveViewport);
+        suppressEnsureVisible = false;
+
+        if (preserveViewport) {
+            setGridContentY(viewportY);
+            applyGridContentY(gridContentY);
+        }
     }
 
     function launchApp(app) {
@@ -349,10 +365,15 @@ Scope {
 
     function applyGridContentY(value) {
         var next = Math.max(0, Number(value || 0));
-        if (visualContent)
-            visualContent.forceContentY(next);
+        var applied = next;
+
         if (inputContent)
-            inputContent.forceContentY(next);
+            applied = inputContent.forceContentY(next);
+        if (visualContent)
+            visualContent.forceContentY(applied);
+
+        if (Math.abs(gridContentY - applied) > 0.5)
+            gridContentY = applied;
     }
 
     function resetGridContentY() {
@@ -368,6 +389,13 @@ Scope {
     function captureContentYForClose() {
         setGridContentY(inputActive ? currentInputContentY() : gridContentY);
         applyGridContentY(gridContentY);
+    }
+
+    function beginViewportPreservingMutation() {
+        preservedViewportY = inputActive ? currentInputContentY() : gridContentY;
+        viewportMutationActive = true;
+        preserveViewportOnNextRebuild = true;
+        setGridContentY(preservedViewportY);
     }
 
     function focusSearchFieldWhenReady() {
@@ -407,10 +435,15 @@ Scope {
     }
 
     function finishCloseAnimation() {
-        if (overviewActive || closeRequested)
+        if (overviewActive)
             return;
 
         closingVisualActive = false;
+        animationBehaviorEnabled = false;
+        animationProgress = 0;
+        animationBehaviorEnabled = true;
+        Services.ShellState.setApplicationsOverviewClosing(false);
+        Services.ShellState.setApplicationsOverviewVisualLayerSettled(false);
         query = "";
         closeContextMenu();
         clearSelection();
@@ -471,7 +504,12 @@ Scope {
 
         if (action === "launch") {
             launchApp(app);
-        } else if (action === "pin") {
+            return;
+        }
+
+        beginViewportPreservingMutation();
+
+        if (action === "pin") {
             Services.AppPanelService.pin(key);
         } else if (action === "unpin") {
             Services.AppPanelService.unpin(key);
@@ -490,7 +528,7 @@ Scope {
         var key = String(appKeyValue || "");
         if (key.length === 0)
             return;
-        selectAppByKey(key, searchActive ? "search" : "pointer");
+        selectAppByKey(key, searchActive ? "search" : "pointer", false);
     }
 
     function handleAppUnhovered(appKeyValue) {
@@ -506,7 +544,7 @@ Scope {
             inputContent.forceSearchFocus();
         var key = appKey(app);
         if (key.length > 0)
-            selectAppByKey(key, searchActive ? "search" : "pointer");
+            selectAppByKey(key, searchActive ? "search" : "pointer", false);
     }
 
     onOverviewActiveChanged: {
@@ -536,6 +574,13 @@ Scope {
             closeContextMenu();
     }
 
+    onInputCaptureActiveChanged: {
+        if (!inputCaptureActive) {
+            closeContextMenu();
+            clearSelection();
+        }
+    }
+
     onCloseRequestedChanged: {
         if (closeRequested && (overviewActive || renderActive))
             startCloseAnimation();
@@ -545,7 +590,9 @@ Scope {
         if (overviewActive && !closingVisualActive) {
             closeContextMenu();
             resetGridContentY();
-            rebuildSections(true);
+            if (!searchActive)
+                clearSelection();
+            rebuildSections(searchActive);
         }
     }
 
@@ -576,8 +623,16 @@ Scope {
 
     Timer {
         id: closeCleanupTimer
-        interval: root.closeAnimationDuration
+        interval: root.closeAnimationDuration + 40
         repeat: false
+        onTriggered: root.finishCloseAnimation()
+    }
+
+    Timer {
+        id: inputReleaseWatchdogTimer
+        interval: root.closeAnimationDuration + 260
+        repeat: false
+        running: root.closingVisualActive && !root.overviewActive
         onTriggered: root.finishCloseAnimation()
     }
 
@@ -594,6 +649,12 @@ Scope {
         function onFavoriteIdsChanged() {
             if (root.overviewActive && !root.closingVisualActive)
                 root.rebuildSections(false);
+        }
+        function onActionRunningChanged() {
+            if (!Services.AppPanelService.actionRunning) {
+                root.viewportMutationActive = false;
+                root.preserveViewportOnNextRebuild = false;
+            }
         }
     }
 
@@ -642,6 +703,70 @@ Scope {
         }
     }
 
+
+    PanelWindow {
+        id: inputBlockerWindow
+
+        anchors {
+            top: true
+            bottom: true
+            left: true
+            right: true
+        }
+
+        visible: root.inputCaptureActive
+        focusable: false
+        implicitHeight: Screen.height
+        color: "transparent"
+        surfaceFormat.opaque: false
+
+        WlrLayershell.namespace: "quickshell:applications-input-blocker"
+        WlrLayershell.layer: WlrLayer.Top
+        exclusiveZone: 0
+        exclusionMode: ExclusionMode.Ignore
+
+        mask: Region {
+            x: 0
+            y: 0
+            width: root.inputCaptureActive ? inputBlockerWindow.width : 0
+            height: root.inputCaptureActive ? inputBlockerWindow.height : 0
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            enabled: root.inputCaptureActive
+            hoverEnabled: false
+            acceptedButtons: Qt.AllButtons
+            preventStealing: true
+            cursorShape: Qt.ArrowCursor
+
+            function keepKeyboardFocus() {
+                if (!root.inputActive)
+                    return;
+                root.closeContextMenu();
+                inputContent.forceSearchFocus();
+                Services.ShellState.requestCloseTopbarPopups();
+            }
+
+            onPressed: function(mouse) {
+                mouse.accepted = true;
+                keepKeyboardFocus();
+            }
+
+            onReleased: function(mouse) {
+                mouse.accepted = true;
+            }
+
+            onClicked: function(mouse) {
+                mouse.accepted = true;
+            }
+
+            onWheel: function(wheel) {
+                wheel.accepted = true;
+            }
+        }
+    }
+
     PanelWindow {
         id: inputWindow
 
@@ -659,7 +784,7 @@ Scope {
         surfaceFormat.opaque: false
 
         WlrLayershell.namespace: "quickshell:applications-input"
-        WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.layer: WlrLayer.Top
         exclusiveZone: 0
         exclusionMode: ExclusionMode.Ignore
 
@@ -667,7 +792,7 @@ Scope {
             x: 0
             y: 0
             width: root.inputCaptureActive ? inputWindow.width : 0
-            height: root.inputCaptureActive ? inputWindow.height : 0
+            height: root.inputCaptureActive ? root.inputPanelMaskHeight : 0
         }
 
         MouseArea {
@@ -701,6 +826,8 @@ Scope {
             }
 
             onWheel: function(wheel) {
+                if (root.inputActive && inputContent)
+                    inputContent.scrollBy(inputContent.wheelDeltaToContentDelta(wheel));
                 wheel.accepted = true;
             }
         }

@@ -17,13 +17,19 @@ Item {
     readonly property real currentContentY: appList.contentY
     readonly property int tileWidth: 118
     readonly property int tileHeight: 116
+    readonly property int sectionHeaderHeight: 20
+    readonly property int sectionHeaderGap: 12
     readonly property int sectionSpacing: 24
     readonly property int appColumns: Math.max(1, Math.floor(Math.max(1, appList.width) / tileWidth))
+    readonly property real wheelLineHeight: 48
+    readonly property real wheelDefaultLines: 6
+    readonly property real wheelSpeedMultiplier: 1.45
+    readonly property real pixelScrollMultiplier: 1.18
     property alias searchField: searchBox.inputField
 
     signal queryEdited(string text)
     signal moveSelectionRequested(string direction)
-    signal activateSelectionRequested()
+    signal activateSelectionRequested
     signal appHovered(string appKey)
     signal appUnhovered(string appKey)
     signal appPressed(var app, int button)
@@ -36,31 +42,112 @@ Item {
     }
 
     function forceContentY(value) {
-        appList.contentY = Math.max(0, Number(value || 0));
+        appList.contentY = clampContentY(value);
+        return appList.contentY;
     }
 
-    function sectionIndexForApp(appKey) {
+    function clampContentY(value) {
+        var maxY = Math.max(0, appList.contentHeight - appList.height);
+        var next = Number(value || 0);
+        if (isNaN(next))
+            next = 0;
+        return Math.max(0, Math.min(maxY, next));
+    }
+
+    function systemWheelLines() {
+        var lines = root.wheelDefaultLines;
+        try {
+            if (Qt.styleHints && Number(Qt.styleHints.wheelScrollLines) > 0)
+                lines = Number(Qt.styleHints.wheelScrollLines);
+        } catch (e) {
+            lines = root.wheelDefaultLines;
+        }
+        return Math.max(1, Math.min(12, lines));
+    }
+
+    function wheelDeltaToContentDelta(event) {
+        var pixelY = event && event.pixelDelta ? Number(event.pixelDelta.y || 0) : 0;
+        if (pixelY !== 0)
+            return -pixelY * root.pixelScrollMultiplier;
+
+        var angleY = event && event.angleDelta ? Number(event.angleDelta.y || 0) : 0;
+        if (angleY === 0)
+            return 0;
+
+        return -(angleY / 120.0) * systemWheelLines() * root.wheelLineHeight * root.wheelSpeedMultiplier;
+    }
+
+    function scrollBy(delta) {
+        if (!root.interactive)
+            return;
+
+        var rawDelta = Number(delta || 0);
+        if (!isFinite(rawDelta) || Math.abs(rawDelta) <= 0.01)
+            return;
+
+        var current = appList.contentY;
+        var next = clampContentY(current + rawDelta);
+        if (Math.abs(next - current) <= 0.25)
+            return;
+
+        appList.contentY = next;
+        root.contentYEdited(next);
+    }
+
+    function appRowsForCount(count) {
+        return Math.max(1, Math.ceil(Math.max(0, Number(count || 0)) / root.appColumns));
+    }
+
+    function appsAreaHeightForCount(count) {
+        return appRowsForCount(count) * root.tileHeight;
+    }
+
+    function sectionHeightForCount(count) {
+        return root.sectionHeaderHeight + root.sectionHeaderGap + appsAreaHeightForCount(count);
+    }
+
+    function appPositionForKey(appKey) {
         var key = String(appKey || "");
         if (key.length === 0)
-            return -1;
+            return null;
 
+        var sectionTop = 0;
         for (var sectionIndex = 0; sectionIndex < root.sectionRows.length; sectionIndex++) {
             var row = root.sectionRows[sectionIndex] || {};
             var apps = row.apps || [];
             for (var i = 0; i < apps.length; i++) {
                 var app = apps[i] || {};
                 var candidate = String(app.desktopId || app.sourceDesktopId || "");
-                if (candidate === key)
-                    return sectionIndex;
+                if (candidate === key) {
+                    var appRow = Math.floor(i / root.appColumns);
+                    return {
+                        "top": sectionTop + root.sectionHeaderHeight + root.sectionHeaderGap + appRow * root.tileHeight,
+                        "bottom": sectionTop + root.sectionHeaderHeight + root.sectionHeaderGap + (appRow + 1) * root.tileHeight
+                    };
+                }
             }
+            sectionTop += root.sectionHeightForCount(apps.length) + root.sectionSpacing;
         }
-        return -1;
+        return null;
     }
 
     function ensureAppVisible(appKey) {
-        var sectionIndex = sectionIndexForApp(appKey);
-        if (sectionIndex >= 0)
-            appList.positionViewAtIndex(sectionIndex, ListView.Contain);
+        var position = appPositionForKey(appKey);
+        if (!position)
+            return;
+
+        var padding = 18;
+        var topLimit = appList.contentY + padding;
+        var bottomLimit = appList.contentY + appList.height - padding;
+        var next = appList.contentY;
+
+        if (position.top < topLimit)
+            next = position.top - padding;
+        else if (position.bottom > bottomLimit)
+            next = position.bottom - appList.height + padding;
+
+        forceContentY(next);
+        root.contentYEdited(appList.contentY);
     }
 
     Item {
@@ -89,8 +176,12 @@ Item {
                 interactive: root.interactive
                 showVisuals: root.showVisuals
                 queryText: root.queryText
-                onQueryEdited: function(text) { root.queryEdited(text); }
-                onMoveSelectionRequested: function(direction) { root.moveSelectionRequested(direction); }
+                onQueryEdited: function (text) {
+                    root.queryEdited(text);
+                }
+                onMoveSelectionRequested: function (direction) {
+                    root.moveSelectionRequested(direction);
+                }
                 onActivateSelectionRequested: root.activateSelectionRequested()
             }
 
@@ -100,10 +191,26 @@ Item {
                 Layout.fillHeight: true
                 model: root.sectionRows.length
                 clip: true
-                cacheBuffer: 520
+                cacheBuffer: 1600
+                reuseItems: false
                 boundsBehavior: Flickable.StopAtBounds
+                boundsMovement: Flickable.StopAtBounds
+                flickableDirection: Flickable.VerticalFlick
                 interactive: root.interactive
                 spacing: root.sectionSpacing
+
+                WheelHandler {
+                    id: appListWheelHandler
+                    enabled: root.interactive
+                    target: null
+                    onWheel: function (event) {
+                        var delta = root.wheelDeltaToContentDelta(event);
+                        if (delta === 0)
+                            return;
+                        root.scrollBy(delta);
+                        event.accepted = true;
+                    }
+                }
 
                 Binding {
                     target: appList
@@ -123,10 +230,12 @@ Item {
                     required property int index
                     readonly property var rowData: (root.sectionRowsVersion, root.sectionRows[index] || ({}))
                     readonly property var rowApps: rowData.apps || []
+                    readonly property int rowAppCount: rowApps.length
                     readonly property bool hiddenSection: rowData.code === "hidden"
+                    readonly property real appsAreaHeight: root.appsAreaHeightForCount(rowAppCount)
 
                     width: appList.width
-                    height: sectionColumn.implicitHeight
+                    height: root.sectionHeightForCount(rowAppCount)
 
                     Column {
                         id: sectionColumn
@@ -135,12 +244,14 @@ Item {
 
                         Text {
                             width: parent.width
+                            height: root.sectionHeaderHeight
                             text: String(sectionDelegate.rowData.title || "")
                             visible: root.showVisuals
                             color: sectionDelegate.hiddenSection ? "#aeb9c5" : "#dce5ee"
                             opacity: sectionDelegate.hiddenSection ? 0.82 : 1.0
                             font.pixelSize: 14
                             font.weight: Font.DemiBold
+                            verticalAlignment: Text.AlignVCenter
                             renderType: Text.NativeRendering
                             font.hintingPreference: Font.PreferFullHinting
                             font.kerning: false
@@ -149,6 +260,7 @@ Item {
                         Flow {
                             id: rowFlow
                             width: parent.width
+                            height: sectionDelegate.appsAreaHeight
                             spacing: 0
 
                             Repeater {
@@ -172,14 +284,22 @@ Item {
                                         selected: root.selectedAppKey.length > 0 && root.selectedAppKey === appCell.appKey
                                         interactive: root.interactive
                                         showVisuals: root.showVisuals
-                                        onHovered: function(appKey) { root.appHovered(appKey); }
-                                        onUnhovered: function(appKey) { root.appUnhovered(appKey); }
-                                        onPressed: function(app, button, localX, localY) { root.appPressed(app, button); }
-                                        onContextRequested: function(app, localX, localY) {
+                                        onHovered: function (appKey) {
+                                            root.appHovered(appKey);
+                                        }
+                                        onUnhovered: function (appKey) {
+                                            root.appUnhovered(appKey);
+                                        }
+                                        onPressed: function (app, button, localX, localY) {
+                                            root.appPressed(app, button);
+                                        }
+                                        onContextRequested: function (app, localX, localY) {
                                             var point = appTile.mapToItem(root, localX, localY);
                                             root.appContextRequested(app, point.x, point.y);
                                         }
-                                        onLaunched: function(app) { root.appLaunched(app); }
+                                        onLaunched: function (app) {
+                                            root.appLaunched(app);
+                                        }
                                     }
                                 }
                             }
