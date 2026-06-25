@@ -9,20 +9,20 @@ Item {
     required property string displayName
     property bool interactive: true
     property bool showVisuals: true
-    property bool highlighted: false
     property bool selected: false
 
     readonly property var safeApp: app || ({})
     readonly property string appKey: String(safeApp.desktopId || safeApp.sourceDesktopId || "")
-    readonly property bool inputHoverActive: (interactive && (appMouse.pressed || appMouse.containsMouse)) || highlighted || selected
+    readonly property bool activeVisual: root.showVisuals && (root.selected || (root.interactive && appMouse.pressed))
     readonly property var iconCacheRef: Services.AppPanelService.iconCache
     readonly property string resolvedIcon: (iconCacheRef, Services.AppPanelService.iconUrl(safeApp.iconCacheKey || safeApp.iconName || safeApp.icon || "application-x-executable",
                                                                                           safeApp.iconCacheFallback || safeApp.icon || ""))
 
     signal hovered(string appKey)
     signal unhovered(string appKey)
-    signal launched(var app)
+    signal pressed(var app, int button, real localX, real localY)
     signal contextRequested(var app, real localX, real localY)
+    signal launched(var app)
 
     Rectangle {
         id: tile
@@ -30,12 +30,17 @@ Item {
         width: 96
         height: 104
         radius: 22
-        color: root.showVisuals && root.inputHoverActive ? (appMouse.pressed ? "#26ffffff" : (root.selected ? "#22ffffff" : "#18ffffff")) : "transparent"
-        border.width: root.showVisuals && root.selected ? 1 : 0
-        border.color: "#44ffffff"
+        color: root.activeVisual ? (appMouse.pressed ? "#26ffffff" : "#18ffffff") : "transparent"
+        border.width: root.activeVisual ? 1 : 0
+        border.color: root.activeVisual ? "#36ffffff" : "transparent"
         antialiasing: true
 
         Behavior on color {
+            enabled: root.showVisuals
+            ColorAnimation { duration: 55; easing.type: Easing.OutCubic }
+        }
+
+        Behavior on border.color {
             enabled: root.showVisuals
             ColorAnimation { duration: 55; easing.type: Easing.OutCubic }
         }
@@ -103,15 +108,22 @@ Item {
             anchors.fill: parent
             enabled: root.interactive
             hoverEnabled: root.interactive
-            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
             cursorShape: Qt.PointingHandCursor
+
             onEntered: root.hovered(root.appKey)
             onExited: root.unhovered(root.appKey)
+
+            onPressed: function(mouse) {
+                root.pressed(root.safeApp, mouse.button, tile.x + mouse.x, tile.y + mouse.y);
+            }
+
             onClicked: function(mouse) {
-                if (mouse.button === Qt.RightButton)
-                    root.contextRequested(root.safeApp, mouse.x, mouse.y);
-                else
+                if (mouse.button === Qt.LeftButton) {
                     root.launched(root.safeApp);
+                } else if (mouse.button === Qt.RightButton) {
+                    root.contextRequested(root.safeApp, tile.x + mouse.x, tile.y + mouse.y);
+                }
             }
         }
     }

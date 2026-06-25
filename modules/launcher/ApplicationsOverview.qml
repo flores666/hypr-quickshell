@@ -1,6 +1,7 @@
 import Quickshell
 import Quickshell.Wayland
 import QtQuick
+import QtQuick.Layouts
 import "../../services" as Services
 
 Scope {
@@ -9,7 +10,6 @@ Scope {
     readonly property bool overviewActive: Services.ShellState.workspaceOverviewOpen && Services.ShellState.workspaceOverviewMode === "applications"
     readonly property bool closeRequested: Services.ShellState.applicationsOverviewClosing
     readonly property bool inputActive: overviewActive && Services.ShellState.applicationsOverviewVisualLayerSettled && !closeRequested && !closingVisualActive
-    readonly property bool visualLayerActive: renderActive && !Services.ShellState.applicationsOverviewVisualLayerHidden
     readonly property int inputTopMargin: 56
     readonly property int inputBottomMargin: 116
     readonly property int visualContentYOffset: 38
@@ -18,45 +18,44 @@ Scope {
     readonly property int closeAnimationDuration: 300
     readonly property int openAnimationDuration: 340
     readonly property real horizontalMargin: Math.max(52, Math.round(visualWindow.width * 0.08))
-    readonly property int appCellWidth: 118
-    readonly property int appCellHeight: 116
-    readonly property int appColumnSpacing: 0
-    readonly property int appColumnCount: Math.max(1, Math.floor(Math.max(1, visualWindow.width - horizontalMargin * 2 + appColumnSpacing) / Math.max(1, appCellWidth + appColumnSpacing)))
     readonly property real applicationsRiseProgress: smoothStep(desktopCardPhaseEnd, 1.0, animationProgress)
     readonly property bool panelVisuallySettled: applicationsRiseProgress >= 0.998
     readonly property bool closingHandoffActive: closingVisualActive && panelVisuallySettled && !Services.ShellState.applicationsOverviewVisualLayerHidden
     readonly property bool renderActive: overviewActive || closingVisualActive || animationProgress > 0.001
+    readonly property bool inputCaptureActive: renderActive
+    readonly property bool visualLayerActive: renderActive && !Services.ShellState.applicationsOverviewVisualLayerHidden
     readonly property bool inputVisualsActive: inputActive || closingHandoffActive
-    readonly property string selectedAppKey: selectedIndex >= 0 && selectedIndex < flatApps.length ? appKey(flatApps[selectedIndex]) : ""
+    readonly property bool searchActive: normalizedQuery().length > 0
+    readonly property int contextMenuWidth: 226
+    readonly property int contextMenuRowHeight: 38
+    readonly property var categoryDefinitions: [
+        { "code": "internet", "title": "Internet", "categories": ["Network", "WebBrowser", "Email", "Chat", "InstantMessaging", "IRCClient", "Feed", "News"] },
+        { "code": "development", "title": "Development", "categories": ["Development", "IDE", "GUIDesigner", "RevisionControl", "WebDevelopment", "Debugger", "Profiling"] },
+        { "code": "office", "title": "Office", "categories": ["Office", "WordProcessor", "Spreadsheet", "Presentation", "Calendar", "ContactManagement", "ProjectManagement"] },
+        { "code": "graphics", "title": "Graphics", "categories": ["Graphics", "Photography", "RasterGraphics", "VectorGraphics", "2DGraphics", "3DGraphics", "Scanning"] },
+        { "code": "multimedia", "title": "Multimedia", "categories": ["AudioVideo", "Audio", "Video", "Player", "Recorder", "Music", "TV"] },
+        { "code": "games", "title": "Games", "categories": ["Game", "Games", "ArcadeGame", "BoardGame", "BlocksGame", "CardGame", "KidsGame", "LogicGame", "RolePlaying", "Simulation", "SportsGame", "StrategyGame"] },
+        { "code": "settings", "title": "Settings", "categories": ["Settings", "DesktopSettings", "HardwareSettings", "Security", "PackageManager"] },
+        { "code": "system", "title": "System", "categories": ["System", "Monitor", "FileManager", "Emulator", "TerminalEmulator", "Filesystem"] },
+        { "code": "utilities", "title": "Utilities", "categories": ["Utility", "TextEditor", "Archiving", "Calculator", "Clock", "Compression", "Dictionary", "Viewer"] },
+        { "code": "other", "title": "Other", "categories": [] }
+    ]
 
     property real animationProgress: 0
     property bool animationBehaviorEnabled: true
     property bool closingVisualActive: false
     property string query: ""
-    property string hoveredAppKey: ""
     property real gridContentY: 0
-    property var flatApps: []
-    property var appRows: []
-    property var rowIndexByAppKey: ({})
-    property int selectedIndex: -1
-    property bool appContextMenuOpen: false
-    property var contextApp: null
+    property var sectionRows: []
+    property int sectionRowsVersion: 0
+    property var selectableApps: []
+    property string selectedAppKey: ""
+    property string selectionSource: "none"
+    property bool contextMenuOpen: false
+    property var contextApp: ({})
     property var contextActions: []
     property real contextMenuX: 0
     property real contextMenuY: 0
-
-    readonly property var categoryDefinitions: [
-        { code: "internet", title: "Internet", keys: ["Network", "WebBrowser", "Email", "Chat", "News", "P2P", "InstantMessaging", "Telephony", "FileTransfer"] },
-        { code: "development", title: "Development", keys: ["Development", "IDE", "GUIDesigner", "Profiling", "Debugger", "RevisionControl", "TextEditor"] },
-        { code: "office", title: "Office", keys: ["Office", "Calendar", "ContactManagement", "Database", "Dictionary", "Finance", "Presentation", "Spreadsheet", "WordProcessor"] },
-        { code: "graphics", title: "Graphics", keys: ["Graphics", "Photography", "2DGraphics", "3DGraphics", "RasterGraphics", "VectorGraphics", "Scanning", "Viewer"] },
-        { code: "multimedia", title: "Multimedia", keys: ["AudioVideo", "Audio", "Video", "Player", "Recorder", "Music", "Mixer", "TV"] },
-        { code: "games", title: "Games", keys: ["Game", "ActionGame", "AdventureGame", "ArcadeGame", "BoardGame", "BlocksGame", "CardGame", "KidsGame", "LogicGame", "RolePlaying", "Shooter", "Simulation", "SportsGame", "StrategyGame"] },
-        { code: "settings", title: "Settings", keys: ["Settings", "DesktopSettings", "HardwareSettings", "PackageManager", "Security"] },
-        { code: "system", title: "System", keys: ["System", "TerminalEmulator", "FileManager", "Monitor", "Emulator", "Filesystem"] },
-        { code: "utilities", title: "Utilities", keys: ["Utility", "Accessibility", "Archiving", "Calculator", "Clock", "Compression", "FileTools", "Maps", "Screensaver"] },
-        { code: "other", title: "Other", keys: [] }
-    ]
 
     function clamp01(value) {
         return Math.max(0, Math.min(1, Number(value || 0)));
@@ -68,11 +67,15 @@ Scope {
         return t * t * (3 - 2 * t);
     }
 
+    function normalizedQuery() {
+        return String(query || "").trim().toLowerCase();
+    }
+
     function appSearchText(app) {
         if (!app)
             return "";
         if (app.searchText)
-            return String(app.searchText);
+            return String(app.searchText).toLowerCase();
 
         var parts = [app.name || "", app.displayName || "", app.genericName || "", app.desktopId || "", app.sourceDesktopId || "", app.executable || "", app.startupWmClass || ""];
         var keys = app.matchKeys || [];
@@ -89,51 +92,78 @@ Scope {
         return String(app && (app.desktopId || app.sourceDesktopId || app.name || app.displayName) || "");
     }
 
-    function appSignature(app) {
-        if (!app)
-            return "";
-
-        var keys = app.matchKeys || [];
-        var categories = app.categories || [];
-        return [app.desktopId || "", app.sourceDesktopId || "", app.name || "", app.displayName || "", app.genericName || "", app.iconCacheKey || "", app.iconName || "", app.icon || "", app.command || "", app.executable || "", app.startupWmClass || "", keys.join(","), categories.join(",")].join("|");
+    function displayNameForApp(app) {
+        return String(app && (app.displayName || app.name || app.desktopId) || "Application").trim();
     }
 
-    function lowerDisplayName(app) {
-        return String(app && (app.displayName || app.name || app.desktopId) || "").trim().toLowerCase();
-    }
-
-    function stableAppCompare(a, b) {
-        var an = lowerDisplayName(a);
-        var bn = lowerDisplayName(b);
-        if (an < bn)
+    function stableAppSort(a, b) {
+        var leftName = displayNameForApp(a).toLowerCase();
+        var rightName = displayNameForApp(b).toLowerCase();
+        if (leftName < rightName)
             return -1;
-        if (an > bn)
+        if (leftName > rightName)
             return 1;
-        var aid = appKey(a).toLowerCase();
-        var bid = appKey(b).toLowerCase();
-        if (aid < bid)
-            return -1;
-        if (aid > bid)
-            return 1;
-        return 0;
+        var leftId = appKey(a).toLowerCase();
+        var rightId = appKey(b).toLowerCase();
+        return leftId < rightId ? -1 : (leftId > rightId ? 1 : 0);
     }
 
-    function appCategoryCode(app) {
+    function sortedApps(apps) {
+        var copy = (apps || []).slice();
+        copy.sort(stableAppSort);
+        return copy;
+    }
+
+    function favoriteIndex(app) {
+        var key = appKey(app);
+        var favorites = Services.AppPanelService.favoriteIds || [];
+        for (var i = 0; i < favorites.length; i++) {
+            if (String(favorites[i] || "") === key)
+                return i;
+        }
+        return 999999;
+    }
+
+    function sortedFavoriteApps(apps) {
+        var copy = (apps || []).slice();
+        copy.sort(function(a, b) {
+            var left = favoriteIndex(a);
+            var right = favoriteIndex(b);
+            if (left !== right)
+                return left - right;
+            return stableAppSort(a, b);
+        });
+        return copy;
+    }
+
+    function appHasCategory(app, categoryName) {
         var categories = app && app.categories ? app.categories : [];
-        for (var i = 0; i < categoryDefinitions.length - 1; i++) {
+        for (var i = 0; i < categories.length; i++) {
+            if (String(categories[i] || "") === categoryName)
+                return true;
+        }
+        return false;
+    }
+
+    function categoryForApp(app) {
+        for (var i = 0; i < categoryDefinitions.length; i++) {
             var definition = categoryDefinitions[i];
-            var keys = definition.keys || [];
-            for (var c = 0; c < categories.length; c++) {
-                for (var k = 0; k < keys.length; k++) {
-                    if (String(categories[c]) === String(keys[k]))
-                        return definition.code;
-                }
+            if (definition.code === "other")
+                continue;
+            var categories = definition.categories || [];
+            for (var j = 0; j < categories.length; j++) {
+                if (appHasCategory(app, categories[j]))
+                    return definition.code;
             }
         }
         return "other";
     }
 
     function categoryTitle(code) {
+        if (code === "favorites")
+            return "Favorites";
+        if (code === "hidden")
+            return "Hidden";
         for (var i = 0; i < categoryDefinitions.length; i++) {
             if (categoryDefinitions[i].code === code)
                 return categoryDefinitions[i].title;
@@ -141,171 +171,172 @@ Scope {
         return "Other";
     }
 
-    function isAppHiddenByUser(app) {
-        return Services.AppPanelService.isHidden(appKey(app));
+    function appIsHidden(app) {
+        var key = appKey(app);
+        return (app && app.hidden) || Services.AppPanelService.isHidden(key);
     }
 
-    function filteredSourceApps() {
-        var apps = Services.AppPanelService.apps || [];
-        var needle = String(query || "").trim().toLowerCase();
-        var result = [];
+    function appIsFavorite(app) {
+        var key = appKey(app);
+        return (app && app.favorite) || Services.AppPanelService.isFavorite(key);
+    }
+
+    function appMatchesSearch(app, needle) {
+        return needle.length === 0 || appSearchText(app).indexOf(needle) >= 0;
+    }
+
+    function selectableIndexOf(key) {
+        var target = String(key || "");
+        if (target.length === 0)
+            return -1;
+        for (var i = 0; i < selectableApps.length; i++) {
+            if (appKey(selectableApps[i]) === target)
+                return i;
+        }
+        return -1;
+    }
+
+    function selectedApp() {
+        var index = selectableIndexOf(selectedAppKey);
+        return index >= 0 ? selectableApps[index] : null;
+    }
+
+    function clearSelection() {
+        selectedAppKey = "";
+        selectionSource = "none";
+    }
+
+    function selectAppByKey(key, source) {
+        var normalizedKey = String(key || "");
+        if (normalizedKey.length === 0 || selectableIndexOf(normalizedKey) < 0) {
+            clearSelection();
+            return;
+        }
+        selectedAppKey = normalizedKey;
+        selectionSource = source || "pointer";
+        if (inputContent)
+            inputContent.ensureAppVisible(selectedAppKey);
+    }
+
+    function selectFirstSearchResult() {
+        if (!searchActive || selectableApps.length === 0) {
+            clearSelection();
+            return;
+        }
+        selectAppByKey(appKey(selectableApps[0]), "search");
+    }
+
+    function reconcileSelection(resetToFirst) {
+        if (!searchActive) {
+            if (selectionSource === "search" || selectedAppKey.length === 0 || selectableIndexOf(selectedAppKey) < 0)
+                clearSelection();
+            return;
+        }
+
+        if (selectableApps.length === 0) {
+            clearSelection();
+            return;
+        }
+
+        if (resetToFirst || selectionSource !== "search" || selectableIndexOf(selectedAppKey) < 0)
+            selectFirstSearchResult();
+        else if (inputContent)
+            inputContent.ensureAppVisible(selectedAppKey);
+    }
+
+    function moveSelection(direction) {
+        if (!searchActive || selectableApps.length === 0)
+            return;
+
+        var columns = inputContent ? Math.max(1, Number(inputContent.appColumns || 1)) : 1;
+        var delta = 0;
+        if (direction === "left")
+            delta = -1;
+        else if (direction === "right")
+            delta = 1;
+        else if (direction === "up")
+            delta = -columns;
+        else if (direction === "down")
+            delta = columns;
+        else
+            return;
+
+        var current = selectableIndexOf(selectedAppKey);
+        if (current < 0)
+            current = delta > 0 ? -1 : selectableApps.length;
+
+        var next = Math.max(0, Math.min(selectableApps.length - 1, current + delta));
+        selectAppByKey(appKey(selectableApps[next]), "search");
+    }
+
+    function activateSelection() {
+        if (!searchActive || selectionSource !== "search")
+            return;
+        var app = selectedApp();
+        if (app)
+            launchApp(app);
+    }
+
+    function rebuildSections(resetSelectionToFirst) {
+        var needle = normalizedQuery();
+        var apps = sortedApps(Services.AppPanelService.apps || []);
         var seen = {};
+        var favoriteApps = [];
+        var hiddenApps = [];
+        var groups = {};
+        var rows = [];
+        var flat = [];
+
+        for (var d = 0; d < categoryDefinitions.length; d++)
+            groups[categoryDefinitions[d].code] = [];
 
         for (var i = 0; i < apps.length; i++) {
             var app = apps[i] || {};
             var key = appKey(app);
             if (!app.desktopId || key.length === 0 || seen[key])
                 continue;
-            if (app.noDisplay || app.hidden || isAppHiddenByUser(app))
+            if (app.noDisplay)
                 continue;
-            if (needle.length === 0 || appSearchText(app).indexOf(needle) >= 0) {
-                seen[key] = true;
-                result.push(app);
+            if (!appMatchesSearch(app, needle))
+                continue;
+
+            seen[key] = true;
+            if (appIsHidden(app)) {
+                hiddenApps.push(app);
+            } else if (appIsFavorite(app)) {
+                favoriteApps.push(app);
+            } else {
+                groups[categoryForApp(app)].push(app);
             }
         }
 
-        return result;
-    }
-
-    function flatAppIndexOf(key) {
-        var needle = String(key || "");
-        if (!needle)
-            return -1;
-        for (var i = 0; i < flatApps.length; i++) {
-            if (appKey(flatApps[i]) === needle)
-                return i;
-        }
-        return -1;
-    }
-
-    function filteredModelContainsKey(key) {
-        return flatAppIndexOf(key) >= 0;
-    }
-
-    function groupedApps(sourceApps) {
-        var groups = {};
-        for (var i = 0; i < categoryDefinitions.length; i++)
-            groups[categoryDefinitions[i].code] = [];
-
-        var source = sourceApps || [];
-        for (var a = 0; a < source.length; a++) {
-            var app = source[a] || {};
-            var code = appCategoryCode(app);
-            if (!groups[code])
-                code = "other";
-            groups[code].push(app);
+        function pushSection(code, title, sourceApps) {
+            var sectionApps = sourceApps || [];
+            if (sectionApps.length === 0)
+                return;
+            rows.push({ "code": code, "title": title, "apps": sectionApps });
+            for (var index = 0; index < sectionApps.length; index++)
+                flat.push(sectionApps[index]);
         }
 
-        for (var key in groups)
-            groups[key].sort(stableAppCompare);
-        return groups;
-    }
-
-    function rebuildApplicationRows(sourceApps) {
-        var groups = groupedApps(sourceApps);
-        var rows = [];
-        var nextFlatApps = [];
-        var nextRowIndexByAppKey = {};
-        var rowIndex = 0;
-
-        for (var d = 0; d < categoryDefinitions.length; d++) {
-            var definition = categoryDefinitions[d];
-            var apps = groups[definition.code] || [];
-            if (apps.length === 0)
-                continue;
-
-            rows.push({ rowType: "header", title: definition.title, categoryCode: definition.code, apps: [] });
-            rowIndex++;
-
-            for (var start = 0; start < apps.length; start += appColumnCount) {
-                var rowApps = apps.slice(start, start + appColumnCount);
-                rows.push({ rowType: "apps", title: "", categoryCode: definition.code, apps: rowApps });
-                for (var i = 0; i < rowApps.length; i++) {
-                    var rowApp = rowApps[i];
-                    nextFlatApps.push(rowApp);
-                    nextRowIndexByAppKey[appKey(rowApp)] = rowIndex;
-                }
-                rowIndex++;
-            }
+        pushSection("favorites", "Favorites", sortedFavoriteApps(favoriteApps));
+        for (var c = 0; c < categoryDefinitions.length; c++) {
+            var definition = categoryDefinitions[c];
+            pushSection(definition.code, definition.title, sortedApps(groups[definition.code] || []));
         }
+        pushSection("hidden", "Hidden", sortedApps(hiddenApps));
 
-        appRows = rows;
-        flatApps = nextFlatApps;
-        rowIndexByAppKey = nextRowIndexByAppKey;
-    }
-
-    function normalizeSelection(previousKey, selectFirst) {
-        if (flatApps.length === 0) {
-            selectedIndex = -1;
-            return;
-        }
-
-        var hasQuery = String(query || "").trim().length > 0;
-        if (selectFirst && hasQuery) {
-            selectedIndex = 0;
-            ensureSelectedVisible();
-            return;
-        }
-
-        var keepIndex = flatAppIndexOf(previousKey);
-        if (keepIndex >= 0)
-            selectedIndex = keepIndex;
-        else if (hasQuery)
-            selectedIndex = 0;
-        else
-            selectedIndex = -1;
-        ensureSelectedVisible();
-    }
-
-    function syncFilteredApps(selectFirst) {
-        var previousKey = selectedAppKey;
-        rebuildApplicationRows(filteredSourceApps());
-
-        if (hoveredAppKey.length > 0 && !filteredModelContainsKey(hoveredAppKey))
-            hoveredAppKey = "";
-
-        normalizeSelection(previousKey, !!selectFirst);
-    }
-
-    function ensureSelectedVisible() {
-        var key = selectedAppKey;
-        if (!key)
-            return;
-        var rowIndex = rowIndexByAppKey[key];
-        if (rowIndex === undefined)
-            return;
-        if (inputContent)
-            inputContent.ensureRowVisible(rowIndex);
-        if (visualContent)
-            visualContent.ensureRowVisible(rowIndex);
-        setGridContentY(inputContent ? inputContent.currentContentY : gridContentY);
-    }
-
-    function moveSelection(dx, dy) {
-        if (!inputActive || flatApps.length === 0)
-            return;
-
-        var current = selectedIndex >= 0 ? selectedIndex : 0;
-        var next = current + Number(dx || 0) + Number(dy || 0) * appColumnCount;
-        selectedIndex = Math.max(0, Math.min(flatApps.length - 1, next));
-        hoveredAppKey = "";
-        ensureSelectedVisible();
-    }
-
-    function activateSelection() {
-        if (!inputActive || flatApps.length === 0)
-            return;
-
-        var index = selectedIndex >= 0 ? selectedIndex : 0;
-        if (index >= 0 && index < flatApps.length)
-            launchApp(flatApps[index]);
+        sectionRows = rows;
+        selectableApps = flat;
+        sectionRowsVersion += 1;
+        reconcileSelection(Boolean(resetSelectionToFirst));
     }
 
     function launchApp(app) {
         if (!app || !app.desktopId)
             return;
 
-        closeAppContextMenu();
+        closeContextMenu();
         Services.AppPanelService.launch(app.desktopId);
         Services.ShellActions.closeWorkspaceOverview();
     }
@@ -343,8 +374,7 @@ Scope {
         Qt.callLater(function () {
             if (!root.inputActive)
                 return;
-            inputContent.searchField.forceActiveFocus();
-            inputContent.searchField.cursorPosition = inputContent.searchField.text.length;
+            inputContent.forceSearchFocus();
             Services.ShellActions.refreshPointerFocus();
         });
     }
@@ -352,9 +382,8 @@ Scope {
     function startOpenAnimation() {
         closeAnimationKickTimer.stop();
         closeCleanupTimer.stop();
-        closeAppContextMenu();
         closingVisualActive = false;
-        hoveredAppKey = "";
+        closeContextMenu();
         animationBehaviorEnabled = false;
         animationProgress = Services.ShellState.applicationsOverviewFromWorkspaceOverview ? desktopCardPhaseEnd + 0.04 : 0;
         animationBehaviorEnabled = true;
@@ -367,8 +396,8 @@ Scope {
 
         animationKickTimer.stop();
         closeCleanupTimer.stop();
-        closeAppContextMenu();
-        hoveredAppKey = "";
+        closeContextMenu();
+        clearSelection();
         captureContentYForClose();
         closingVisualActive = true;
         animationBehaviorEnabled = false;
@@ -383,72 +412,101 @@ Scope {
 
         closingVisualActive = false;
         query = "";
-        hoveredAppKey = "";
-        selectedIndex = -1;
-        closeAppContextMenu();
-        syncFilteredApps(false);
+        closeContextMenu();
+        clearSelection();
+        rebuildSections(false);
         resetGridContentY();
     }
 
-    function contextMenuActionsFor(app) {
-        var desktopId = appKey(app);
-        if (!desktopId)
-            return [];
+    function contextMenuHeight() {
+        return Math.max(1, contextActions.length) * contextMenuRowHeight + 12;
+    }
 
-        var pinned = Services.AppPanelService.isPinned(desktopId);
+    function clampContextX(x) {
+        return Math.max(8, Math.min(Number(x || 0), Math.max(8, inputWindow.width - contextMenuWidth - 8)));
+    }
+
+    function clampContextY(y) {
+        var minY = inputTopMargin + 4;
+        var maxY = Math.max(minY, inputWindow.height - inputBottomMargin - contextMenuHeight() - 4);
+        return Math.max(minY, Math.min(Number(y || 0), maxY));
+    }
+
+    function appContextActions(app) {
+        var key = appKey(app);
+        var hidden = Services.AppPanelService.isHidden(key) || Boolean(app && app.hidden);
+        var favorite = Services.AppPanelService.isFavorite(key) || Boolean(app && app.favorite);
+        var pinned = Services.AppPanelService.isPinned(key);
         return [
-            { label: "Launch", action: "launch", enabled: true },
-            { label: pinned ? "Unpin from panel" : "Pin to panel", action: pinned ? "unpin" : "pin", enabled: true },
-            { label: "Hide from applications", action: "hide", enabled: true }
+            { "label": "Launch", "action": "launch" },
+            { "label": favorite ? "Remove from favorites" : "Add to favorites", "action": favorite ? "unfavorite" : "favorite" },
+            { "label": pinned ? "Unpin from panel" : "Pin to panel", "action": pinned ? "unpin" : "pin" },
+            { "label": hidden ? "Show in applications" : "Hide from applications", "action": hidden ? "show" : "hide" }
         ];
     }
 
-    function openAppContextMenu(app, x, y) {
-        if (!inputActive || !app || !app.desktopId)
+    function openContextMenu(app, x, y) {
+        if (!app || !app.desktopId)
             return;
-
-        var key = appKey(app);
-        var index = flatAppIndexOf(key);
-        if (index >= 0)
-            selectedIndex = index;
-        hoveredAppKey = key;
         contextApp = app;
-        contextActions = contextMenuActionsFor(app);
-
-        var menuWidth = 224;
-        var menuHeight = 16 + contextActions.length * 38;
-        contextMenuX = Math.max(8, Math.min(Number(x || 0), inputWindow.width - menuWidth - 8));
-        contextMenuY = Math.max(inputTopMargin + 8, Math.min(Number(y || 0), inputWindow.height - menuHeight - 8));
-        appContextMenuOpen = contextActions.length > 0;
+        contextActions = appContextActions(app);
+        contextMenuX = clampContextX(x + 8);
+        contextMenuY = clampContextY(y + 8);
+        contextMenuOpen = true;
+        Services.ShellState.requestCloseTopbarPopups();
     }
 
-    function closeAppContextMenu() {
-        appContextMenuOpen = false;
-        contextApp = null;
+    function closeContextMenu() {
+        contextMenuOpen = false;
         contextActions = [];
+        contextApp = ({});
     }
 
-    function runAppContextAction(action) {
-        var app = contextApp;
-        var desktopId = appKey(app);
-        closeAppContextMenu();
-        if (!desktopId)
+    function runContextAction(action) {
+        var app = contextApp || {};
+        var key = appKey(app);
+        closeContextMenu();
+        if (!key)
             return;
 
-        switch (action) {
-        case "launch":
+        if (action === "launch") {
             launchApp(app);
-            break;
-        case "pin":
-            Services.AppPanelService.pin(desktopId);
-            break;
-        case "unpin":
-            Services.AppPanelService.unpin(desktopId);
-            break;
-        case "hide":
-            Services.AppPanelService.hideFromApplications(desktopId);
-            break;
+        } else if (action === "pin") {
+            Services.AppPanelService.pin(key);
+        } else if (action === "unpin") {
+            Services.AppPanelService.unpin(key);
+        } else if (action === "favorite") {
+            Services.AppPanelService.addFavorite(key);
+        } else if (action === "unfavorite") {
+            Services.AppPanelService.removeFavorite(key);
+        } else if (action === "hide") {
+            Services.AppPanelService.hideFromApplications(key);
+        } else if (action === "show") {
+            Services.AppPanelService.showInApplications(key);
         }
+    }
+
+    function handleAppHovered(appKeyValue) {
+        var key = String(appKeyValue || "");
+        if (key.length === 0)
+            return;
+        selectAppByKey(key, searchActive ? "search" : "pointer");
+    }
+
+    function handleAppUnhovered(appKeyValue) {
+        var key = String(appKeyValue || "");
+        if (!searchActive && selectionSource === "pointer" && selectedAppKey === key)
+            clearSelection();
+    }
+
+    function handleAppPressed(app, button) {
+        closeContextMenu();
+        Services.ShellState.requestCloseTopbarPopups();
+        if (inputContent)
+            inputContent.forceSearchFocus();
+        var key = appKey(app);
+        if (key.length > 0)
+            selectAppByKey(key, searchActive ? "search" : "pointer");
     }
 
     onOverviewActiveChanged: {
@@ -458,7 +516,8 @@ Scope {
             if (!Services.AppPanelService.ready)
                 Services.AppPanelService.requestRefresh(false);
             resetGridContentY();
-            syncFilteredApps(String(query || "").trim().length > 0);
+            clearSelection();
+            rebuildSections(true);
             startOpenAnimation();
         } else if (closingVisualActive) {
             if (animationProgress <= 0.001)
@@ -474,7 +533,7 @@ Scope {
         if (inputActive)
             focusSearchFieldWhenReady();
         else
-            closeAppContextMenu();
+            closeContextMenu();
     }
 
     onCloseRequestedChanged: {
@@ -484,15 +543,10 @@ Scope {
 
     onQueryChanged: {
         if (overviewActive && !closingVisualActive) {
-            closeAppContextMenu();
+            closeContextMenu();
             resetGridContentY();
-            syncFilteredApps(true);
+            rebuildSections(true);
         }
-    }
-
-    onAppColumnCountChanged: {
-        if (renderActive)
-            syncFilteredApps(false);
     }
 
     Behavior on animationProgress {
@@ -531,15 +585,15 @@ Scope {
         target: Services.AppPanelService
         function onAppsChanged() {
             if (root.overviewActive && !root.closingVisualActive)
-                root.syncFilteredApps(false);
+                root.rebuildSections(false);
         }
         function onHiddenIdsChanged() {
             if (root.overviewActive && !root.closingVisualActive)
-                root.syncFilteredApps(false);
+                root.rebuildSections(false);
         }
-        function onPinnedIdsChanged() {
-            if (root.appContextMenuOpen && root.contextApp)
-                root.contextActions = root.contextMenuActionsFor(root.contextApp);
+        function onFavoriteIdsChanged() {
+            if (root.overviewActive && !root.closingVisualActive)
+                root.rebuildSections(false);
         }
     }
 
@@ -577,17 +631,14 @@ Scope {
             opacity: root.inputVisualsActive ? 0 : 1
             interactive: false
             showVisuals: true
-            rowModel: root.appRows
+            sectionRows: root.sectionRows
+            sectionRowsVersion: root.sectionRowsVersion
+            selectedAppKey: root.selectedAppKey
             externalContentY: root.gridContentY
             syncContentY: true
             horizontalMargin: root.horizontalMargin
             contentYOffset: root.visualContentYOffset
             queryText: root.query
-            hoveredAppKey: root.hoveredAppKey
-            selectedAppKey: root.selectedAppKey
-            cellWidth: root.appCellWidth
-            cellHeight: root.appCellHeight
-            columnSpacing: root.appColumnSpacing
         }
     }
 
@@ -602,7 +653,7 @@ Scope {
         }
 
         visible: root.renderActive
-        focusable: root.inputActive
+        focusable: root.inputCaptureActive
         implicitHeight: Screen.height
         color: "transparent"
         surfaceFormat.opaque: false
@@ -614,19 +665,43 @@ Scope {
 
         mask: Region {
             x: 0
-            y: root.inputActive ? root.inputTopMargin : 0
-            width: root.inputActive ? inputWindow.width : 0
-            height: root.inputActive ? Math.max(0, inputWindow.height - root.inputTopMargin - root.inputBottomMargin) : 0
+            y: 0
+            width: root.inputCaptureActive ? inputWindow.width : 0
+            height: root.inputCaptureActive ? inputWindow.height : 0
         }
 
         MouseArea {
+            id: inputEventBlocker
             anchors.fill: parent
-            enabled: root.inputActive
-            acceptedButtons: Qt.LeftButton | Qt.RightButton
-            onClicked: {
-                root.closeAppContextMenu();
-                inputContent.searchField.forceActiveFocus();
+            enabled: root.inputCaptureActive
+            hoverEnabled: enabled
+            acceptedButtons: Qt.AllButtons
+            preventStealing: true
+            cursorShape: Qt.ArrowCursor
+
+            function keepKeyboardFocus() {
+                if (!root.inputActive)
+                    return;
+                root.closeContextMenu();
+                inputContent.forceSearchFocus();
                 Services.ShellState.requestCloseTopbarPopups();
+            }
+
+            onPressed: function(mouse) {
+                mouse.accepted = true;
+                keepKeyboardFocus();
+            }
+
+            onReleased: function(mouse) {
+                mouse.accepted = true;
+            }
+
+            onClicked: function(mouse) {
+                mouse.accepted = true;
+            }
+
+            onWheel: function(wheel) {
+                wheel.accepted = true;
             }
         }
 
@@ -636,103 +711,113 @@ Scope {
             opacity: root.inputVisualsActive ? 1 : 0
             interactive: root.inputActive
             showVisuals: true
-            rowModel: root.appRows
+            sectionRows: root.sectionRows
+            sectionRowsVersion: root.sectionRowsVersion
             horizontalMargin: root.horizontalMargin
             contentYOffset: root.inputContentYOffset
             externalContentY: root.gridContentY
             syncContentY: !root.inputActive && !root.closeRequested && !root.closingVisualActive
             queryText: root.query
-            hoveredAppKey: root.hoveredAppKey
             selectedAppKey: root.selectedAppKey
-            cellWidth: root.appCellWidth
-            cellHeight: root.appCellHeight
-            columnSpacing: root.appColumnSpacing
             onContentYEdited: function (value) {
                 root.setGridContentY(value);
             }
             onQueryEdited: function (text) {
                 root.query = text;
             }
-            onSelectionMoveRequested: function (dx, dy) {
-                root.moveSelection(dx, dy);
+            onMoveSelectionRequested: function(direction) {
+                root.moveSelection(direction);
             }
-            onSelectionActivationRequested: root.activateSelection()
+            onActivateSelectionRequested: root.activateSelection()
             onAppHovered: function (appKey) {
-                root.hoveredAppKey = appKey;
+                root.handleAppHovered(appKey);
             }
             onAppUnhovered: function (appKey) {
-                if (root.hoveredAppKey === appKey)
-                    root.hoveredAppKey = "";
+                root.handleAppUnhovered(appKey);
+            }
+            onAppPressed: function(app, button) {
+                root.handleAppPressed(app, button);
+            }
+            onAppContextRequested: function(app, x, y) {
+                root.openContextMenu(app, x, y);
             }
             onAppLaunched: function (app) {
                 root.launchApp(app);
             }
-            onAppContextRequested: function (app, x, y) {
-                root.openAppContextMenu(app, x, y);
-            }
         }
 
-        Rectangle {
-            id: appContextMenu
-            x: Math.round(root.contextMenuX)
-            y: Math.round(root.contextMenuY)
-            width: 224
-            height: 16 + contextMenuColumn.implicitHeight
-            visible: root.appContextMenuOpen && root.inputActive
-            z: 1000
-            radius: 16
-            color: "#ee101820"
-            border.width: 1
-            border.color: "#24ffffff"
-            antialiasing: true
+        Item {
+            id: contextMenuLayer
+            anchors.fill: parent
+            visible: root.contextMenuOpen && root.inputActive
+            z: 10000
 
-            Column {
-                id: contextMenuColumn
-                anchors {
-                    left: parent.left
-                    right: parent.right
-                    verticalCenter: parent.verticalCenter
-                    leftMargin: 8
-                    rightMargin: 8
-                }
-                spacing: 2
+            Rectangle {
+                id: contextMenu
+                x: Math.round(root.contextMenuX)
+                y: Math.round(root.contextMenuY)
+                width: root.contextMenuWidth
+                height: contextColumn.implicitHeight + 12
+                radius: 18
+                color: "#ef111821"
+                border.width: 1
+                border.color: "#2effffff"
+                antialiasing: true
 
-                Repeater {
-                    model: root.contextActions ? root.contextActions.length : 0
+                Column {
+                    id: contextColumn
+                    anchors {
+                        left: parent.left
+                        right: parent.right
+                        top: parent.top
+                        margins: 6
+                    }
+                    spacing: 2
 
-                    Rectangle {
-                        readonly property var actionData: root.contextActions && index >= 0 && index < root.contextActions.length ? (root.contextActions[index] || ({})) : ({})
+                    Repeater {
+                        model: root.contextActions.length
 
-                        width: contextMenuColumn.width
-                        height: 36
-                        radius: 10
-                        color: menuMouse.containsMouse ? "#18ffffff" : "transparent"
-                        antialiasing: true
+                        delegate: Item {
+                            id: actionDelegate
+                            required property int index
+                            readonly property var actionData: root.contextActions[index] || ({})
 
-                        Text {
-                            anchors {
-                                left: parent.left
-                                right: parent.right
-                                verticalCenter: parent.verticalCenter
-                                leftMargin: 12
-                                rightMargin: 12
+                            width: contextColumn.width
+                            height: root.contextMenuRowHeight
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: 12
+                                color: actionMouse.containsMouse ? "#22ffffff" : "transparent"
+                                antialiasing: true
+
+                                Text {
+                                    anchors {
+                                        left: parent.left
+                                        right: parent.right
+                                        verticalCenter: parent.verticalCenter
+                                        leftMargin: 14
+                                        rightMargin: 14
+                                    }
+                                    text: String(actionDelegate.actionData.label || "")
+                                    color: "#f4f7fb"
+                                    font.pixelSize: 13
+                                    font.weight: Font.Medium
+                                    elide: Text.ElideRight
+                                    renderType: Text.NativeRendering
+                                    font.hintingPreference: Font.PreferFullHinting
+                                    font.kerning: false
+                                }
+
+                                MouseArea {
+                                    id: actionMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    acceptedButtons: Qt.LeftButton
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.runContextAction(String(actionDelegate.actionData.action || ""))
+                                }
                             }
-                            text: actionData.label || ""
-                            color: "#eef4fb"
-                            font.pixelSize: 13
-                            elide: Text.ElideRight
-                            renderType: Text.NativeRendering
-                            font.hintingPreference: Font.PreferFullHinting
-                            font.kerning: false
-                        }
-
-                        MouseArea {
-                            id: menuMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            acceptedButtons: Qt.LeftButton
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.runAppContextAction(actionData.action)
                         }
                     }
                 }

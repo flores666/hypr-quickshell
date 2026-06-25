@@ -16,6 +16,7 @@ Item {
     property var pinnedIds: []
     property var orderIds: []
     property var hiddenIds: []
+    property var favoriteIds: []
     property var missingPinned: []
     property string configPath: ""
     property var appsById: ({})
@@ -52,8 +53,10 @@ Item {
                 app.icon || "",
                 app.iconName || "",
                 app.command || "",
-                (app.matchKeys || []).join(","),
-                (app.categories || []).join(",")
+                app.hidden ? "hidden" : "visible",
+                app.favorite ? "favorite" : "normal",
+                (app.categories || []).join(","),
+                (app.matchKeys || []).join(",")
             ].join("|"));
         }
         return result.join("\n");
@@ -75,7 +78,6 @@ Item {
         var keys = app.matchKeys || [];
         for (var i = 0; i < keys.length; i++)
             parts.push(keys[i]);
-
         var categories = app.categories || [];
         for (var c = 0; c < categories.length; c++)
             parts.push(categories[c]);
@@ -255,12 +257,15 @@ Item {
             hiddenIds = nextIds;
     }
 
-    function isHidden(desktopId) {
-        var target = String(desktopId || "");
-        if (!target)
-            return false;
-        for (var i = 0; i < hiddenIds.length; i++) {
-            if (String(hiddenIds[i] || "") === target)
+    function applyFavoriteIds(nextIds) {
+        if (!sameStringList(favoriteIds, nextIds))
+            favoriteIds = nextIds;
+    }
+
+    function listContains(list, desktopId) {
+        var id = String(desktopId || "");
+        for (var i = 0; i < (list || []).length; i++) {
+            if (String(list[i] || "") === id)
                 return true;
         }
         return false;
@@ -268,21 +273,28 @@ Item {
 
     function withoutHidden(desktopId) {
         var next = [];
-        var target = String(desktopId || "");
         for (var i = 0; i < hiddenIds.length; i++) {
-            var id = String(hiddenIds[i] || "");
-            if (id.length > 0 && id !== target && next.indexOf(id) < 0)
-                next.push(id);
+            if (hiddenIds[i] !== desktopId)
+                next.push(hiddenIds[i]);
         }
         return next;
     }
 
-    function withHidden(desktopId) {
-        var next = withoutHidden(desktopId);
-        var target = String(desktopId || "");
-        if (target.length > 0)
-            next.push(target);
+    function withoutFavorite(desktopId) {
+        var next = [];
+        for (var i = 0; i < favoriteIds.length; i++) {
+            if (favoriteIds[i] !== desktopId)
+                next.push(favoriteIds[i]);
+        }
         return next;
+    }
+
+    function isHidden(desktopId) {
+        return listContains(hiddenIds, desktopId);
+    }
+
+    function isFavorite(desktopId) {
+        return listContains(favoriteIds, desktopId);
     }
 
     function withoutPinned(desktopId) {
@@ -311,10 +323,11 @@ Item {
             return;
         }
 
+        applyHiddenIds(payload.hidden || []);
+        applyFavoriteIds(payload.favorites || []);
         applyApps(payload.apps || []);
         applyPinnedIds(payload.pinned || []);
         applyOrderIds(payload.order || payload.pinned || []);
-        applyHiddenIds(payload.hidden || []);
         missingPinned = payload.missingPinned || [];
         configPath = payload.configPath || "";
         ready = true;
@@ -456,15 +469,41 @@ Item {
     function hideFromApplications(desktopId) {
         if (!desktopId)
             return;
-        applyHiddenIds(withHidden(desktopId));
-        runAction("hide", [desktopId]);
+        var id = String(desktopId);
+        if (!isHidden(id)) {
+            var next = hiddenIds.slice();
+            next.push(id);
+            applyHiddenIds(next);
+        }
+        runAction("hide", [id]);
     }
 
     function showInApplications(desktopId) {
         if (!desktopId)
             return;
-        applyHiddenIds(withoutHidden(desktopId));
-        runAction("unhide", [desktopId]);
+        var id = String(desktopId);
+        applyHiddenIds(withoutHidden(id));
+        runAction("show", [id]);
+    }
+
+    function addFavorite(desktopId) {
+        if (!desktopId)
+            return;
+        var id = String(desktopId);
+        if (!isFavorite(id)) {
+            var next = favoriteIds.slice();
+            next.push(id);
+            applyFavoriteIds(next);
+        }
+        runAction("favorite", [id]);
+    }
+
+    function removeFavorite(desktopId) {
+        if (!desktopId)
+            return;
+        var id = String(desktopId);
+        applyFavoriteIds(withoutFavorite(id));
+        runAction("unfavorite", [id]);
     }
 
     function launch(desktopId) {

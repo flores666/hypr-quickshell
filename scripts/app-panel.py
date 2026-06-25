@@ -206,21 +206,21 @@ def localized_value(entry: Dict[str, str], key: str) -> str:
     return ""
 
 
+def parse_categories(value: str) -> List[str]:
+    result: List[str] = []
+    for raw in (value or "").split(";"):
+        category = raw.strip()
+        if category and category not in result:
+            result.append(category)
+    return result
+
+
 def sanitize_exec(exec_value: str) -> str:
     value = exec_value.strip()
     value = FIELD_CODE_RE.sub("", value)
     value = INLINE_FIELD_CODE_RE.sub("", value)
     value = re.sub(r"\s+", " ", value).strip()
     return value
-
-
-def parse_categories(value: str) -> List[str]:
-    result: List[str] = []
-    for raw in str(value or "").split(";"):
-        category = raw.strip()
-        if category and category not in result:
-            result.append(category)
-    return result
 
 
 def executable_from_exec(command: str) -> str:
@@ -413,7 +413,6 @@ def app_from_desktop(path: Path) -> Optional[Dict[str, object]]:
         executable,
         Path(executable).stem,
         icon_name,
-        *categories,
     ]:
         add_match_token(tokens, value)
 
@@ -423,6 +422,7 @@ def app_from_desktop(path: Path) -> Optional[Dict[str, object]]:
         "name": name,
         "displayName": name,
         "genericName": generic_name,
+        "categories": categories,
         # Prefer a resolved file URI, but keep the theme icon name as a fallback.
         # QML resolves theme names through Quickshell.iconPath when needed.
         "icon": file_uri(icon_path) if icon_path else icon_name,
@@ -433,7 +433,6 @@ def app_from_desktop(path: Path) -> Optional[Dict[str, object]]:
         "startupWmClass": startup_wm_class,
         "noDisplay": entry.get("NoDisplay", "false").lower() == "true",
         "terminal": entry.get("Terminal", "false").lower() == "true",
-        "categories": categories,
         "matchKeys": tokens,
     }
 
@@ -509,10 +508,11 @@ def unique_ids(values: List[str]) -> List[str]:
     return result
 
 
-def save_config(pins: List[str], order: List[str], hidden: Optional[List[str]] = None) -> None:
+def save_config(pins: List[str], order: List[str], hidden: Optional[List[str]] = None, favorites: Optional[List[str]] = None) -> None:
     pins = unique_ids(pins)
     order = unique_ids(order)
     hidden = unique_ids(hidden or [])
+    favorites = unique_ids(favorites or [])
     for pin in pins:
         if pin not in order:
             order.append(pin)
@@ -522,30 +522,35 @@ def save_config(pins: List[str], order: List[str], hidden: Optional[List[str]] =
         "pinned": pins,
         "order": order,
         "hidden": hidden,
-        "note": "Application panel config. 'pinned' controls dock pin state, 'order' controls visual dock order, 'hidden' hides apps from the applications overview.",
+        "favorites": favorites,
+        "note": "Application panel config. 'pinned' controls dock pin state, 'order' controls dock order, 'favorites' controls the launcher Favorites category, 'hidden' moves apps to the launcher Hidden category.",
     }
     PINS_FILE.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
-def load_config(apps: List[Dict[str, object]]) -> Tuple[List[str], List[str], List[str]]:
+def load_config(apps: List[Dict[str, object]]) -> Tuple[List[str], List[str], List[str], List[str]]:
     try:
         data = json.loads(PINS_FILE.read_text(encoding="utf-8"))
         if isinstance(data, dict):
-            pins = unique_ids([str(x) for x in data.get("pinned", []) if isinstance(x, str)])
+            raw_pins = data.get("pinned", [])
             raw_order = data.get("order")
+            raw_hidden = data.get("hidden", [])
+            raw_favorites = data.get("favorites", [])
+            pins = unique_ids([str(x) for x in raw_pins if isinstance(x, str)]) if isinstance(raw_pins, list) else []
             order = unique_ids([str(x) for x in raw_order if isinstance(x, str)]) if isinstance(raw_order, list) else pins[:]
-            hidden = unique_ids([str(x) for x in data.get("hidden", []) if isinstance(x, str)])
+            hidden = unique_ids([str(x) for x in raw_hidden if isinstance(x, str)]) if isinstance(raw_hidden, list) else []
+            favorites = unique_ids([str(x) for x in raw_favorites if isinstance(x, str)]) if isinstance(raw_favorites, list) else []
             for pin in pins:
                 if pin not in order:
                     order.append(pin)
-            return pins, order, hidden
+            return pins, order, hidden, favorites
     except FileNotFoundError:
         pins = default_pins(apps)
-        save_config(pins, pins[:], [])
-        return pins, pins[:], []
+        save_config(pins, pins[:], [], [])
+        return pins, pins[:], [], []
     except Exception as exc:
         warn(f"cannot read app panel config {PINS_FILE}: {exc}")
-    return [], [], []
+    return [], [], [], []
 
 
 def load_pins(apps: List[Dict[str, object]]) -> List[str]:
@@ -560,9 +565,12 @@ def load_hidden(apps: List[Dict[str, object]]) -> List[str]:
     return load_config(apps)[2]
 
 
+def load_favorites(apps: List[Dict[str, object]]) -> List[str]:
+    return load_config(apps)[3]
+
+
 def save_pins(pins: List[str]) -> None:
-    _old_pins, _old_order, hidden = load_config(load_apps())
-    save_config(pins, pins[:], hidden)
+    save_config(pins, pins[:], [], [])
 
 
 def app_map(apps: List[Dict[str, object]]) -> Dict[str, Dict[str, object]]:
@@ -615,11 +623,21 @@ def resolve_desktop_id(value: str, apps: List[Dict[str, object]]) -> str:
 
 def list_payload(force: bool = False) -> Dict[str, object]:
     apps = load_apps(force)
-    pins, order, hidden = load_config(apps)
+    pins, order, hidden, favorites = load_config(apps)
     by_id = app_map(apps)
+    hidden_set = set(hidden)
+    favorite_set = set(favorites)
+    visible_apps: List[Dict[str, object]] = []
     visible_pins = []
     visible_order = []
     missing_pins = []
+
+    for app in apps:
+        desktop_id = str(app.get("desktopId", ""))
+        enriched = dict(app)
+        enriched["hidden"] = desktop_id in hidden_set
+        enriched["favorite"] = desktop_id in favorite_set
+        visible_apps.append(enriched)
 
     for desktop_id in order:
         if desktop_id and desktop_id not in visible_order:
@@ -633,11 +651,13 @@ def list_payload(force: bool = False) -> Dict[str, object]:
         else:
             missing_pins.append(pin)
             warn(f"pinned desktop file not found: {pin}")
+
     return {
-        "apps": apps,
+        "apps": visible_apps,
         "pinned": visible_pins,
         "order": visible_order,
         "hidden": hidden,
+        "favorites": favorites,
         "missingPinned": missing_pins,
         "configPath": str(PINS_FILE),
     }
@@ -646,7 +666,7 @@ def list_payload(force: bool = False) -> Dict[str, object]:
 def pin_app(desktop_id: str) -> None:
     apps = load_apps()
     desktop_id = resolve_desktop_id(desktop_id, apps)
-    pins, order, hidden = load_config(apps)
+    pins, order, hidden, favorites = load_config(apps)
     by_id = app_map(apps)
     if desktop_id not in by_id:
         warn(f"cannot pin missing desktop id: {desktop_id}")
@@ -655,23 +675,23 @@ def pin_app(desktop_id: str) -> None:
         pins.append(desktop_id)
     if desktop_id not in order:
         order.append(desktop_id)
-    save_config(pins, order, hidden)
+    save_config(pins, order, hidden, favorites)
 
 
 def unpin_app(desktop_id: str) -> None:
     apps = load_apps()
     desktop_id = resolve_desktop_id(desktop_id, apps) or desktop_id
-    pins, order, hidden = load_config(apps)
+    pins, order, hidden, favorites = load_config(apps)
     pins = [item for item in pins if item != desktop_id]
     # Keep visual order. If the app is open, it stays in the same place. If it is
     # closed, QML will simply skip it until the app appears again.
-    save_config(pins, order, hidden)
+    save_config(pins, order, hidden, favorites)
 
 
 def pin_app_at(desktop_id: str, index: int) -> None:
     apps = load_apps()
     desktop_id = resolve_desktop_id(desktop_id, apps)
-    pins, order, hidden = load_config(apps)
+    pins, order, hidden, favorites = load_config(apps)
     by_id = app_map(apps)
     if desktop_id not in by_id:
         warn(f"cannot pin missing desktop id: {desktop_id}")
@@ -682,20 +702,20 @@ def pin_app_at(desktop_id: str, index: int) -> None:
     order = [item for item in order if item != desktop_id]
     target = max(0, min(index, len(order)))
     order.insert(target, desktop_id)
-    save_config(pins, order, hidden)
+    save_config(pins, order, hidden, favorites)
 
 
 def move_pinned_app(desktop_id: str, index: int) -> None:
     apps = load_apps()
     desktop_id = resolve_desktop_id(desktop_id, apps) or desktop_id
-    pins, order, hidden = load_config(apps)
+    pins, order, hidden, favorites = load_config(apps)
     if desktop_id not in pins and desktop_id not in order:
         return
 
     order = [item for item in order if item != desktop_id]
     target = max(0, min(index, len(order)))
     order.insert(target, desktop_id)
-    save_config(pins, order, hidden)
+    save_config(pins, order, hidden, favorites)
 
 
 def clean_order(desktop_ids: List[str], by_id: Dict[str, Dict[str, object]]) -> List[str]:
@@ -714,15 +734,15 @@ def clean_order(desktop_ids: List[str], by_id: Dict[str, Dict[str, object]]) -> 
 
 def set_pinned_order(desktop_ids: List[str]) -> None:
     apps = load_apps()
-    pins, _order, hidden = load_config(apps)
+    pins, _order, hidden, favorites = load_config(apps)
     by_id = app_map(apps)
-    save_config(pins, clean_order(desktop_ids, by_id), hidden)
+    save_config(pins, clean_order(desktop_ids, by_id), hidden, favorites)
 
 
 def pin_with_order(desktop_id: str, desktop_ids: List[str]) -> None:
     apps = load_apps()
     desktop_id = resolve_desktop_id(desktop_id, apps)
-    pins, order, hidden = load_config(apps)
+    pins, order, hidden, favorites = load_config(apps)
     by_id = app_map(apps)
     if desktop_id not in by_id:
         warn(f"cannot pin missing desktop id: {desktop_id}")
@@ -732,38 +752,58 @@ def pin_with_order(desktop_id: str, desktop_ids: List[str]) -> None:
     next_order = clean_order(desktop_ids, by_id)
     if desktop_id not in next_order:
         next_order.append(desktop_id)
-    save_config(pins, next_order, hidden)
+    save_config(pins, next_order, hidden, favorites)
 
 
 def unpin_with_order(desktop_id: str, desktop_ids: List[str]) -> None:
     apps = load_apps()
     desktop_id = resolve_desktop_id(desktop_id, apps) or desktop_id
-    pins, order, hidden = load_config(apps)
+    pins, order, hidden, favorites = load_config(apps)
     by_id = app_map(apps)
     pins = [item for item in pins if item != desktop_id]
     next_order = clean_order(desktop_ids, by_id)
-    save_config(pins, next_order, hidden)
-
+    save_config(pins, next_order, hidden, favorites)
 
 def hide_app(desktop_id: str) -> None:
     apps = load_apps()
     desktop_id = resolve_desktop_id(desktop_id, apps)
-    pins, order, hidden = load_config(apps)
+    pins, order, hidden, favorites = load_config(apps)
     by_id = app_map(apps)
     if desktop_id not in by_id:
         warn(f"cannot hide missing desktop id: {desktop_id}")
         return
     if desktop_id not in hidden:
         hidden.append(desktop_id)
-    save_config(pins, order, hidden)
+    save_config(pins, order, hidden, favorites)
 
 
-def unhide_app(desktop_id: str) -> None:
+def show_app(desktop_id: str) -> None:
     apps = load_apps()
     desktop_id = resolve_desktop_id(desktop_id, apps) or desktop_id
-    pins, order, hidden = load_config(apps)
+    pins, order, hidden, favorites = load_config(apps)
     hidden = [item for item in hidden if item != desktop_id]
-    save_config(pins, order, hidden)
+    save_config(pins, order, hidden, favorites)
+
+
+def favorite_app(desktop_id: str) -> None:
+    apps = load_apps()
+    desktop_id = resolve_desktop_id(desktop_id, apps)
+    pins, order, hidden, favorites = load_config(apps)
+    by_id = app_map(apps)
+    if desktop_id not in by_id:
+        warn(f"cannot favorite missing desktop id: {desktop_id}")
+        return
+    if desktop_id not in favorites:
+        favorites.append(desktop_id)
+    save_config(pins, order, hidden, favorites)
+
+
+def unfavorite_app(desktop_id: str) -> None:
+    apps = load_apps()
+    desktop_id = resolve_desktop_id(desktop_id, apps) or desktop_id
+    pins, order, hidden, favorites = load_config(apps)
+    favorites = [item for item in favorites if item != desktop_id]
+    save_config(pins, order, hidden, favorites)
 
 
 def launch_app(desktop_id: str) -> int:
@@ -869,14 +909,22 @@ def main() -> int:
         hide_app(sys.argv[2])
         print(json.dumps(list_payload(False), ensure_ascii=False))
         return 0
-    if command == "unhide" and len(sys.argv) > 2:
-        unhide_app(sys.argv[2])
+    if command == "show" and len(sys.argv) > 2:
+        show_app(sys.argv[2])
+        print(json.dumps(list_payload(False), ensure_ascii=False))
+        return 0
+    if command == "favorite" and len(sys.argv) > 2:
+        favorite_app(sys.argv[2])
+        print(json.dumps(list_payload(False), ensure_ascii=False))
+        return 0
+    if command == "unfavorite" and len(sys.argv) > 2:
+        unfavorite_app(sys.argv[2])
         print(json.dumps(list_payload(False), ensure_ascii=False))
         return 0
     if command == "launch" and len(sys.argv) > 2:
         return launch_app(sys.argv[2])
 
-    warn("usage: app-panel.py list|refresh|pin DESKTOP_ID|pin-at DESKTOP_ID INDEX|move DESKTOP_ID INDEX|set-order DESKTOP_ID...|pin-order DESKTOP_ID ORDER...|unpin-order DESKTOP_ID ORDER...|unpin DESKTOP_ID|hide DESKTOP_ID|unhide DESKTOP_ID|launch DESKTOP_ID")
+    warn("usage: app-panel.py list|refresh|pin DESKTOP_ID|pin-at DESKTOP_ID INDEX|move DESKTOP_ID INDEX|set-order DESKTOP_ID...|pin-order DESKTOP_ID ORDER...|unpin-order DESKTOP_ID ORDER...|unpin DESKTOP_ID|hide DESKTOP_ID|show DESKTOP_ID|favorite DESKTOP_ID|unfavorite DESKTOP_ID|launch DESKTOP_ID")
     return 1
 
 

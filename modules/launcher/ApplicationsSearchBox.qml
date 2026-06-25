@@ -10,8 +10,15 @@ Rectangle {
     property alias inputField: searchInput
 
     signal queryEdited(string text)
-    signal selectionMoveRequested(int dx, int dy)
-    signal selectionActivationRequested()
+    signal moveSelectionRequested(string direction)
+    signal activateSelectionRequested()
+
+    function forceSearchFocus() {
+        if (!root.interactive)
+            return;
+        searchInput.forceActiveFocus();
+        searchInput.cursorPosition = searchInput.text.length;
+    }
 
     radius: 24
     color: showVisuals ? "#da111821" : "transparent"
@@ -73,10 +80,7 @@ Rectangle {
         font.kerning: false
         clip: true
 
-        onTextChanged: {
-            if (text !== root.queryText)
-                root.queryEdited(text);
-        }
+        onTextEdited: root.queryEdited(text)
 
         Text {
             anchors.fill: parent
@@ -91,35 +95,34 @@ Rectangle {
         }
 
         Keys.onPressed: function(event) {
-            if (event.key === Qt.Key_Escape) {
-                Services.ShellActions.closeWorkspaceOverview();
-                event.accepted = true;
-                return;
-            }
             if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                root.selectionActivationRequested();
+                root.activateSelectionRequested();
                 event.accepted = true;
                 return;
             }
+
             if (event.key === Qt.Key_Left) {
-                root.selectionMoveRequested(-1, 0);
+                root.moveSelectionRequested("left");
                 event.accepted = true;
                 return;
             }
             if (event.key === Qt.Key_Right) {
-                root.selectionMoveRequested(1, 0);
+                root.moveSelectionRequested("right");
                 event.accepted = true;
                 return;
             }
             if (event.key === Qt.Key_Up) {
-                root.selectionMoveRequested(0, -1);
+                root.moveSelectionRequested("up");
                 event.accepted = true;
                 return;
             }
             if (event.key === Qt.Key_Down) {
-                root.selectionMoveRequested(0, 1);
+                root.moveSelectionRequested("down");
                 event.accepted = true;
+                return;
             }
         }
+
+        Keys.onEscapePressed: Services.ShellActions.closeWorkspaceOverview()
     }
 }

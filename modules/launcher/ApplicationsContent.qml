@@ -9,34 +9,58 @@ Item {
     required property real horizontalMargin
     property real contentYOffset: 0
     property string queryText: ""
-    property string hoveredAppKey: ""
     property string selectedAppKey: ""
-    property var rowModel: null
+    property var sectionRows: []
+    property int sectionRowsVersion: 0
     property real externalContentY: 0
     property bool syncContentY: false
-    property int cellWidth: 118
-    property int cellHeight: 116
-    property int columnSpacing: 0
     readonly property real currentContentY: appList.contentY
+    readonly property int tileWidth: 118
+    readonly property int tileHeight: 116
+    readonly property int sectionSpacing: 24
+    readonly property int appColumns: Math.max(1, Math.floor(Math.max(1, appList.width) / tileWidth))
     property alias searchField: searchBox.inputField
 
     signal queryEdited(string text)
-    signal selectionMoveRequested(int dx, int dy)
-    signal selectionActivationRequested()
+    signal moveSelectionRequested(string direction)
+    signal activateSelectionRequested()
     signal appHovered(string appKey)
     signal appUnhovered(string appKey)
-    signal appLaunched(var app)
+    signal appPressed(var app, int button)
     signal appContextRequested(var app, real x, real y)
+    signal appLaunched(var app)
     signal contentYEdited(real value)
+
+    function forceSearchFocus() {
+        searchBox.forceSearchFocus();
+    }
 
     function forceContentY(value) {
         appList.contentY = Math.max(0, Number(value || 0));
     }
 
-    function ensureRowVisible(rowIndex) {
-        var index = Math.max(0, Math.min(Number(rowIndex || 0), appList.count - 1));
-        if (appList.count > 0)
-            appList.positionViewAtIndex(index, ListView.Contain);
+    function sectionIndexForApp(appKey) {
+        var key = String(appKey || "");
+        if (key.length === 0)
+            return -1;
+
+        for (var sectionIndex = 0; sectionIndex < root.sectionRows.length; sectionIndex++) {
+            var row = root.sectionRows[sectionIndex] || {};
+            var apps = row.apps || [];
+            for (var i = 0; i < apps.length; i++) {
+                var app = apps[i] || {};
+                var candidate = String(app.desktopId || app.sourceDesktopId || "");
+                if (candidate === key)
+                    return sectionIndex;
+            }
+        }
+        return -1;
+    }
+
+    function ensureAppVisible(appKey) {
+        var sectionIndex = sectionIndexForApp(appKey);
+        if (sectionIndex >= 0)
+            appList.positionViewAtIndex(sectionIndex, ListView.Contain);
     }
 
     Item {
@@ -55,7 +79,7 @@ Item {
                 leftMargin: root.horizontalMargin
                 rightMargin: root.horizontalMargin
             }
-            spacing: 24
+            spacing: 28
 
             ApplicationsSearchBox {
                 id: searchBox
@@ -66,22 +90,20 @@ Item {
                 showVisuals: root.showVisuals
                 queryText: root.queryText
                 onQueryEdited: function(text) { root.queryEdited(text); }
-                onSelectionMoveRequested: function(dx, dy) { root.selectionMoveRequested(dx, dy); }
-                onSelectionActivationRequested: root.selectionActivationRequested()
+                onMoveSelectionRequested: function(direction) { root.moveSelectionRequested(direction); }
+                onActivateSelectionRequested: root.activateSelectionRequested()
             }
 
             ListView {
                 id: appList
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                model: root.rowModel ? root.rowModel.length : 0
+                model: root.sectionRows.length
                 clip: true
-                reuseItems: false
-                cacheBuffer: 480
+                cacheBuffer: 520
                 boundsBehavior: Flickable.StopAtBounds
                 interactive: root.interactive
-                keyNavigationEnabled: false
-                spacing: 2
+                spacing: root.sectionSpacing
 
                 Binding {
                     target: appList
@@ -97,66 +119,67 @@ Item {
                 }
 
                 delegate: Item {
-                    id: rowDelegate
-
-                    readonly property var rowData: root.rowModel && index >= 0 && index < root.rowModel.length ? (root.rowModel[index] || ({})) : ({})
+                    id: sectionDelegate
+                    required property int index
+                    readonly property var rowData: (root.sectionRowsVersion, root.sectionRows[index] || ({}))
+                    readonly property var rowApps: rowData.apps || []
+                    readonly property bool hiddenSection: rowData.code === "hidden"
 
                     width: appList.width
-                    height: rowData.rowType === "header" ? 38 : root.cellHeight
+                    height: sectionColumn.implicitHeight
 
-                    Text {
-                        anchors {
-                            left: parent.left
-                            right: parent.right
-                            verticalCenter: parent.verticalCenter
-                            leftMargin: 4
+                    Column {
+                        id: sectionColumn
+                        width: parent.width
+                        spacing: 12
+
+                        Text {
+                            width: parent.width
+                            text: String(sectionDelegate.rowData.title || "")
+                            visible: root.showVisuals
+                            color: sectionDelegate.hiddenSection ? "#aeb9c5" : "#dce5ee"
+                            opacity: sectionDelegate.hiddenSection ? 0.82 : 1.0
+                            font.pixelSize: 14
+                            font.weight: Font.DemiBold
+                            renderType: Text.NativeRendering
+                            font.hintingPreference: Font.PreferFullHinting
+                            font.kerning: false
                         }
-                        visible: root.showVisuals && rowDelegate.rowData.rowType === "header"
-                        text: rowDelegate.rowData.title || ""
-                        color: "#cbd6e2"
-                        font.pixelSize: 15
-                        font.weight: Font.DemiBold
-                        elide: Text.ElideRight
-                        renderType: Text.NativeRendering
-                        font.hintingPreference: Font.PreferFullHinting
-                        font.kerning: false
-                    }
 
-                    Row {
-                        anchors.fill: parent
-                        visible: rowDelegate.rowData.rowType === "apps"
-                        spacing: root.columnSpacing
+                        Flow {
+                            id: rowFlow
+                            width: parent.width
+                            spacing: 0
 
-                        Repeater {
-                            id: rowAppsRepeater
-                            model: rowDelegate.rowData.apps ? rowDelegate.rowData.apps.length : 0
+                            Repeater {
+                                id: rowAppsRepeater
+                                model: sectionDelegate.rowApps.length
 
-                            delegate: Item {
-                                id: appCell
+                                delegate: Item {
+                                    id: appCell
+                                    required property int index
+                                    readonly property var appEntry: sectionDelegate.rowApps[index] || ({})
+                                    readonly property string appKey: String(appEntry.desktopId || appEntry.sourceDesktopId || "")
 
-                                required property int index
-                                readonly property var rowApps: rowDelegate.rowData.apps || []
-                                readonly property var appEntry: index >= 0 && index < rowApps.length ? (rowApps[index] || ({})) : ({})
+                                    width: root.tileWidth
+                                    height: root.tileHeight
 
-                                width: root.cellWidth
-                                height: root.cellHeight
-
-                                ApplicationTile {
-                                    id: appTile
-
-                                    anchors.fill: parent
-                                    app: appCell.appEntry
-                                    displayName: String(appCell.appEntry && (appCell.appEntry.displayName || appCell.appEntry.name || appCell.appEntry.desktopId) || "Application").trim()
-                                    selected: root.selectedAppKey.length > 0 && root.selectedAppKey === String(appCell.appEntry && (appCell.appEntry.desktopId || appCell.appEntry.sourceDesktopId) || "")
-                                    highlighted: root.hoveredAppKey.length > 0 && root.hoveredAppKey === String(appCell.appEntry && (appCell.appEntry.desktopId || appCell.appEntry.sourceDesktopId) || "")
-                                    interactive: root.interactive
-                                    showVisuals: root.showVisuals
-                                    onHovered: function(appKey) { root.appHovered(appKey); }
-                                    onUnhovered: function(appKey) { root.appUnhovered(appKey); }
-                                    onLaunched: function(app) { root.appLaunched(app); }
-                                    onContextRequested: function(app, localX, localY) {
-                                        var mapped = appTile.mapToItem(root, localX, localY);
-                                        root.appContextRequested(app, mapped.x, mapped.y);
+                                    ApplicationTile {
+                                        id: appTile
+                                        anchors.fill: parent
+                                        app: appCell.appEntry
+                                        displayName: String(appCell.appEntry.displayName || appCell.appEntry.name || appCell.appEntry.desktopId || "Application").trim()
+                                        selected: root.selectedAppKey.length > 0 && root.selectedAppKey === appCell.appKey
+                                        interactive: root.interactive
+                                        showVisuals: root.showVisuals
+                                        onHovered: function(appKey) { root.appHovered(appKey); }
+                                        onUnhovered: function(appKey) { root.appUnhovered(appKey); }
+                                        onPressed: function(app, button, localX, localY) { root.appPressed(app, button); }
+                                        onContextRequested: function(app, localX, localY) {
+                                            var point = appTile.mapToItem(root, localX, localY);
+                                            root.appContextRequested(app, point.x, point.y);
+                                        }
+                                        onLaunched: function(app) { root.appLaunched(app); }
                                     }
                                 }
                             }
