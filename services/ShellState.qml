@@ -272,6 +272,7 @@ QtObject {
             applicationsOverviewInitialQuery = "";
             applicationsOverviewFromWorkspaceOverview = false;
             applicationsOverviewClosing = false;
+            applicationsOverviewVisualLayerSettled = false;
         }
     }
 
@@ -281,8 +282,10 @@ QtObject {
             next = "workspaces";
         if (workspaceOverviewMode !== next)
             workspaceOverviewMode = next;
-        if (next !== "applications")
+        if (next !== "applications") {
             applicationsOverviewClosing = false;
+            applicationsOverviewVisualLayerSettled = false;
+        }
     }
 
     function setApplicationsOverviewInitialQuery(query) {
@@ -297,16 +300,20 @@ QtObject {
         var next = !!value;
         if (applicationsOverviewClosing !== next)
             applicationsOverviewClosing = next;
+        if (next)
+            applicationsOverviewVisualLayerSettled = false;
     }
 
     function setApplicationsOverviewVisualLayerHidden(value) {
         var next = !!value;
         if (applicationsOverviewVisualLayerHidden !== next)
             applicationsOverviewVisualLayerHidden = next;
+        if (next)
+            applicationsOverviewVisualLayerSettled = false;
     }
 
     function setApplicationsOverviewVisualLayerSettled(value) {
-        var next = !!value;
+        var next = !!value && !applicationsOverviewVisualLayerHidden;
         if (applicationsOverviewVisualLayerSettled !== next)
             applicationsOverviewVisualLayerSettled = next;
     }

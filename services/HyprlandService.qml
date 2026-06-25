@@ -474,12 +474,20 @@ Item {
                         Services.ShellState.setApplicationsOverviewClosing(true);
                     }
                 } else if (overviewState === "applications-layer-hidden") {
-                    Services.ShellState.setApplicationsOverviewVisualLayerHidden(true);
+                    if (Services.ShellState.applicationsOverviewClosing) {
+                        Services.ShellState.setApplicationsOverviewVisualLayerSettled(false);
+                        Services.ShellState.setApplicationsOverviewVisualLayerHidden(true);
+                    }
                 } else if (overviewState === "applications-layer-settled") {
-                    if (Services.ShellState.workspaceOverviewOpen && Services.ShellState.workspaceOverviewMode === "applications")
+                    if (Services.ShellState.workspaceOverviewOpen
+                            && Services.ShellState.workspaceOverviewMode === "applications"
+                            && !Services.ShellState.applicationsOverviewClosing
+                            && !Services.ShellState.applicationsOverviewVisualLayerHidden)
                         Services.ShellState.setApplicationsOverviewVisualLayerSettled(true);
-                } else if (overviewState === "close")
+                } else if (overviewState === "close") {
+                    Services.ShellState.setApplicationsOverviewVisualLayerSettled(false);
                     Services.ShellState.setWorkspaceOverviewOpen(false);
+                }
                 return;
             }
 

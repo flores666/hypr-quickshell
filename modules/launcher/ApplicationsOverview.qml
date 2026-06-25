@@ -16,6 +16,7 @@ Scope {
     readonly property int visualContentYOffset: 36
     readonly property int inputContentYOffset: 0
     readonly property real desktopCardPhaseEnd: 0.48
+    readonly property int openAnimationDuration: 360
     readonly property int closeAnimationDuration: 220
     readonly property int closeCleanupDelay: closeAnimationDuration
     readonly property real horizontalMargin: Math.max(52, Math.round(visualWindow.width * 0.08))
@@ -149,6 +150,9 @@ Scope {
 
         while (filteredAppsModel.count > nextApps.length)
             filteredAppsModel.remove(nextApps.length);
+
+        if (hoveredAppKey.length > 0 && filteredModelIndexOf(hoveredAppKey, 0) < 0)
+            hoveredAppKey = "";
     }
 
     function launchApp(app) {
@@ -159,21 +163,33 @@ Scope {
         Services.ShellActions.closeWorkspaceOverview();
     }
 
+    function normalizedContentY(value) {
+        var next = Number(value || 0);
+        return isNaN(next) ? 0 : Math.max(0, next);
+    }
+
     function setGridContentY(value) {
         if (suppressGridContentYUpdates)
             return;
 
-        var next = Math.max(0, Number(value || 0));
+        var next = normalizedContentY(value);
         if (Math.abs(gridContentY - next) > 0.5)
             gridContentY = next;
     }
 
+    function setGridViewContentY(gridView, value) {
+        if (!gridView)
+            return;
+
+        var next = normalizedContentY(value);
+        if (Math.abs(Number(gridView.contentY || 0) - next) > 0.5)
+            gridView.contentY = next;
+    }
+
     function applyGridContentY(value) {
-        var next = Math.max(0, Number(value || 0));
-        if (visualContent && visualContent.gridView)
-            visualContent.gridView.contentY = next;
-        if (inputContent && inputContent.gridView)
-            inputContent.gridView.contentY = next;
+        var next = normalizedContentY(value);
+        setGridViewContentY(visualContent && visualContent.gridView ? visualContent.gridView : null, next);
+        setGridViewContentY(inputContent && inputContent.gridView ? inputContent.gridView : null, next);
     }
 
     function resetGridContentY() {
@@ -183,10 +199,26 @@ Scope {
         suppressGridContentYUpdates = false;
     }
 
+    function currentInputContentY() {
+        if (inputContent && inputContent.gridView && inputActive)
+            return normalizedContentY(inputContent.gridView.contentY);
+
+        return gridContentY;
+    }
+
+    function captureContentYForClose() {
+        var current = currentInputContentY();
+        setGridContentY(current);
+        applyGridContentY(current);
+    }
+
     function startOpenAnimation() {
+        animationKickTimer.stop();
         closeAnimationKickTimer.stop();
         closeCleanupTimer.stop();
         closingVisualActive = false;
+        hoveredAppKey = "";
+        applyGridContentY(gridContentY);
         animationBehaviorEnabled = false;
         animationProgress = Services.ShellState.applicationsOverviewFromWorkspaceOverview ? desktopCardPhaseEnd + 0.04 : 0;
         animationBehaviorEnabled = true;
@@ -194,11 +226,14 @@ Scope {
     }
 
     function startCloseAnimation() {
+        if (closingVisualActive)
+            return;
+
         animationKickTimer.stop();
         closeCleanupTimer.stop();
         hoveredAppKey = "";
         suppressGridContentYUpdates = false;
-        setGridContentY(inputContent.gridView.contentY);
+        captureContentYForClose();
         closingVisualActive = true;
         animationBehaviorEnabled = false;
         animationProgress = clamp01(animationProgress);
@@ -210,7 +245,12 @@ Scope {
         if (overviewActive || closeRequested)
             return;
 
+        closeAnimationKickTimer.stop();
+        closeCleanupTimer.stop();
         closingVisualActive = false;
+        animationBehaviorEnabled = false;
+        animationProgress = 0;
+        animationBehaviorEnabled = true;
         query = "";
         hoveredAppKey = "";
         syncFilteredApps();
@@ -250,19 +290,13 @@ Scope {
     }
 
     onCloseRequestedChanged: {
-        if (closeRequested && overviewActive) {
+        if (closeRequested && overviewActive)
             startCloseAnimation();
-        } else if (!overviewActive && closingVisualActive) {
-            closeAnimationKickTimer.stop();
-            closeCleanupTimer.stop();
-            animationBehaviorEnabled = false;
-            animationProgress = 0;
-            finishCloseAnimation();
-        }
     }
 
     onQueryChanged: {
         if (overviewActive && !closingVisualActive) {
+            hoveredAppKey = "";
             resetGridContentY();
             syncFilteredApps();
         }
@@ -270,7 +304,7 @@ Scope {
 
     Behavior on animationProgress {
         enabled: root.animationBehaviorEnabled
-        NumberAnimation { duration: root.closingVisualActive || root.closeRequested ? root.closeAnimationDuration : 360; easing.type: Easing.OutCubic }
+        NumberAnimation { duration: root.closingVisualActive || root.closeRequested ? root.closeAnimationDuration : root.openAnimationDuration; easing.type: Easing.OutCubic }
     }
 
     Timer {
@@ -383,6 +417,7 @@ Scope {
 
         MouseArea {
             anchors.fill: parent
+            enabled: root.inputActive
             acceptedButtons: Qt.LeftButton | Qt.RightButton
             onClicked: {
                 inputContent.searchField.forceActiveFocus();
@@ -584,7 +619,10 @@ Scope {
             font.hintingPreference: Font.PreferFullHinting
             font.kerning: false
             clip: true
-            onTextChanged: searchBox.queryEdited(text)
+            onTextChanged: {
+                if (text !== searchBox.queryText)
+                    searchBox.queryEdited(text);
+            }
 
             Text {
                 anchors.fill: parent
