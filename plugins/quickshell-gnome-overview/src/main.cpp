@@ -298,6 +298,13 @@ static bool isQuickshellLayerNamespace(const std::string& ns) {
     return ns.starts_with("quickshell") || ns.starts_with("quickshell:");
 }
 
+static bool isScreenshotSelectorKeysym(xkb_keysym_t keysym) {
+    // Let the compositor handle screenshot binds while overview is visible.
+    // Without this exception the generic overview key guard below consumes
+    // Print, so Hyprland never starts commands such as `grim -g "$(slurp)"`.
+    return keysym == XKB_KEY_Print || keysym == XKB_KEY_Sys_Req;
+}
+
 static bool isMonitorSizedOverlayBox(const CBox& box, PHLMONITORREF monitor) {
     if (!monitor || !(box.w > 1.0 && box.h > 1.0))
         return false;
@@ -305,6 +312,14 @@ static bool isMonitorSizedOverlayBox(const CBox& box, PHLMONITORREF monitor) {
     const double monitorW = std::max<double>(1.0, monitor->m_size.x);
     const double monitorH = std::max<double>(1.0, monitor->m_size.y);
     return box.w >= monitorW * 0.92 && box.h >= monitorH * 0.92;
+}
+
+static bool isExternalSelectorOverlayLayer(size_t layerIndex, bool quickshellLayer) {
+    // Region screenshot tools such as slurp are external layer-shell clients.
+    // They usually map a monitor-sized top/overlay layer and need pointer input
+    // while the overview is open. Quickshell's own fullscreen helper layers stay
+    // excluded unless they are explicitly whitelisted elsewhere.
+    return !quickshellLayer && layerIndex >= 2;
 }
 
 static bool layerBoxShouldReceiveOverviewInput(const CBox& box, PHLMONITORREF monitor, const Vector2D& coords, bool allowMonitorSizedOverlay) {
@@ -360,7 +375,9 @@ static bool isCoordsOverInteractiveLayer(PHLMONITORREF monitor, const Vector2D& 
                 continue;
 
             const bool applicationsInputLayer = g_overviewApplicationsMode && layer->m_namespace == "quickshell:applications-input";
-            const bool allowMonitorSizedOverlay = applicationsInputLayer && isApplicationsOverviewInputRegion(monitor, coords);
+            const bool externalSelectorOverlayLayer = isExternalSelectorOverlayLayer(layerIndex, quickshellLayer);
+            const bool allowMonitorSizedOverlay = externalSelectorOverlayLayer ||
+                                                  (applicationsInputLayer && isApplicationsOverviewInputRegion(monitor, coords));
 
             const CBox realBox = {layer->m_realPosition->value(), layer->m_realSize->value()};
             const auto logicalBox = layer->logicalBox();
@@ -757,6 +774,12 @@ void onKeyPress(const IKeyboard::SKeyEvent& event, SCallbackInfo& info) {
     const xkb_keysym_t keysym = xkb_state_key_get_one_sym(keyboard->m_xkbSymState, keycode);
     const bool pressed = event.state == WL_KEYBOARD_KEY_STATE_PRESSED;
     const bool released = event.state == WL_KEYBOARD_KEY_STATE_RELEASED;
+
+    if (isAnyOverviewActive() && isScreenshotSelectorKeysym(keysym)) {
+        if (pressed && g_mainModDown)
+            g_mainModCancelled = true;
+        return;
+    }
 
     if (pressed) {
         if (isAnyOverviewActive() && !g_overviewApplicationsMode && !g_mainModDown) {
