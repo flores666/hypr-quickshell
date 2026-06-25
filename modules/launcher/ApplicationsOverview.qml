@@ -61,6 +61,10 @@ Scope {
     property bool viewportMutationActive: false
     property real preservedViewportY: 0
     property bool suppressEnsureVisible: false
+    property bool hiddenSectionExpanded: false
+    property bool pointerSuppressedByKeyboard: false
+    property bool pointerRefreshGuardActive: false
+
 
     function clamp01(value) {
         return Math.max(0, Math.min(1, Number(value || 0)));
@@ -74,6 +78,14 @@ Scope {
 
     function normalizedQuery() {
         return String(query || "").trim().toLowerCase();
+    }
+
+    function isSearchTextActive(text) {
+        return String(text || "").trim().length > 0;
+    }
+
+    function currentSearchActive() {
+        return isSearchTextActive(query);
     }
 
     function appSearchText(app) {
@@ -91,6 +103,93 @@ Scope {
             parts.push(categories[c]);
 
         return parts.join(" ").toLowerCase();
+    }
+
+    function searchFieldText(app, fieldName) {
+        if (!app)
+            return "";
+        return String(app[fieldName] || "").trim();
+    }
+
+    function searchWordPrefixIndex(text, needle) {
+        var value = String(text || "").toLowerCase();
+        var queryValue = String(needle || "").toLowerCase();
+        if (queryValue.length === 0)
+            return -1;
+
+        var words = value.split(/[^a-z0-9]+/);
+        var offset = 0;
+        for (var i = 0; i < words.length; i++) {
+            var word = words[i] || "";
+            if (word.indexOf(queryValue) === 0)
+                return offset;
+            offset += word.length + 1;
+        }
+        return -1;
+    }
+
+    function searchScore(app, needle) {
+        var queryValue = String(needle || "").trim();
+        var queryLower = queryValue.toLowerCase();
+        if (queryLower.length === 0)
+            return 0;
+
+        var name = displayNameForApp(app);
+        var nameLower = name.toLowerCase();
+        var id = appKey(app);
+        var idLower = id.toLowerCase();
+        var genericName = searchFieldText(app, "genericName");
+        var executable = searchFieldText(app, "executable");
+        var wmClass = searchFieldText(app, "startupWmClass");
+        var caseBonus = name.indexOf(queryValue) === 0 ? -12 : 0;
+
+        if (nameLower === queryLower)
+            return 0 + caseBonus;
+        if (nameLower.indexOf(queryLower) === 0)
+            return 100 + nameLower.length + caseBonus;
+
+        var wordIndex = searchWordPrefixIndex(name, queryLower);
+        if (wordIndex >= 0)
+            return 220 + wordIndex + Math.min(80, nameLower.length);
+
+        if (idLower === queryLower)
+            return 300;
+        if (idLower.indexOf(queryLower) === 0)
+            return 360 + Math.min(80, idLower.length);
+
+        var genericLower = genericName.toLowerCase();
+        if (genericLower.indexOf(queryLower) === 0)
+            return 430 + Math.min(80, genericLower.length);
+
+        var nameContains = nameLower.indexOf(queryLower);
+        if (nameContains >= 0)
+            return 520 + nameContains + Math.min(120, nameLower.length);
+
+        var idContains = idLower.indexOf(queryLower);
+        if (idContains >= 0)
+            return 650 + idContains + Math.min(120, idLower.length);
+
+        var execLower = executable.toLowerCase();
+        if (execLower.indexOf(queryLower) === 0)
+            return 760 + Math.min(120, execLower.length);
+
+        var wmLower = wmClass.toLowerCase();
+        if (wmLower.indexOf(queryLower) === 0)
+            return 820 + Math.min(120, wmLower.length);
+
+        return 1000 + Math.min(500, appSearchText(app).indexOf(queryLower));
+    }
+
+    function sortedSearchApps(apps, needle) {
+        var copy = (apps || []).slice();
+        copy.sort(function(a, b) {
+            var leftScore = searchScore(a, needle);
+            var rightScore = searchScore(b, needle);
+            if (leftScore !== rightScore)
+                return leftScore - rightScore;
+            return stableAppSort(a, b);
+        });
+        return copy;
     }
 
     function appKey(app) {
@@ -224,15 +323,15 @@ Scope {
     }
 
     function selectFirstSearchResult() {
-        if (!searchActive || selectableApps.length === 0) {
+        if (!currentSearchActive() || selectableApps.length === 0) {
             clearSelection();
             return;
         }
         selectAppByKey(appKey(selectableApps[0]), "search", true);
     }
 
-    function reconcileSelection(resetToFirst) {
-        if (!searchActive) {
+    function reconcileSelection(searchMode, resetToFirst) {
+        if (!searchMode) {
             clearSelection();
             return;
         }
@@ -249,8 +348,10 @@ Scope {
     }
 
     function moveSelection(direction) {
-        if (!searchActive || selectableApps.length === 0)
+        if (!currentSearchActive() || selectableApps.length === 0)
             return;
+
+        suppressPointerAfterKeyboardInput();
 
         var columns = inputContent ? Math.max(1, Number(inputContent.appColumns || 1)) : 1;
         var delta = 0;
@@ -274,7 +375,7 @@ Scope {
     }
 
     function activateSelection() {
-        if (!searchActive || selectionSource !== "search")
+        if (!currentSearchActive() || selectionSource !== "search")
             return;
         var app = selectedApp();
         if (app)
@@ -283,10 +384,13 @@ Scope {
 
     function rebuildSections(resetSelectionToFirst) {
         var needle = normalizedQuery();
+        var rawNeedle = String(query || "").trim();
+        var searchMode = needle.length > 0;
         var apps = sortedApps(Services.AppPanelService.apps || []);
         var seen = {};
         var favoriteApps = [];
         var hiddenApps = [];
+        var searchApps = [];
         var groups = {};
         var rows = [];
         var flat = [];
@@ -297,6 +401,19 @@ Scope {
 
         for (var d = 0; d < categoryDefinitions.length; d++)
             groups[categoryDefinitions[d].code] = [];
+
+        function pushSection(code, title, sourceApps, collapsed) {
+            var sectionApps = sourceApps || [];
+            if (sectionApps.length === 0)
+                return;
+
+            var sectionCollapsed = Boolean(collapsed);
+            rows.push({ "code": code, "title": title, "apps": sectionApps, "collapsed": sectionCollapsed });
+            if (!sectionCollapsed) {
+                for (var index = 0; index < sectionApps.length; index++)
+                    flat.push(sectionApps[index]);
+            }
+        }
 
         for (var i = 0; i < apps.length; i++) {
             var app = apps[i] || {};
@@ -311,6 +428,8 @@ Scope {
             seen[key] = true;
             if (appIsHidden(app)) {
                 hiddenApps.push(app);
+            } else if (searchMode) {
+                searchApps.push(app);
             } else if (appIsFavorite(app)) {
                 favoriteApps.push(app);
             } else {
@@ -318,34 +437,37 @@ Scope {
             }
         }
 
-        function pushSection(code, title, sourceApps) {
-            var sectionApps = sourceApps || [];
-            if (sectionApps.length === 0)
-                return;
-            rows.push({ "code": code, "title": title, "apps": sectionApps });
-            for (var index = 0; index < sectionApps.length; index++)
-                flat.push(sectionApps[index]);
+        if (searchMode) {
+            pushSection("search", "Applications", sortedSearchApps(searchApps, rawNeedle), false);
+            pushSection("hidden", "Hidden", sortedSearchApps(hiddenApps, rawNeedle), !hiddenSectionExpanded);
+        } else {
+            pushSection("favorites", "Favorites", sortedFavoriteApps(favoriteApps), false);
+            for (var c = 0; c < categoryDefinitions.length; c++) {
+                var definition = categoryDefinitions[c];
+                pushSection(definition.code, definition.title, sortedApps(groups[definition.code] || []), false);
+            }
+            pushSection("hidden", "Hidden", sortedApps(hiddenApps), !hiddenSectionExpanded);
         }
-
-        pushSection("favorites", "Favorites", sortedFavoriteApps(favoriteApps));
-        for (var c = 0; c < categoryDefinitions.length; c++) {
-            var definition = categoryDefinitions[c];
-            pushSection(definition.code, definition.title, sortedApps(groups[definition.code] || []));
-        }
-        pushSection("hidden", "Hidden", sortedApps(hiddenApps));
 
         sectionRows = rows;
         selectableApps = flat;
         sectionRowsVersion += 1;
 
         suppressEnsureVisible = preserveViewport;
-        reconcileSelection(Boolean(resetSelectionToFirst) && !preserveViewport);
+        reconcileSelection(searchMode, Boolean(resetSelectionToFirst) && !preserveViewport);
         suppressEnsureVisible = false;
 
         if (preserveViewport) {
             setGridContentY(viewportY);
             applyGridContentY(gridContentY);
         }
+    }
+
+    function toggleHiddenSection() {
+        preservedViewportY = inputActive ? currentInputContentY() : gridContentY;
+        preserveViewportOnNextRebuild = true;
+        hiddenSectionExpanded = !hiddenSectionExpanded;
+        rebuildSections(false);
     }
 
     function launchApp(app) {
@@ -407,6 +529,37 @@ Scope {
         });
     }
 
+    function suppressPointerAfterKeyboardInput() {
+        if (!inputActive)
+            return;
+
+        var shouldRefreshPointerFocus = !pointerSuppressedByKeyboard;
+        pointerSuppressedByKeyboard = true;
+        pointerRefreshGuardActive = true;
+        pointerRefreshGuardTimer.restart();
+
+        if (shouldRefreshPointerFocus)
+            Services.ShellActions.refreshPointerFocus();
+    }
+
+    function clearPointerSuppression() {
+        pointerRefreshGuardTimer.stop();
+        pointerRefreshGuardActive = false;
+        pointerSuppressedByKeyboard = false;
+    }
+
+    function revealPointerAfterMouseMove() {
+        if (pointerRefreshGuardActive)
+            return;
+
+        if (pointerSuppressedByKeyboard)
+            pointerSuppressedByKeyboard = false;
+    }
+
+    function interactiveCursorShape(defaultShape) {
+        return pointerSuppressedByKeyboard ? Qt.BlankCursor : defaultShape;
+    }
+
     function startOpenAnimation() {
         closeAnimationKickTimer.stop();
         closeCleanupTimer.stop();
@@ -426,6 +579,7 @@ Scope {
         closeCleanupTimer.stop();
         closeContextMenu();
         clearSelection();
+        clearPointerSuppression();
         captureContentYForClose();
         closingVisualActive = true;
         animationBehaviorEnabled = false;
@@ -445,6 +599,7 @@ Scope {
         Services.ShellState.setApplicationsOverviewClosing(false);
         Services.ShellState.setApplicationsOverviewVisualLayerSettled(false);
         query = "";
+        clearPointerSuppression();
         closeContextMenu();
         clearSelection();
         rebuildSections(false);
@@ -525,30 +680,39 @@ Scope {
     }
 
     function handleAppHovered(appKeyValue) {
+        if (pointerSuppressedByKeyboard)
+            return;
+
         var key = String(appKeyValue || "");
         if (key.length === 0)
             return;
-        selectAppByKey(key, searchActive ? "search" : "pointer", false);
+        selectAppByKey(key, currentSearchActive() ? "search" : "pointer", false);
     }
 
     function handleAppUnhovered(appKeyValue) {
+        if (pointerSuppressedByKeyboard)
+            return;
+
         var key = String(appKeyValue || "");
-        if (!searchActive && selectionSource === "pointer" && selectedAppKey === key)
+        if (!currentSearchActive() && selectionSource === "pointer" && selectedAppKey === key)
             clearSelection();
     }
 
     function handleAppPressed(app, button) {
+        clearPointerSuppression();
         closeContextMenu();
         Services.ShellState.requestCloseTopbarPopups();
         if (inputContent)
             inputContent.forceSearchFocus();
         var key = appKey(app);
         if (key.length > 0)
-            selectAppByKey(key, searchActive ? "search" : "pointer", false);
+            selectAppByKey(key, currentSearchActive() ? "search" : "pointer", false);
     }
 
     onOverviewActiveChanged: {
+        clearPointerSuppression();
         if (overviewActive) {
+            hiddenSectionExpanded = false;
             query = Services.ShellState.applicationsOverviewInitialQuery;
             Services.ShellState.setApplicationsOverviewInitialQuery("");
             if (!Services.AppPanelService.ready)
@@ -576,6 +740,7 @@ Scope {
 
     onInputCaptureActiveChanged: {
         if (!inputCaptureActive) {
+            clearPointerSuppression();
             closeContextMenu();
             clearSelection();
         }
@@ -588,11 +753,12 @@ Scope {
 
     onQueryChanged: {
         if (overviewActive && !closingVisualActive) {
+            var active = currentSearchActive();
             closeContextMenu();
             resetGridContentY();
-            if (!searchActive)
+            if (!active)
                 clearSelection();
-            rebuildSections(searchActive);
+            rebuildSections(active);
         }
     }
 
@@ -634,6 +800,13 @@ Scope {
         repeat: false
         running: root.closingVisualActive && !root.overviewActive
         onTriggered: root.finishCloseAnimation()
+    }
+
+    Timer {
+        id: pointerRefreshGuardTimer
+        interval: 120
+        repeat: false
+        onTriggered: root.pointerRefreshGuardActive = false
     }
 
     Connections {
@@ -735,10 +908,12 @@ Scope {
         MouseArea {
             anchors.fill: parent
             enabled: root.inputCaptureActive
-            hoverEnabled: false
+            hoverEnabled: enabled
             acceptedButtons: Qt.AllButtons
             preventStealing: true
-            cursorShape: Qt.ArrowCursor
+            cursorShape: root.interactiveCursorShape(Qt.ArrowCursor)
+
+            onPositionChanged: root.revealPointerAfterMouseMove()
 
             function keepKeyboardFocus() {
                 if (!root.inputActive)
@@ -804,7 +979,9 @@ Scope {
             hoverEnabled: enabled
             acceptedButtons: Qt.AllButtons
             preventStealing: true
-            cursorShape: Qt.ArrowCursor
+            cursorShape: root.interactiveCursorShape(Qt.ArrowCursor)
+
+            onPositionChanged: root.revealPointerAfterMouseMove()
 
             function keepKeyboardFocus() {
                 if (!root.inputActive)
@@ -848,16 +1025,20 @@ Scope {
             syncContentY: !root.inputActive && !root.closeRequested && !root.closingVisualActive
             queryText: root.query
             selectedAppKey: root.selectedAppKey
+            hidePointerCursor: root.pointerSuppressedByKeyboard
             onContentYEdited: function (value) {
                 root.setGridContentY(value);
             }
             onQueryEdited: function (text) {
+                root.suppressPointerAfterKeyboardInput();
                 root.query = text;
             }
+            pointerMovedCallback: function() { root.revealPointerAfterMouseMove(); }
             onMoveSelectionRequested: function(direction) {
                 root.moveSelection(direction);
             }
             onActivateSelectionRequested: root.activateSelection()
+            onHiddenSectionToggleRequested: root.toggleHiddenSection()
             onAppHovered: function (appKey) {
                 root.handleAppHovered(appKey);
             }
@@ -943,13 +1124,34 @@ Scope {
                                     anchors.fill: parent
                                     hoverEnabled: true
                                     acceptedButtons: Qt.LeftButton
-                                    cursorShape: Qt.PointingHandCursor
+                                    cursorShape: root.interactiveCursorShape(Qt.PointingHandCursor)
+                                    onPositionChanged: root.revealPointerAfterMouseMove()
                                     onClicked: root.runContextAction(String(actionDelegate.actionData.action || ""))
                                 }
                             }
                         }
                     }
                 }
+            }
+        }
+
+        MouseArea {
+            id: pointerSuppressionCursorLayer
+            anchors.fill: parent
+            z: 20000
+            enabled: root.pointerSuppressedByKeyboard && root.inputActive
+            visible: enabled
+            hoverEnabled: enabled
+            acceptedButtons: Qt.NoButton
+            preventStealing: false
+            cursorShape: Qt.BlankCursor
+
+            onPositionChanged: root.revealPointerAfterMouseMove()
+
+            onWheel: function(wheel) {
+                if (root.inputActive && inputContent)
+                    inputContent.handleWheel(wheel);
+                wheel.accepted = true;
             }
         }
     }

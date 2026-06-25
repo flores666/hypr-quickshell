@@ -10,6 +10,8 @@ Item {
     property real contentYOffset: 0
     property string queryText: ""
     property string selectedAppKey: ""
+    property bool hidePointerCursor: false
+    property var pointerMovedCallback: null
     property var sectionRows: []
     property int sectionRowsVersion: 0
     property real externalContentY: 0
@@ -27,6 +29,7 @@ Item {
     property real pixelScrollMultiplier: 0.525
     readonly property int wheelSmoothDuration: 170
     readonly property int pixelSmoothDuration: 95
+    readonly property int hiddenSectionAnimationDuration: 220
     property real smoothScrollTargetY: 0
     property bool smoothScrollRetargeting: false
     property alias searchField: searchBox.inputField
@@ -39,10 +42,21 @@ Item {
     signal appPressed(var app, int button)
     signal appContextRequested(var app, real x, real y)
     signal appLaunched(var app)
+    signal hiddenSectionToggleRequested()
     signal contentYEdited(real value)
 
     function forceSearchFocus() {
         searchBox.forceSearchFocus();
+    }
+
+
+    function notifyPointerMoved() {
+        if (root.pointerMovedCallback)
+            root.pointerMovedCallback();
+    }
+
+    function interactiveCursorShape(defaultShape) {
+        return root.hidePointerCursor ? Qt.BlankCursor : defaultShape;
     }
 
     function forceContentY(value) {
@@ -167,6 +181,22 @@ Item {
         return appRowsForCount(count) * root.tileHeight;
     }
 
+    function sectionCollapsed(row) {
+        return Boolean(row && row.collapsed);
+    }
+
+    function sectionVisualHeightForArea(areaHeight) {
+        var area = Math.max(0, Number(areaHeight || 0));
+        return root.sectionHeaderHeight + (area > 0.5 ? root.sectionHeaderGap + area : 0);
+    }
+
+    function sectionHeightForRow(row) {
+        if (sectionCollapsed(row))
+            return root.sectionHeaderHeight;
+        var apps = row && row.apps ? row.apps : [];
+        return sectionVisualHeightForArea(appsAreaHeightForCount(apps.length));
+    }
+
     function sectionHeightForCount(count) {
         return root.sectionHeaderHeight + root.sectionHeaderGap + appsAreaHeightForCount(count);
     }
@@ -180,18 +210,20 @@ Item {
         for (var sectionIndex = 0; sectionIndex < root.sectionRows.length; sectionIndex++) {
             var row = root.sectionRows[sectionIndex] || {};
             var apps = row.apps || [];
-            for (var i = 0; i < apps.length; i++) {
-                var app = apps[i] || {};
-                var candidate = String(app.desktopId || app.sourceDesktopId || "");
-                if (candidate === key) {
-                    var appRow = Math.floor(i / root.appColumns);
-                    return {
-                        "top": sectionTop + root.sectionHeaderHeight + root.sectionHeaderGap + appRow * root.tileHeight,
-                        "bottom": sectionTop + root.sectionHeaderHeight + root.sectionHeaderGap + (appRow + 1) * root.tileHeight
-                    };
+            if (!sectionCollapsed(row)) {
+                for (var i = 0; i < apps.length; i++) {
+                    var app = apps[i] || {};
+                    var candidate = String(app.desktopId || app.sourceDesktopId || "");
+                    if (candidate === key) {
+                        var appRow = Math.floor(i / root.appColumns);
+                        return {
+                            "top": sectionTop + root.sectionHeaderHeight + root.sectionHeaderGap + appRow * root.tileHeight,
+                            "bottom": sectionTop + root.sectionHeaderHeight + root.sectionHeaderGap + (appRow + 1) * root.tileHeight
+                        };
+                    }
                 }
             }
-            sectionTop += root.sectionHeightForCount(apps.length) + root.sectionSpacing;
+            sectionTop += root.sectionHeightForRow(row) + root.sectionSpacing;
         }
         return null;
     }
@@ -241,7 +273,9 @@ Item {
                 interactive: root.interactive
                 showVisuals: root.showVisuals
                 queryText: root.queryText
+                hidePointerCursor: root.hidePointerCursor
                 onQueryEdited: function(text) { root.queryEdited(text); }
+                pointerMovedCallback: function() { root.notifyPointerMoved(); }
                 onMoveSelectionRequested: function(direction) { root.moveSelectionRequested(direction); }
                 onActivateSelectionRequested: root.activateSelectionRequested()
             }
@@ -302,36 +336,106 @@ Item {
                     readonly property var rowApps: rowData.apps || []
                     readonly property int rowAppCount: rowApps.length
                     readonly property bool hiddenSection: rowData.code === "hidden"
-                    readonly property real appsAreaHeight: root.appsAreaHeightForCount(rowAppCount)
+                    readonly property bool collapsed: Boolean(rowData.collapsed)
+                    readonly property real expandedAppsAreaHeight: root.appsAreaHeightForCount(rowAppCount)
+                    property real animatedAppsAreaHeight: collapsed ? 0 : expandedAppsAreaHeight
+                    readonly property real hiddenContentProgress: expandedAppsAreaHeight > 0 ? Math.min(1, animatedAppsAreaHeight / expandedAppsAreaHeight) : 0
 
                     width: appList.width
-                    height: root.sectionHeightForCount(rowAppCount)
+                    height: root.sectionHeaderHeight + (hiddenContentProgress > 0.001 ? root.sectionHeaderGap * hiddenContentProgress + animatedAppsAreaHeight : 0)
+                    clip: true
+
+                    Behavior on animatedAppsAreaHeight {
+                        enabled: root.showVisuals && sectionDelegate.hiddenSection
+                        NumberAnimation {
+                            duration: root.hiddenSectionAnimationDuration
+                            easing.type: Easing.InOutCubic
+                        }
+                    }
 
                     Column {
                         id: sectionColumn
                         width: parent.width
-                        spacing: 12
+                        spacing: root.sectionHeaderGap * sectionDelegate.hiddenContentProgress
 
-                        Text {
+                        Item {
+                            id: sectionHeader
                             width: parent.width
                             height: root.sectionHeaderHeight
-                            text: String(sectionDelegate.rowData.title || "")
                             visible: root.showVisuals
-                            color: sectionDelegate.hiddenSection ? "#aeb9c5" : "#dce5ee"
-                            opacity: sectionDelegate.hiddenSection ? 0.82 : 1.0
-                            font.pixelSize: 14
-                            font.weight: Font.DemiBold
-                            verticalAlignment: Text.AlignVCenter
-                            renderType: Text.NativeRendering
-                            font.hintingPreference: Font.PreferFullHinting
-                            font.kerning: false
+
+                            Text {
+                                anchors {
+                                    left: parent.left
+                                    right: sectionArrow.left
+                                    verticalCenter: parent.verticalCenter
+                                    rightMargin: 12
+                                }
+                                text: String(sectionDelegate.rowData.title || "")
+                                color: sectionDelegate.hiddenSection ? "#aeb9c5" : "#dce5ee"
+                                opacity: sectionDelegate.hiddenSection ? 0.82 : 1.0
+                                font.pixelSize: 14
+                                font.weight: Font.DemiBold
+                                elide: Text.ElideRight
+                                verticalAlignment: Text.AlignVCenter
+                                renderType: Text.NativeRendering
+                                font.hintingPreference: Font.PreferFullHinting
+                                font.kerning: false
+                            }
+
+                            Text {
+                                id: sectionArrow
+                                anchors {
+                                    right: parent.right
+                                    verticalCenter: parent.verticalCenter
+                                }
+                                width: 28
+                                height: parent.height
+                                visible: sectionDelegate.hiddenSection
+                                text: "▸"
+                                rotation: sectionDelegate.collapsed ? 0 : 90
+                                transformOrigin: Item.Center
+                                color: "#dce5ee"
+                                opacity: sectionHeaderMouse.containsMouse ? 1.0 : 0.78
+                                font.pixelSize: 16
+                                font.weight: Font.DemiBold
+                                horizontalAlignment: Text.AlignRight
+                                verticalAlignment: Text.AlignVCenter
+                                renderType: Text.NativeRendering
+                                font.hintingPreference: Font.PreferFullHinting
+                                font.kerning: false
+
+                                Behavior on rotation {
+                                    NumberAnimation {
+                                        duration: root.hiddenSectionAnimationDuration
+                                        easing.type: Easing.InOutCubic
+                                    }
+                                }
+                            }
+
+                            MouseArea {
+                                id: sectionHeaderMouse
+                                anchors.fill: parent
+                                enabled: root.interactive && sectionDelegate.hiddenSection
+                                hoverEnabled: enabled
+                                acceptedButtons: Qt.LeftButton
+                                cursorShape: enabled ? root.interactiveCursorShape(Qt.PointingHandCursor) : root.interactiveCursorShape(Qt.ArrowCursor)
+                                onPositionChanged: root.notifyPointerMoved()
+                                onClicked: function(mouse) {
+                                    mouse.accepted = true;
+                                    root.hiddenSectionToggleRequested();
+                                }
+                            }
                         }
 
                         Flow {
                             id: rowFlow
                             width: parent.width
-                            height: sectionDelegate.appsAreaHeight
+                            height: sectionDelegate.animatedAppsAreaHeight
+                            visible: sectionDelegate.animatedAppsAreaHeight > 0.5 || !sectionDelegate.collapsed
+                            opacity: Math.min(1, sectionDelegate.animatedAppsAreaHeight / Math.max(1, sectionDelegate.expandedAppsAreaHeight))
                             spacing: 0
+                            clip: true
 
                             Repeater {
                                 id: rowAppsRepeater
@@ -354,8 +458,10 @@ Item {
                                         selected: root.selectedAppKey.length > 0 && root.selectedAppKey === appCell.appKey
                                         interactive: root.interactive
                                         showVisuals: root.showVisuals
+                                        hidePointerCursor: root.hidePointerCursor
                                         onHovered: function(appKey) { root.appHovered(appKey); }
                                         onUnhovered: function(appKey) { root.appUnhovered(appKey); }
+                                        pointerMovedCallback: function() { root.notifyPointerMoved(); }
                                         onPressed: function(app, button, localX, localY) { root.appPressed(app, button); }
                                         onContextRequested: function(app, localX, localY) {
                                             var point = appTile.mapToItem(root, localX, localY);

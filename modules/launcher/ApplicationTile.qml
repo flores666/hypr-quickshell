@@ -10,6 +10,8 @@ Item {
     property bool interactive: true
     property bool showVisuals: true
     property bool selected: false
+    property bool hidePointerCursor: false
+    property var pointerMovedCallback: null
 
     readonly property var safeApp: app || ({})
     readonly property string appKey: String(safeApp.desktopId || safeApp.sourceDesktopId || "")
@@ -23,6 +25,11 @@ Item {
     signal pressed(var app, int button, real localX, real localY)
     signal contextRequested(var app, real localX, real localY)
     signal launched(var app)
+
+    function notifyPointerMoved() {
+        if (root.pointerMovedCallback)
+            root.pointerMovedCallback();
+    }
 
     Rectangle {
         id: tile
@@ -109,9 +116,13 @@ Item {
             enabled: root.interactive
             hoverEnabled: root.interactive
             acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
-            cursorShape: Qt.PointingHandCursor
+            cursorShape: root.hidePointerCursor ? Qt.BlankCursor : Qt.PointingHandCursor
 
             onEntered: root.hovered(root.appKey)
+            onPositionChanged: {
+                root.notifyPointerMoved();
+                root.hovered(root.appKey);
+            }
             onExited: root.unhovered(root.appKey)
 
             onPressed: function(mouse) {
@@ -119,6 +130,46 @@ Item {
             }
 
             onClicked: function(mouse) {
+                if (mouse.button === Qt.LeftButton) {
+                    root.launched(root.safeApp);
+                } else if (mouse.button === Qt.RightButton) {
+                    root.contextRequested(root.safeApp, tile.x + mouse.x, tile.y + mouse.y);
+                }
+            }
+        }
+
+        MouseArea {
+            id: appCursorSuppressionLayer
+            anchors.fill: parent
+            z: appMouse.z + 1
+            enabled: root.interactive && root.hidePointerCursor
+            visible: enabled
+            hoverEnabled: enabled
+            acceptedButtons: Qt.AllButtons
+            preventStealing: true
+            cursorShape: Qt.BlankCursor
+
+            onEntered: root.hovered(root.appKey)
+
+            onPositionChanged: {
+                root.notifyPointerMoved();
+                root.hovered(root.appKey);
+            }
+
+            onExited: root.unhovered(root.appKey)
+
+            onPressed: function(mouse) {
+                mouse.accepted = true;
+            }
+
+            onReleased: function(mouse) {
+                mouse.accepted = true;
+            }
+
+            onClicked: function(mouse) {
+                mouse.accepted = true;
+                root.pressed(root.safeApp, mouse.button, tile.x + mouse.x, tile.y + mouse.y);
+
                 if (mouse.button === Qt.LeftButton) {
                     root.launched(root.safeApp);
                 } else if (mouse.button === Qt.RightButton) {

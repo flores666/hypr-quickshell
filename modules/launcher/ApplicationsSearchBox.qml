@@ -7,11 +7,19 @@ Rectangle {
     required property bool interactive
     required property bool showVisuals
     property string queryText: ""
+    property bool hidePointerCursor: false
+    property var pointerMovedCallback: null
     property alias inputField: searchInput
 
     signal queryEdited(string text)
     signal moveSelectionRequested(string direction)
     signal activateSelectionRequested()
+
+
+    function notifyPointerMoved() {
+        if (root.pointerMovedCallback)
+            root.pointerMovedCallback();
+    }
 
     function forceSearchFocus() {
         if (!root.interactive)
@@ -25,6 +33,12 @@ Rectangle {
     border.width: showVisuals ? 1 : 0
     border.color: "#22ffffff"
     antialiasing: true
+
+    HoverHandler {
+        enabled: root.interactive
+        cursorShape: root.hidePointerCursor ? Qt.BlankCursor : Qt.IBeamCursor
+        onPointChanged: root.notifyPointerMoved()
+    }
 
     Text {
         anchors.left: parent.left
