@@ -13,6 +13,8 @@ Scope {
     readonly property bool visualLayerActive: renderActive && !Services.ShellState.applicationsOverviewVisualLayerHidden
     readonly property int inputTopMargin: 56
     readonly property int inputBottomMargin: 116
+    readonly property int visualContentYOffset: 36
+    readonly property int inputContentYOffset: 0
     readonly property real desktopCardPhaseEnd: 0.48
     readonly property int closeAnimationDuration: 220
     readonly property int closeCleanupDelay: closeAnimationDuration
@@ -26,8 +28,12 @@ Scope {
     property bool suppressGridContentYUpdates: false
     property string query: ""
     property string hoveredAppKey: ""
-    property var filteredApps: []
     property real gridContentY: 0
+
+    ListModel {
+        id: filteredAppsModel
+        dynamicRoles: true
+    }
 
     function clamp01(value) {
         return Math.max(0, Math.min(1, Number(value || 0)));
@@ -61,7 +67,32 @@ Scope {
         return parts.join(" ").toLowerCase();
     }
 
-    function rebuildFilteredApps() {
+    function appKey(app) {
+        return String(app && (app.desktopId || app.sourceDesktopId || app.name || app.displayName) || "");
+    }
+
+    function appSignature(app) {
+        if (!app)
+            return "";
+
+        var keys = app.matchKeys || [];
+        return [
+            app.desktopId || "",
+            app.sourceDesktopId || "",
+            app.name || "",
+            app.displayName || "",
+            app.genericName || "",
+            app.iconCacheKey || "",
+            app.iconName || "",
+            app.icon || "",
+            app.command || "",
+            app.executable || "",
+            app.startupWmClass || "",
+            keys.join(",")
+        ].join("|");
+    }
+
+    function filteredSourceApps() {
         var apps = Services.AppPanelService.apps || [];
         var needle = String(query || "").trim().toLowerCase();
         var result = [];
@@ -76,7 +107,48 @@ Scope {
                 result.push(app);
         }
 
-        filteredApps = result;
+        return result;
+    }
+
+    function filteredModelIndexOf(appKey, fromIndex) {
+        for (var i = Math.max(0, fromIndex || 0); i < filteredAppsModel.count; i++) {
+            if (String(filteredAppsModel.get(i).appKey || "") === appKey)
+                return i;
+        }
+        return -1;
+    }
+
+    function filteredModelRow(app) {
+        return {
+            "appKey": appKey(app),
+            "appSig": appSignature(app),
+            "appEntry": app
+        };
+    }
+
+    function syncFilteredApps() {
+        var nextApps = filteredSourceApps();
+
+        for (var i = 0; i < nextApps.length; i++) {
+            var app = nextApps[i] || {};
+            var key = appKey(app);
+            var existing = filteredModelIndexOf(key, i);
+            var row = filteredModelRow(app);
+
+            if (existing < 0) {
+                filteredAppsModel.insert(i, row);
+                continue;
+            }
+
+            if (existing !== i)
+                filteredAppsModel.move(existing, i, 1);
+
+            if (String(filteredAppsModel.get(i).appSig || "") !== row.appSig)
+                filteredAppsModel.set(i, row);
+        }
+
+        while (filteredAppsModel.count > nextApps.length)
+            filteredAppsModel.remove(nextApps.length);
     }
 
     function launchApp(app) {
@@ -108,25 +180,17 @@ Scope {
         suppressGridContentYUpdates = true;
         gridContentY = 0;
         applyGridContentY(0);
-        Qt.callLater(function() {
-            root.applyGridContentY(0);
-            root.suppressGridContentYUpdates = false;
-        });
+        suppressGridContentYUpdates = false;
     }
 
     function startOpenAnimation() {
         closeAnimationKickTimer.stop();
         closeCleanupTimer.stop();
         closingVisualActive = false;
-        resetGridContentY();
         animationBehaviorEnabled = false;
         animationProgress = Services.ShellState.applicationsOverviewFromWorkspaceOverview ? desktopCardPhaseEnd + 0.04 : 0;
         animationBehaviorEnabled = true;
         animationKickTimer.restart();
-        Qt.callLater(function() {
-            if (root.overviewActive && !root.closingVisualActive)
-                root.resetGridContentY();
-        });
     }
 
     function startCloseAnimation() {
@@ -149,7 +213,7 @@ Scope {
         closingVisualActive = false;
         query = "";
         hoveredAppKey = "";
-        filteredApps = [];
+        syncFilteredApps();
         resetGridContentY();
     }
 
@@ -159,7 +223,8 @@ Scope {
             Services.ShellState.setApplicationsOverviewInitialQuery("");
             if (!Services.AppPanelService.ready)
                 Services.AppPanelService.requestRefresh(false);
-            rebuildFilteredApps();
+            resetGridContentY();
+            syncFilteredApps();
             startOpenAnimation();
         } else {
             if (closingVisualActive) {
@@ -175,11 +240,9 @@ Scope {
 
     onInputActiveChanged: {
         if (inputActive) {
-            resetGridContentY();
             Qt.callLater(function() {
                 if (!root.inputActive)
                     return;
-                root.resetGridContentY();
                 inputContent.searchField.forceActiveFocus();
                 inputContent.searchField.cursorPosition = inputContent.searchField.text.length;
             });
@@ -199,8 +262,10 @@ Scope {
     }
 
     onQueryChanged: {
-        if (overviewActive && !closingVisualActive)
-            rebuildFilteredApps();
+        if (overviewActive && !closingVisualActive) {
+            resetGridContentY();
+            syncFilteredApps();
+        }
     }
 
     Behavior on animationProgress {
@@ -235,13 +300,8 @@ Scope {
     Connections {
         target: Services.AppPanelService
         function onAppsChanged() {
-            if (root.overviewActive && !root.closingVisualActive)
-                root.rebuildFilteredApps();
-        }
-        function onIconCacheChanged() {
             if (root.overviewActive && !root.closingVisualActive) {
-                visualContent.gridView.forceLayout();
-                inputContent.gridView.forceLayout();
+                root.syncFilteredApps();
             }
         }
     }
@@ -280,13 +340,16 @@ Scope {
             opacity: root.inputVisualsActive ? 0 : 1
             interactive: false
             showVisuals: true
-            gridModel: root.visualLayerActive ? root.filteredApps : []
+            gridModel: filteredAppsModel
             externalContentY: root.gridContentY
+            syncContentY: true
             windowHeight: visualWindow.height
             riseProgress: root.applicationsRiseProgress
             horizontalMargin: root.horizontalMargin
+            contentYOffset: root.visualContentYOffset
             queryText: root.query
             hoveredAppKey: root.hoveredAppKey
+
         }
     }
 
@@ -300,7 +363,7 @@ Scope {
             right: true
         }
 
-        visible: root.inputActive
+        visible: root.renderActive
         focusable: root.inputActive
         implicitHeight: Screen.height
         color: "transparent"
@@ -330,13 +393,16 @@ Scope {
         ApplicationsContent {
             id: inputContent
             anchors.fill: parent
+            opacity: root.inputVisualsActive ? 1 : 0
             interactive: root.inputActive
-            showVisuals: root.inputVisualsActive
-            gridModel: root.renderActive ? root.filteredApps : []
+            showVisuals: true
+            gridModel: filteredAppsModel
             windowHeight: inputWindow.height
             riseProgress: root.applicationsRiseProgress
             horizontalMargin: root.horizontalMargin
+            contentYOffset: root.inputContentYOffset
             externalContentY: root.gridContentY
+            syncContentY: !root.inputActive && !root.closeRequested && !root.closingVisualActive
             queryText: root.query
             hoveredAppKey: root.hoveredAppKey
             onContentYEdited: function(value) { root.setGridContentY(value); }
@@ -347,6 +413,7 @@ Scope {
                     root.hoveredAppKey = "";
             }
             onAppLaunched: function(app) { root.launchApp(app); }
+
         }
     }
 
@@ -358,10 +425,12 @@ Scope {
         required property real windowHeight
         required property real riseProgress
         required property real horizontalMargin
+        property real contentYOffset: 0
         property string queryText: ""
         property string hoveredAppKey: ""
-        property var gridModel: []
+        property var gridModel: null
         property real externalContentY: 0
+        property bool syncContentY: false
         property alias gridView: appGrid
         property alias searchField: searchBox.inputField
 
@@ -372,9 +441,11 @@ Scope {
         signal contentYEdited(real value)
 
         Item {
-            anchors.fill: parent
+            x: 0
+            y: Math.round(content.contentYOffset)
+            width: parent.width
+            height: parent.height
             opacity: 1
-            y: 0
             scale: 1
 
             ColumnLayout {
@@ -406,7 +477,7 @@ Scope {
                     cellWidth: 118
                     cellHeight: 116
                     clip: true
-                    reuseItems: true
+                    reuseItems: false
                     cacheBuffer: 260
                     boundsBehavior: Flickable.StopAtBounds
                     interactive: content.interactive
@@ -416,17 +487,17 @@ Scope {
                         target: appGrid
                         property: "contentY"
                         value: content.externalContentY
-                        when: !content.interactive
+                        when: content.syncContentY
+                        restoreMode: Binding.RestoreNone
                     }
 
                     onContentYChanged: {
-                        if (content.interactive)
+                        if (content.interactive && !content.syncContentY && (appGrid.dragging || appGrid.flicking || appGrid.moving))
                             content.contentYEdited(contentY);
                     }
 
                     delegate: ApplicationTile {
-                        required property var modelData
-                        readonly property var appEntry: modelData || ({})
+                        required property var appEntry
 
                         width: appGrid.cellWidth
                         height: appGrid.cellHeight
@@ -542,8 +613,9 @@ Scope {
         readonly property var safeApp: app || ({})
         readonly property string appKey: String(safeApp.desktopId || safeApp.sourceDesktopId || "")
         readonly property bool inputHoverActive: (interactive && (appMouse.pressed || appMouse.containsMouse)) || highlighted
-        readonly property string resolvedIcon: Services.AppPanelService.iconUrl(safeApp.iconCacheKey || safeApp.iconName || safeApp.icon || "application-x-executable",
-                                                                                safeApp.iconCacheFallback || safeApp.icon || "")
+        readonly property var iconCacheRef: Services.AppPanelService.iconCache
+        readonly property string resolvedIcon: (iconCacheRef, Services.AppPanelService.iconUrl(safeApp.iconCacheKey || safeApp.iconName || safeApp.icon || "application-x-executable",
+                                                                                              safeApp.iconCacheFallback || safeApp.icon || ""))
 
         signal hovered(string appKey)
         signal unhovered(string appKey)
