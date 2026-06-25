@@ -159,9 +159,11 @@ static void renderOverviewBackdrop(PHLMONITOR owner, const CBox& monitorClip, co
     // The overview should feel like one unified GNOME-like canvas. Topbar and
     // AppDock are layer surfaces rendered by Hyprland after this POST_WINDOWS
     // hook, so they remain visible and clickable.
-    const bool hasBackground = renderFullscreenBackground(owner, monitorClip, time);
-    if (!hasBackground)
-        renderRect(CBox{0, 0, owner->m_transformedSize.x, owner->m_transformedSize.y}, CHyprColor(0.02, 0.025, 0.032, 1.0));
+    // renderFullscreenBackground() can legitimately miss for one frame while
+    // layer-surfaces are being remapped. Do not replace that transient frame
+    // with an opaque black fill: the already-rendered compositor scene is a
+    // safer fallback and avoids black flashes behind the applications panel.
+    renderFullscreenBackground(owner, monitorClip, time);
 
     // One global background layer for the whole overview:
     // wallpaper -> blur/dim overlay -> mode content.
@@ -228,20 +230,6 @@ static CBox overviewApplicationsLayerBox(PHLMONITOR owner, double openProgress) 
     return CBox{0, y, owner->m_transformedSize.x, owner->m_transformedSize.y};
 }
 
-static double overviewApplicationsMotionAmount(double openProgress) {
-    const double liftProgress = overviewApplicationsLiftProgress(openProgress);
-    if (liftProgress <= 0.001 || liftProgress >= 0.999)
-        return 0.0;
-
-    // Use a position-based envelope instead of duplicating the surface texture.
-    // It gives the moving sheet a soft blur tail, but avoids one-frame ghost
-    // copies of icons/text when the applications layer is handed off on close.
-    const double middleMotion = std::sin(liftProgress * 3.14159265358979323846);
-    const double startEnvelope = overviewSmoothStep(0.08, 0.24, liftProgress);
-    const double endEnvelope = 1.0 - overviewSmoothStep(0.76, 0.96, liftProgress);
-    return middleMotion * startEnvelope * endEnvelope;
-}
-
 static bool applicationsLayerReady(PHLMONITOR owner) {
     if (!owner)
         return false;
@@ -267,42 +255,7 @@ static bool applicationsLayerReady(PHLMONITOR owner) {
     return false;
 }
 
-static void renderApplicationsLayerMotionBlur(PHLMONITOR owner,
-                                              const CBox& layerBox,
-                                              const CBox& monitorClip,
-                                              double openProgress,
-                                              bool leavingApplicationsMode) {
-    if (!owner || Config::disableBlur)
-        return;
-
-    const double motionAmount = overviewApplicationsMotionAmount(openProgress);
-    if (motionAmount <= 0.001)
-        return;
-
-    const double direction = leavingApplicationsMode ? -1.0 : 1.0;
-    const double trailStep = std::max<double>(7.0, 9.0 * owner->m_scale) * motionAmount;
-
-    auto renderClippedBlurSheet = [&](double offsetMultiplier, float alphaMultiplier) {
-        CBox blurBox = layerBox;
-        blurBox.y += direction * trailStep * offsetMultiplier;
-
-        const double clippedLeft = std::max(blurBox.x, monitorClip.x);
-        const double clippedTop = std::max(blurBox.y, monitorClip.y);
-        const double clippedRight = std::min(blurBox.x + blurBox.w, monitorClip.x + monitorClip.w);
-        const double clippedBottom = std::min(blurBox.y + blurBox.h, monitorClip.y + monitorClip.h);
-        if (clippedRight <= clippedLeft || clippedBottom <= clippedTop)
-            return;
-
-        const CBox clippedBlurBox{clippedLeft, clippedTop, clippedRight - clippedLeft, clippedBottom - clippedTop};
-        const float alpha = alphaMultiplier * static_cast<float>(motionAmount);
-        renderRectWithBlur(overviewPixelSnappedBox(clippedBlurBox), CHyprColor(0.02, 0.025, 0.032, alpha));
-    };
-
-    renderClippedBlurSheet(0.85, 0.035F);
-    renderClippedBlurSheet(1.55, 0.020F);
-}
-
-static bool renderApplicationsLayerBelowOverviewCard(PHLMONITOR owner, const CBox& monitorClip, const Time::steady_tp& time, double openProgress, bool leavingApplicationsMode) {
+static bool renderApplicationsLayerBelowOverviewCard(PHLMONITOR owner, const CBox& monitorClip, const Time::steady_tp& time, double openProgress) {
     if (!owner)
         return false;
 
@@ -321,7 +274,6 @@ static bool renderApplicationsLayerBelowOverviewCard(PHLMONITOR owner, const CBo
                 continue;
 
             const CBox layerBox = overviewPixelSnappedBox(overviewApplicationsLayerBox(owner, openProgress));
-            renderApplicationsLayerMotionBlur(owner, layerBox, monitorClip, openProgress, leavingApplicationsMode);
             renderLayerSurfaceStub(layer, owner, layerBox, monitorClip, time, 1.0F);
             return true;
         }
@@ -1039,7 +991,7 @@ void CHyprspaceWidget::drawApplicationsBackground() {
     // second overview mode. Render the applications layer inside the plugin,
     // below the shrinking desktop card, so both surfaces animate as one scene.
     renderOverviewBackdrop(owner, monitorClip, time, openProgress, 0.10);
-    renderApplicationsLayerBelowOverviewCard(owner, monitorClip, time, openProgress, leavingApplicationsMode);
+    renderApplicationsLayerBelowOverviewCard(owner, monitorClip, time, openProgress);
 
     if ((applicationsTransitionStartedFromOverview || applicationsReturningToOverview) && !isClosing()) {
         const auto workspaces = overviewWorkspaceIds();

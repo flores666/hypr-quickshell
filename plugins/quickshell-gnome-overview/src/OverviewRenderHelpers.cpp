@@ -148,56 +148,6 @@ void renderLayerSurfaceStub(PHLLS pLayer, PHLMONITOR pMonitor, CBox rectOverride
         &renderdata);
 }
 
-void renderLayerSurfaceTextureStub(PHLLS pLayer, CBox rectOverride, CBox clipBox, float alpha, int rounding, float roundingPower) {
-    if (!pLayer)
-        return;
-
-    if (!pLayer->m_mapped || pLayer->m_readyToDelete || !pLayer->m_layerSurface || !pLayer->wlSurface() || !pLayer->wlSurface()->resource())
-        return;
-
-    const Vector2D sourceSize = pLayer->m_realSize->value();
-    const float sourceW = std::max((float)sourceSize.x, 1.F);
-    const float sourceH = std::max((float)sourceSize.y, 1.F);
-    const float scaleX = rectOverride.w / sourceW;
-    const float scaleY = rectOverride.h / sourceH;
-    if (!(scaleX > 0.F) || !(scaleY > 0.F) || !(rectOverride.w > 0.5 && rectOverride.h > 0.5))
-        return;
-
-    pLayer->wlSurface()->resource()->breadthfirst(
-        [&](SP<CWLSurfaceResource> surface, const Vector2D& offset, void*) {
-            if (!surface || !surface->m_current.texture)
-                return;
-
-            if (surface->m_current.size.x < 1 || surface->m_current.size.y < 1)
-                return;
-
-            const bool mainSurface = surface == pLayer->wlSurface()->resource();
-            CBox surfaceBox = mainSurface
-                ? rectOverride
-                : CBox{
-                    rectOverride.x + offset.x * scaleX,
-                    rectOverride.y + offset.y * scaleY,
-                    std::max<double>(2.0, surface->m_current.size.x * scaleX),
-                    std::max<double>(2.0, surface->m_current.size.y * scaleY),
-                };
-
-            if (!(surfaceBox.w > 0.5 && surfaceBox.h > 0.5) || !boxesIntersectForOverview(surfaceBox, clipBox))
-                return;
-
-            CTexPassElement::SRenderData renderData;
-            renderData.tex = surface->m_current.texture;
-            renderData.box = surfaceBox;
-            renderData.a = std::clamp(alpha, 0.F, 1.F);
-            renderData.round = mainSurface ? rounding : 0;
-            renderData.roundingPower = mainSurface ? roundingPower : 2.0F;
-            renderData.clipBox = clipBox;
-            renderData.surface = surface;
-            renderData.discardMode = DISCARD_ALPHA;
-            g_pHyprRenderer->m_renderPass.add(makeUnique<CTexPassElement>(renderData));
-        },
-        nullptr);
-}
-
 bool renderFullscreenBackground(PHLMONITOR pMonitor, const CBox& monitorClip, const Time::steady_tp& time) {
     if (!pMonitor)
         return false;
