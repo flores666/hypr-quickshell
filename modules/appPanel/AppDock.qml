@@ -60,7 +60,10 @@ PanelWindow {
     function showDock() {
         Services.ShellState.requestCloseTopbarPopups();
         hideTimer.stop();
+        var wasShown = dockShown;
         dockShown = true;
+        if (!wasShown || Services.ShellState.workspaceOverviewOpen)
+            Services.ShellActions.refreshPointerFocus();
         showGuardTimer.restart();
     }
 

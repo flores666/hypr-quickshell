@@ -12,15 +12,17 @@ Scope {
     readonly property bool visualLayerActive: renderActive && !Services.ShellState.applicationsOverviewVisualLayerHidden
     readonly property int inputTopMargin: 56
     readonly property int inputBottomMargin: 116
-    readonly property int visualContentYOffset: 36
+    readonly property int visualContentYOffset: 38
     readonly property int inputContentYOffset: 0
     readonly property real desktopCardPhaseEnd: 0.48
     readonly property int closeAnimationDuration: 300
     readonly property int openAnimationDuration: 340
     readonly property real horizontalMargin: Math.max(52, Math.round(visualWindow.width * 0.08))
     readonly property real applicationsRiseProgress: smoothStep(desktopCardPhaseEnd, 1.0, animationProgress)
+    readonly property bool panelVisuallySettled: applicationsRiseProgress >= 0.998
+    readonly property bool closingHandoffActive: closingVisualActive && panelVisuallySettled && !Services.ShellState.applicationsOverviewVisualLayerHidden
     readonly property bool renderActive: overviewActive || closingVisualActive || animationProgress > 0.001
-    readonly property bool inputVisualsActive: inputActive
+    readonly property bool inputVisualsActive: inputActive || closingHandoffActive
 
     property real animationProgress: 0
     property bool animationBehaviorEnabled: true
@@ -50,15 +52,7 @@ Scope {
         if (app.searchText)
             return String(app.searchText);
 
-        var parts = [
-            app.name || "",
-            app.displayName || "",
-            app.genericName || "",
-            app.desktopId || "",
-            app.sourceDesktopId || "",
-            app.executable || "",
-            app.startupWmClass || ""
-        ];
+        var parts = [app.name || "", app.displayName || "", app.genericName || "", app.desktopId || "", app.sourceDesktopId || "", app.executable || "", app.startupWmClass || ""];
         var keys = app.matchKeys || [];
         for (var i = 0; i < keys.length; i++)
             parts.push(keys[i]);
@@ -75,20 +69,7 @@ Scope {
             return "";
 
         var keys = app.matchKeys || [];
-        return [
-            app.desktopId || "",
-            app.sourceDesktopId || "",
-            app.name || "",
-            app.displayName || "",
-            app.genericName || "",
-            app.iconCacheKey || "",
-            app.iconName || "",
-            app.icon || "",
-            app.command || "",
-            app.executable || "",
-            app.startupWmClass || "",
-            keys.join(",")
-        ].join("|");
+        return [app.desktopId || "", app.sourceDesktopId || "", app.name || "", app.displayName || "", app.genericName || "", app.iconCacheKey || "", app.iconName || "", app.icon || "", app.command || "", app.executable || "", app.startupWmClass || "", keys.join(",")].join("|");
     }
 
     function filteredSourceApps() {
@@ -199,11 +180,12 @@ Scope {
     }
 
     function focusSearchFieldWhenReady() {
-        Qt.callLater(function() {
+        Qt.callLater(function () {
             if (!root.inputActive)
                 return;
             inputContent.searchField.forceActiveFocus();
             inputContent.searchField.cursorPosition = inputContent.searchField.text.length;
+            Services.ShellActions.refreshPointerFocus();
         });
     }
 
@@ -415,14 +397,22 @@ Scope {
             syncContentY: !root.inputActive && !root.closeRequested && !root.closingVisualActive
             queryText: root.query
             hoveredAppKey: root.hoveredAppKey
-            onContentYEdited: function(value) { root.setGridContentY(value); }
-            onQueryEdited: function(text) { root.query = text; }
-            onAppHovered: function(appKey) { root.hoveredAppKey = appKey; }
-            onAppUnhovered: function(appKey) {
+            onContentYEdited: function (value) {
+                root.setGridContentY(value);
+            }
+            onQueryEdited: function (text) {
+                root.query = text;
+            }
+            onAppHovered: function (appKey) {
+                root.hoveredAppKey = appKey;
+            }
+            onAppUnhovered: function (appKey) {
                 if (root.hoveredAppKey === appKey)
                     root.hoveredAppKey = "";
             }
-            onAppLaunched: function(app) { root.launchApp(app); }
+            onAppLaunched: function (app) {
+                root.launchApp(app);
+            }
         }
     }
 }

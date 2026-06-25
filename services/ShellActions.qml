@@ -42,6 +42,8 @@ QtObject {
             return "qs-gnome-overview:prev"
         if (action === "applications")
             return "qs-gnome-overview:applications"
+        if (action === "refresh-pointer")
+            return "qs-gnome-overview:refresh-pointer"
         return Services.ShellState.nativeWorkspaceOverviewToggleDispatcher
     }
 
@@ -53,6 +55,10 @@ QtObject {
         var extraArgs = String(args || "").trim()
         Hyprland.dispatch(extraArgs.length > 0 ? dispatcher + " " + extraArgs : dispatcher)
         return true
+    }
+
+    function refreshPointerFocus() {
+        nativeOverviewDispatch("refresh-pointer")
     }
 
     function openWorkspaceOverview() {

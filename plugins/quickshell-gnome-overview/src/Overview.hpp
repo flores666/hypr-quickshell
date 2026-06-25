@@ -73,6 +73,8 @@ class CHyprspaceWidget {
     static constexpr double APPLICATIONS_OPEN_ANIMATION_SECONDS = 0.34;
     static constexpr double APPLICATIONS_CLOSE_ANIMATION_SECONDS = 0.30;
     static constexpr double APPLICATIONS_RETURN_ANIMATION_SECONDS = 0.30;
+    static constexpr double APPLICATIONS_CARD_PHASE_END = 0.48;
+    static constexpr double APPLICATIONS_FROM_OVERVIEW_START_PROGRESS = APPLICATIONS_CARD_PHASE_END;
     int workspaceSelectionFromID = 0;
     int workspaceSelectionToID = 0;
 
@@ -107,6 +109,7 @@ public:
     PHLMONITOR getOwner() const;
     bool isActive();
     bool isClosing() const;
+    bool isAnimating() const;
     bool isApplyingWorkspaceActivation() const;
 
     void show();

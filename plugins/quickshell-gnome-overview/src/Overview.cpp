@@ -550,9 +550,6 @@ void CHyprspaceWidget::startApplicationsTransitionFromOverview() {
         return;
     }
 
-    constexpr double OVERVIEW_OPEN_ANIMATION_SECONDS = 0.24;
-    constexpr double APPLICATIONS_PREVIEW_RAW_PROGRESS = 0.19585484828218835;
-
     closeOwnerSpecialWorkspace();
     suppressWorkspaceTransitionAnimation();
 
@@ -579,7 +576,7 @@ void CHyprspaceWidget::startApplicationsTransitionFromOverview() {
 
     overviewAnimationStarted = true;
     overviewAnimationStartedAt = std::chrono::steady_clock::now() - std::chrono::duration_cast<std::chrono::steady_clock::duration>(
-        std::chrono::duration<double>(OVERVIEW_OPEN_ANIMATION_SECONDS * APPLICATIONS_PREVIEW_RAW_PROGRESS));
+        std::chrono::duration<double>(APPLICATIONS_OPEN_ANIMATION_SECONDS * APPLICATIONS_FROM_OVERVIEW_START_PROGRESS));
 
     setOverviewCursor();
     g_pHyprRenderer->damageMonitor(owner);
@@ -825,6 +822,19 @@ double CHyprspaceWidget::applicationsOverviewOpenProgress() const {
 
 bool CHyprspaceWidget::isClosing() const {
     return overviewClosing;
+}
+
+bool CHyprspaceWidget::isAnimating() const {
+    if (!active)
+        return false;
+
+    if (overviewClosing || workspaceSelectionAnimating || applicationsReturningToOverview)
+        return true;
+
+    if (!overviewAnimationStarted)
+        return false;
+
+    return overviewOpenProgress() < 0.995 || applicationsOverviewOpenProgress() < 0.995;
 }
 
 bool CHyprspaceWidget::isApplyingWorkspaceActivation() const {

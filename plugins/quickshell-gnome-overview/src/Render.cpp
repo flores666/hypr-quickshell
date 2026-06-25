@@ -233,7 +233,13 @@ static double overviewApplicationsMotionAmount(double openProgress) {
     if (liftProgress <= 0.001 || liftProgress >= 0.999)
         return 0.0;
 
-    return std::sin(liftProgress * 3.14159265358979323846);
+    // Use a position-based envelope instead of duplicating the surface texture.
+    // It gives the moving sheet a soft blur tail, but avoids one-frame ghost
+    // copies of icons/text when the applications layer is handed off on close.
+    const double middleMotion = std::sin(liftProgress * 3.14159265358979323846);
+    const double startEnvelope = overviewSmoothStep(0.08, 0.24, liftProgress);
+    const double endEnvelope = 1.0 - overviewSmoothStep(0.76, 0.96, liftProgress);
+    return middleMotion * startEnvelope * endEnvelope;
 }
 
 static bool applicationsLayerReady(PHLMONITOR owner) {
@@ -261,13 +267,14 @@ static bool applicationsLayerReady(PHLMONITOR owner) {
     return false;
 }
 
-static void renderApplicationsLayerMotionBlur(PHLLS layer,
-                                              PHLMONITOR owner,
+static void renderApplicationsLayerMotionBlur(PHLMONITOR owner,
                                               const CBox& layerBox,
                                               const CBox& monitorClip,
-                                              const Time::steady_tp& time,
                                               double openProgress,
                                               bool leavingApplicationsMode) {
+    if (!owner || Config::disableBlur)
+        return;
+
     const double motionAmount = overviewApplicationsMotionAmount(openProgress);
     if (motionAmount <= 0.001)
         return;
@@ -275,26 +282,24 @@ static void renderApplicationsLayerMotionBlur(PHLLS layer,
     const double direction = leavingApplicationsMode ? -1.0 : 1.0;
     const double trailStep = std::max<double>(7.0, 9.0 * owner->m_scale) * motionAmount;
 
-    if (!Config::disableBlur) {
+    auto renderClippedBlurSheet = [&](double offsetMultiplier, float alphaMultiplier) {
         CBox blurBox = layerBox;
-        blurBox.y += direction * trailStep;
+        blurBox.y += direction * trailStep * offsetMultiplier;
+
         const double clippedLeft = std::max(blurBox.x, monitorClip.x);
         const double clippedTop = std::max(blurBox.y, monitorClip.y);
         const double clippedRight = std::min(blurBox.x + blurBox.w, monitorClip.x + monitorClip.w);
         const double clippedBottom = std::min(blurBox.y + blurBox.h, monitorClip.y + monitorClip.h);
-        if (clippedRight > clippedLeft && clippedBottom > clippedTop) {
-            const CBox clippedBlurBox{clippedLeft, clippedTop, clippedRight - clippedLeft, clippedBottom - clippedTop};
-            renderRectWithBlur(overviewPixelSnappedBox(clippedBlurBox), CHyprColor(0.02, 0.025, 0.032, 0.045F * static_cast<float>(motionAmount)));
-        }
-    }
+        if (clippedRight <= clippedLeft || clippedBottom <= clippedTop)
+            return;
 
-    CBox farTrailBox = layerBox;
-    farTrailBox.y += direction * trailStep * 2.1;
-    renderLayerSurfaceStub(layer, owner, overviewPixelSnappedBox(farTrailBox), monitorClip, time, 0.055F * static_cast<float>(motionAmount));
+        const CBox clippedBlurBox{clippedLeft, clippedTop, clippedRight - clippedLeft, clippedBottom - clippedTop};
+        const float alpha = alphaMultiplier * static_cast<float>(motionAmount);
+        renderRectWithBlur(overviewPixelSnappedBox(clippedBlurBox), CHyprColor(0.02, 0.025, 0.032, alpha));
+    };
 
-    CBox nearTrailBox = layerBox;
-    nearTrailBox.y += direction * trailStep;
-    renderLayerSurfaceStub(layer, owner, overviewPixelSnappedBox(nearTrailBox), monitorClip, time, 0.10F * static_cast<float>(motionAmount));
+    renderClippedBlurSheet(0.85, 0.035F);
+    renderClippedBlurSheet(1.55, 0.020F);
 }
 
 static bool renderApplicationsLayerBelowOverviewCard(PHLMONITOR owner, const CBox& monitorClip, const Time::steady_tp& time, double openProgress, bool leavingApplicationsMode) {
@@ -316,7 +321,7 @@ static bool renderApplicationsLayerBelowOverviewCard(PHLMONITOR owner, const CBo
                 continue;
 
             const CBox layerBox = overviewPixelSnappedBox(overviewApplicationsLayerBox(owner, openProgress));
-            renderApplicationsLayerMotionBlur(layer, owner, layerBox, monitorClip, time, openProgress, leavingApplicationsMode);
+            renderApplicationsLayerMotionBlur(owner, layerBox, monitorClip, openProgress, leavingApplicationsMode);
             renderLayerSurfaceStub(layer, owner, layerBox, monitorClip, time, 1.0F);
             return true;
         }
@@ -973,7 +978,7 @@ void CHyprspaceWidget::drawApplicationsBackground() {
     if (!owner)
         return;
 
-    constexpr double APPLICATIONS_PREVIEW_RAW_PROGRESS = 0.19585484828218835;
+    constexpr double APPLICATIONS_PREVIEW_RAW_PROGRESS = APPLICATIONS_FROM_OVERVIEW_START_PROGRESS;
 
     auto setApplicationsRawProgress = [&](double rawProgress) {
         overviewAnimationStarted = true;
@@ -982,12 +987,11 @@ void CHyprspaceWidget::drawApplicationsBackground() {
     };
 
     const bool applicationLayerReady = applicationsLayerReady(owner);
-    if (!isClosing() && !applicationLayerReady) {
-        applicationsLayerReadyForTransition = false;
+    const bool leavingApplicationsModeNow = isClosing() || applicationsReturningToOverview;
+    if (!leavingApplicationsModeNow && !applicationLayerReady && !applicationsLayerReadyForTransition)
         setApplicationsRawProgress(applicationsTransitionStartedFromOverview ? APPLICATIONS_PREVIEW_RAW_PROGRESS : 0.0);
-    }
 
-    if (!isClosing() && applicationLayerReady && !applicationsLayerReadyForTransition) {
+    if (!leavingApplicationsModeNow && applicationLayerReady && !applicationsLayerReadyForTransition) {
         applicationsLayerReadyForTransition = true;
         setApplicationsRawProgress(applicationsTransitionStartedFromOverview ? APPLICATIONS_PREVIEW_RAW_PROGRESS : 0.0);
     }
@@ -1017,8 +1021,8 @@ void CHyprspaceWidget::drawApplicationsBackground() {
     const bool returnAnimationFinished = applicationsReturningToOverview && returnProgress >= 0.999;
     const double openProgress = overviewEaseInOutCubic(rawOpenProgress);
 
-    constexpr double CARD_PHASE_END = 0.48;
-    const bool leavingApplicationsMode = isClosing() || applicationsReturningToOverview;
+    constexpr double CARD_PHASE_END = APPLICATIONS_CARD_PHASE_END;
+    const bool leavingApplicationsMode = leavingApplicationsModeNow;
     if (leavingApplicationsMode && !applicationsLayerHiddenForClose && openProgress <= CARD_PHASE_END) {
         applicationsLayerHiddenForClose = true;
         notifyQuickshellApplicationsState("applications-layer-hidden");

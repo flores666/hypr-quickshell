@@ -212,6 +212,14 @@ bool renderFullscreenBackground(PHLMONITOR pMonitor, const CBox& monitorClip, co
             continue;
         if (layer->m_namespace == "quickshell:applications")
             continue;
+        if (!layer->m_mapped || layer->m_readyToDelete || !layer->m_layerSurface || !layer->wlSurface() || !layer->wlSurface()->resource())
+            continue;
+
+        const auto surface = layer->wlSurface()->resource();
+        if (!surface->m_current.texture)
+            continue;
+        if (surface->m_current.size.x < 1 || surface->m_current.size.y < 1)
+            continue;
 
         const Vector2D layerPos = (layer->m_realPosition->value() - pMonitor->m_position) * pMonitor->m_scale;
         const Vector2D layerSize = layer->m_realSize->value() * pMonitor->m_scale;
