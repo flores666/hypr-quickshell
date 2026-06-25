@@ -590,9 +590,8 @@ double CHyprspaceWidget::applicationsReturnProgress() const {
     if (!applicationsReturningToOverview)
         return 1.0;
 
-    constexpr double APPLICATIONS_RETURN_SECONDS = 0.22;
     const double elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - applicationsReturnStartedAt).count();
-    return std::clamp(elapsed / APPLICATIONS_RETURN_SECONDS, 0.0, 1.0);
+    return std::clamp(elapsed / APPLICATIONS_RETURN_ANIMATION_SECONDS, 0.0, 1.0);
 }
 
 void CHyprspaceWidget::startApplicationsReturnToOverview() {
@@ -799,20 +798,29 @@ void CHyprspaceWidget::hideKeepingWorkspace(int workspaceID) {
     g_pCompositor->scheduleFrameForMonitor(owner);
 }
 
-double CHyprspaceWidget::overviewOpenProgress() const {
-    constexpr double OVERVIEW_OPEN_ANIMATION_SECONDS = 0.24;
-    constexpr double OVERVIEW_CLOSE_ANIMATION_SECONDS = 0.22;
+static double animationProgressFromStart(const std::chrono::steady_clock::time_point& startedAt, double durationSeconds) {
+    const double elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - startedAt).count();
+    return std::clamp(elapsed / std::max(0.001, durationSeconds), 0.0, 1.0);
+}
 
-    if (overviewClosing) {
-        const double elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - overviewClosingStartedAt).count();
-        return 1.0 - std::clamp(elapsed / OVERVIEW_CLOSE_ANIMATION_SECONDS, 0.0, 1.0);
-    }
+double CHyprspaceWidget::overviewOpenProgress() const {
+    if (overviewClosing)
+        return 1.0 - animationProgressFromStart(overviewClosingStartedAt, OVERVIEW_CLOSE_ANIMATION_SECONDS);
 
     if (!overviewAnimationStarted)
         return 1.0;
 
-    const double elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - overviewAnimationStartedAt).count();
-    return std::clamp(elapsed / OVERVIEW_OPEN_ANIMATION_SECONDS, 0.0, 1.0);
+    return animationProgressFromStart(overviewAnimationStartedAt, OVERVIEW_OPEN_ANIMATION_SECONDS);
+}
+
+double CHyprspaceWidget::applicationsOverviewOpenProgress() const {
+    if (overviewClosing)
+        return 1.0 - animationProgressFromStart(overviewClosingStartedAt, APPLICATIONS_CLOSE_ANIMATION_SECONDS);
+
+    if (!overviewAnimationStarted)
+        return 1.0;
+
+    return animationProgressFromStart(overviewAnimationStartedAt, APPLICATIONS_OPEN_ANIMATION_SECONDS);
 }
 
 bool CHyprspaceWidget::isClosing() const {

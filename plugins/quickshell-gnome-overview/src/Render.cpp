@@ -212,16 +212,28 @@ static CBox overviewApplicationCardBox(PHLMONITOR owner, double openProgress) {
     return overviewPixelSnappedBox(overviewLerpBox(cardBox, liftedCardBox, liftProgress));
 }
 
+static double overviewApplicationsLiftProgress(double openProgress) {
+    constexpr double CARD_PHASE_END = 0.48;
+    return overviewEaseInOutCubic((openProgress - CARD_PHASE_END) / (1.0 - CARD_PHASE_END));
+}
+
 static CBox overviewApplicationsLayerBox(PHLMONITOR owner, double openProgress) {
     if (!owner)
         return CBox{0, 0, 1, 1};
 
-    constexpr double CARD_PHASE_END = 0.48;
-    const double liftProgress = overviewEaseInOutCubic((openProgress - CARD_PHASE_END) / (1.0 - CARD_PHASE_END));
+    const double liftProgress = overviewApplicationsLiftProgress(openProgress);
     const double riseOffset = std::max<double>(240.0, owner->m_transformedSize.y * 0.42);
     const double y = overviewLerp(riseOffset, 0.0, liftProgress);
 
     return CBox{0, y, owner->m_transformedSize.x, owner->m_transformedSize.y};
+}
+
+static double overviewApplicationsMotionAmount(double openProgress) {
+    const double liftProgress = overviewApplicationsLiftProgress(openProgress);
+    if (liftProgress <= 0.001 || liftProgress >= 0.999)
+        return 0.0;
+
+    return std::sin(liftProgress * 3.14159265358979323846);
 }
 
 static bool applicationsLayerReady(PHLMONITOR owner) {
@@ -249,7 +261,43 @@ static bool applicationsLayerReady(PHLMONITOR owner) {
     return false;
 }
 
-static bool renderApplicationsLayerBelowOverviewCard(PHLMONITOR owner, const CBox& monitorClip, const Time::steady_tp& time, double openProgress) {
+static void renderApplicationsLayerMotionBlur(PHLLS layer,
+                                              PHLMONITOR owner,
+                                              const CBox& layerBox,
+                                              const CBox& monitorClip,
+                                              const Time::steady_tp& time,
+                                              double openProgress,
+                                              bool leavingApplicationsMode) {
+    const double motionAmount = overviewApplicationsMotionAmount(openProgress);
+    if (motionAmount <= 0.001)
+        return;
+
+    const double direction = leavingApplicationsMode ? -1.0 : 1.0;
+    const double trailStep = std::max<double>(7.0, 9.0 * owner->m_scale) * motionAmount;
+
+    if (!Config::disableBlur) {
+        CBox blurBox = layerBox;
+        blurBox.y += direction * trailStep;
+        const double clippedLeft = std::max(blurBox.x, monitorClip.x);
+        const double clippedTop = std::max(blurBox.y, monitorClip.y);
+        const double clippedRight = std::min(blurBox.x + blurBox.w, monitorClip.x + monitorClip.w);
+        const double clippedBottom = std::min(blurBox.y + blurBox.h, monitorClip.y + monitorClip.h);
+        if (clippedRight > clippedLeft && clippedBottom > clippedTop) {
+            const CBox clippedBlurBox{clippedLeft, clippedTop, clippedRight - clippedLeft, clippedBottom - clippedTop};
+            renderRectWithBlur(overviewPixelSnappedBox(clippedBlurBox), CHyprColor(0.02, 0.025, 0.032, 0.045F * static_cast<float>(motionAmount)));
+        }
+    }
+
+    CBox farTrailBox = layerBox;
+    farTrailBox.y += direction * trailStep * 2.1;
+    renderLayerSurfaceStub(layer, owner, overviewPixelSnappedBox(farTrailBox), monitorClip, time, 0.055F * static_cast<float>(motionAmount));
+
+    CBox nearTrailBox = layerBox;
+    nearTrailBox.y += direction * trailStep;
+    renderLayerSurfaceStub(layer, owner, overviewPixelSnappedBox(nearTrailBox), monitorClip, time, 0.10F * static_cast<float>(motionAmount));
+}
+
+static bool renderApplicationsLayerBelowOverviewCard(PHLMONITOR owner, const CBox& monitorClip, const Time::steady_tp& time, double openProgress, bool leavingApplicationsMode) {
     if (!owner)
         return false;
 
@@ -267,7 +315,8 @@ static bool renderApplicationsLayerBelowOverviewCard(PHLMONITOR owner, const CBo
             if (!(layerSize.x > 1.0 && layerSize.y > 1.0))
                 continue;
 
-            const CBox layerBox = overviewApplicationsLayerBox(owner, openProgress);
+            const CBox layerBox = overviewPixelSnappedBox(overviewApplicationsLayerBox(owner, openProgress));
+            renderApplicationsLayerMotionBlur(layer, owner, layerBox, monitorClip, time, openProgress, leavingApplicationsMode);
             renderLayerSurfaceStub(layer, owner, layerBox, monitorClip, time, 1.0F);
             return true;
         }
@@ -924,13 +973,12 @@ void CHyprspaceWidget::drawApplicationsBackground() {
     if (!owner)
         return;
 
-    constexpr double OVERVIEW_OPEN_ANIMATION_SECONDS = 0.24;
     constexpr double APPLICATIONS_PREVIEW_RAW_PROGRESS = 0.19585484828218835;
 
     auto setApplicationsRawProgress = [&](double rawProgress) {
         overviewAnimationStarted = true;
         overviewAnimationStartedAt = std::chrono::steady_clock::now() - std::chrono::duration_cast<std::chrono::steady_clock::duration>(
-            std::chrono::duration<double>(OVERVIEW_OPEN_ANIMATION_SECONDS * std::clamp(rawProgress, 0.0, 1.0)));
+            std::chrono::duration<double>(APPLICATIONS_OPEN_ANIMATION_SECONDS * std::clamp(rawProgress, 0.0, 1.0)));
     };
 
     const bool applicationLayerReady = applicationsLayerReady(owner);
@@ -948,7 +996,7 @@ void CHyprspaceWidget::drawApplicationsBackground() {
     const auto time = Time::steadyNow();
     const bool selectionCloseMorphRunning = workspaceSelectionCloseMorphActive();
     const double selectionProgress = isSelectingWorkspace() ? workspaceSelectionProgress() : 1.0;
-    double rawOpenProgress = selectionCloseMorphRunning ? (1.0 - selectionProgress) : overviewOpenProgress();
+    double rawOpenProgress = selectionCloseMorphRunning ? (1.0 - selectionProgress) : applicationsOverviewOpenProgress();
     double returnProgress = 1.0;
     if (applicationsReturningToOverview) {
         returnProgress = applicationsReturnProgress();
@@ -967,9 +1015,7 @@ void CHyprspaceWidget::drawApplicationsBackground() {
     const bool closingAnimationRunning = isClosing() || selectionCloseMorphRunning;
     const bool morphAnimationRunning = rawOpenProgress < 0.999 || closingAnimationRunning;
     const bool returnAnimationFinished = applicationsReturningToOverview && returnProgress >= 0.999;
-    const double openProgress = closingAnimationRunning
-        ? overviewEaseInOutCubic(rawOpenProgress)
-        : overviewEaseOutCubic(rawOpenProgress);
+    const double openProgress = overviewEaseInOutCubic(rawOpenProgress);
 
     constexpr double CARD_PHASE_END = 0.48;
     const bool leavingApplicationsMode = isClosing() || applicationsReturningToOverview;
@@ -988,8 +1034,8 @@ void CHyprspaceWidget::drawApplicationsBackground() {
     // GNOME Applications is not a popup over workspace previews. It is the
     // second overview mode. Render the applications layer inside the plugin,
     // below the shrinking desktop card, so both surfaces animate as one scene.
-    renderOverviewBackdrop(owner, monitorClip, time, openProgress, 0.28);
-    renderApplicationsLayerBelowOverviewCard(owner, monitorClip, time, openProgress);
+    renderOverviewBackdrop(owner, monitorClip, time, openProgress, 0.10);
+    renderApplicationsLayerBelowOverviewCard(owner, monitorClip, time, openProgress, leavingApplicationsMode);
 
     if ((applicationsTransitionStartedFromOverview || applicationsReturningToOverview) && !isClosing()) {
         const auto workspaces = overviewWorkspaceIds();

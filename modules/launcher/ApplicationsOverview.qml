@@ -15,8 +15,8 @@ Scope {
     readonly property int visualContentYOffset: 36
     readonly property int inputContentYOffset: 0
     readonly property real desktopCardPhaseEnd: 0.48
-    readonly property int closeAnimationDuration: 220
-    readonly property int openAnimationDuration: 360
+    readonly property int closeAnimationDuration: 300
+    readonly property int openAnimationDuration: 340
     readonly property real horizontalMargin: Math.max(52, Math.round(visualWindow.width * 0.08))
     readonly property real applicationsRiseProgress: smoothStep(desktopCardPhaseEnd, 1.0, animationProgress)
     readonly property bool renderActive: overviewActive || closingVisualActive || animationProgress > 0.001
@@ -284,7 +284,7 @@ Scope {
         enabled: root.animationBehaviorEnabled
         NumberAnimation {
             duration: root.closingVisualActive || root.closeRequested ? root.closeAnimationDuration : root.openAnimationDuration
-            easing.type: Easing.OutCubic
+            easing.type: Easing.InOutCubic
         }
     }
 
