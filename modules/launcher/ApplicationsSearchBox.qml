@@ -10,6 +10,8 @@ Rectangle {
     property alias inputField: searchInput
 
     signal queryEdited(string text)
+    signal selectionMoveRequested(int dx, int dy)
+    signal selectionActivationRequested()
 
     radius: 24
     color: showVisuals ? "#da111821" : "transparent"
@@ -88,6 +90,36 @@ Rectangle {
             font.kerning: false
         }
 
-        Keys.onEscapePressed: Services.ShellActions.closeWorkspaceOverview()
+        Keys.onPressed: function(event) {
+            if (event.key === Qt.Key_Escape) {
+                Services.ShellActions.closeWorkspaceOverview();
+                event.accepted = true;
+                return;
+            }
+            if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                root.selectionActivationRequested();
+                event.accepted = true;
+                return;
+            }
+            if (event.key === Qt.Key_Left) {
+                root.selectionMoveRequested(-1, 0);
+                event.accepted = true;
+                return;
+            }
+            if (event.key === Qt.Key_Right) {
+                root.selectionMoveRequested(1, 0);
+                event.accepted = true;
+                return;
+            }
+            if (event.key === Qt.Key_Up) {
+                root.selectionMoveRequested(0, -1);
+                event.accepted = true;
+                return;
+            }
+            if (event.key === Qt.Key_Down) {
+                root.selectionMoveRequested(0, 1);
+                event.accepted = true;
+            }
+        }
     }
 }

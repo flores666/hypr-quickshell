@@ -15,6 +15,7 @@ Item {
     property var apps: []
     property var pinnedIds: []
     property var orderIds: []
+    property var hiddenIds: []
     property var missingPinned: []
     property string configPath: ""
     property var appsById: ({})
@@ -51,7 +52,8 @@ Item {
                 app.icon || "",
                 app.iconName || "",
                 app.command || "",
-                (app.matchKeys || []).join(",")
+                (app.matchKeys || []).join(","),
+                (app.categories || []).join(",")
             ].join("|"));
         }
         return result.join("\n");
@@ -73,6 +75,10 @@ Item {
         var keys = app.matchKeys || [];
         for (var i = 0; i < keys.length; i++)
             parts.push(keys[i]);
+
+        var categories = app.categories || [];
+        for (var c = 0; c < categories.length; c++)
+            parts.push(categories[c]);
 
         return parts.join(" ").toLowerCase();
     }
@@ -244,6 +250,41 @@ Item {
             orderIds = nextIds;
     }
 
+    function applyHiddenIds(nextIds) {
+        if (!sameStringList(hiddenIds, nextIds))
+            hiddenIds = nextIds;
+    }
+
+    function isHidden(desktopId) {
+        var target = String(desktopId || "");
+        if (!target)
+            return false;
+        for (var i = 0; i < hiddenIds.length; i++) {
+            if (String(hiddenIds[i] || "") === target)
+                return true;
+        }
+        return false;
+    }
+
+    function withoutHidden(desktopId) {
+        var next = [];
+        var target = String(desktopId || "");
+        for (var i = 0; i < hiddenIds.length; i++) {
+            var id = String(hiddenIds[i] || "");
+            if (id.length > 0 && id !== target && next.indexOf(id) < 0)
+                next.push(id);
+        }
+        return next;
+    }
+
+    function withHidden(desktopId) {
+        var next = withoutHidden(desktopId);
+        var target = String(desktopId || "");
+        if (target.length > 0)
+            next.push(target);
+        return next;
+    }
+
     function withoutPinned(desktopId) {
         var next = [];
         for (var i = 0; i < pinnedIds.length; i++) {
@@ -273,6 +314,7 @@ Item {
         applyApps(payload.apps || []);
         applyPinnedIds(payload.pinned || []);
         applyOrderIds(payload.order || payload.pinned || []);
+        applyHiddenIds(payload.hidden || []);
         missingPinned = payload.missingPinned || [];
         configPath = payload.configPath || "";
         ready = true;
@@ -409,6 +451,20 @@ Item {
         // Keep orderIds unchanged so an open app does not jump when it is unpinned.
         applyPinnedIds(withoutPinned(desktopId));
         runAction("unpin", [desktopId]);
+    }
+
+    function hideFromApplications(desktopId) {
+        if (!desktopId)
+            return;
+        applyHiddenIds(withHidden(desktopId));
+        runAction("hide", [desktopId]);
+    }
+
+    function showInApplications(desktopId) {
+        if (!desktopId)
+            return;
+        applyHiddenIds(withoutHidden(desktopId));
+        runAction("unhide", [desktopId]);
     }
 
     function launch(desktopId) {
