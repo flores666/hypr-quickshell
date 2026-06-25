@@ -762,6 +762,8 @@ Scope {
             }
 
             onWheel: function(wheel) {
+                if (root.inputActive && inputContent)
+                    inputContent.handleWheel(wheel);
                 wheel.accepted = true;
             }
         }
@@ -827,7 +829,7 @@ Scope {
 
             onWheel: function(wheel) {
                 if (root.inputActive && inputContent)
-                    inputContent.scrollBy(inputContent.wheelDeltaToContentDelta(wheel));
+                    inputContent.handleWheel(wheel);
                 wheel.accepted = true;
             }
         }

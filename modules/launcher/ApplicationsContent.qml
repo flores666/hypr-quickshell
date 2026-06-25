@@ -21,15 +21,15 @@ Item {
     readonly property int sectionHeaderGap: 12
     readonly property int sectionSpacing: 24
     readonly property int appColumns: Math.max(1, Math.floor(Math.max(1, appList.width) / tileWidth))
-    readonly property real wheelLineHeight: 48
-    readonly property real wheelDefaultLines: 6
-    readonly property real wheelSpeedMultiplier: 1.45
-    readonly property real pixelScrollMultiplier: 1.18
+    readonly property real wheelLineHeight: 40
+    readonly property real wheelDefaultLines: 3
+    property real wheelSpeedMultiplier: 0.575
+    property real pixelScrollMultiplier: 0.525
     property alias searchField: searchBox.inputField
 
     signal queryEdited(string text)
     signal moveSelectionRequested(string direction)
-    signal activateSelectionRequested
+    signal activateSelectionRequested()
     signal appHovered(string appKey)
     signal appUnhovered(string appKey)
     signal appPressed(var app, int button)
@@ -75,6 +75,19 @@ Item {
             return 0;
 
         return -(angleY / 120.0) * systemWheelLines() * root.wheelLineHeight * root.wheelSpeedMultiplier;
+    }
+
+    function handleWheel(event) {
+        if (!root.interactive || !event)
+            return false;
+
+        var delta = wheelDeltaToContentDelta(event);
+        if (Math.abs(delta) <= 0.01)
+            return false;
+
+        scrollBy(delta);
+        event.accepted = true;
+        return true;
     }
 
     function scrollBy(delta) {
@@ -176,12 +189,8 @@ Item {
                 interactive: root.interactive
                 showVisuals: root.showVisuals
                 queryText: root.queryText
-                onQueryEdited: function (text) {
-                    root.queryEdited(text);
-                }
-                onMoveSelectionRequested: function (direction) {
-                    root.moveSelectionRequested(direction);
-                }
+                onQueryEdited: function(text) { root.queryEdited(text); }
+                onMoveSelectionRequested: function(direction) { root.moveSelectionRequested(direction); }
                 onActivateSelectionRequested: root.activateSelectionRequested()
             }
 
@@ -196,21 +205,8 @@ Item {
                 boundsBehavior: Flickable.StopAtBounds
                 boundsMovement: Flickable.StopAtBounds
                 flickableDirection: Flickable.VerticalFlick
-                interactive: root.interactive
+                interactive: false
                 spacing: root.sectionSpacing
-
-                WheelHandler {
-                    id: appListWheelHandler
-                    enabled: root.interactive
-                    target: null
-                    onWheel: function (event) {
-                        var delta = root.wheelDeltaToContentDelta(event);
-                        if (delta === 0)
-                            return;
-                        root.scrollBy(delta);
-                        event.accepted = true;
-                    }
-                }
 
                 Binding {
                     target: appList
@@ -284,22 +280,14 @@ Item {
                                         selected: root.selectedAppKey.length > 0 && root.selectedAppKey === appCell.appKey
                                         interactive: root.interactive
                                         showVisuals: root.showVisuals
-                                        onHovered: function (appKey) {
-                                            root.appHovered(appKey);
-                                        }
-                                        onUnhovered: function (appKey) {
-                                            root.appUnhovered(appKey);
-                                        }
-                                        onPressed: function (app, button, localX, localY) {
-                                            root.appPressed(app, button);
-                                        }
-                                        onContextRequested: function (app, localX, localY) {
+                                        onHovered: function(appKey) { root.appHovered(appKey); }
+                                        onUnhovered: function(appKey) { root.appUnhovered(appKey); }
+                                        onPressed: function(app, button, localX, localY) { root.appPressed(app, button); }
+                                        onContextRequested: function(app, localX, localY) {
                                             var point = appTile.mapToItem(root, localX, localY);
                                             root.appContextRequested(app, point.x, point.y);
                                         }
-                                        onLaunched: function (app) {
-                                            root.appLaunched(app);
-                                        }
+                                        onLaunched: function(app) { root.appLaunched(app); }
                                     }
                                 }
                             }
@@ -309,4 +297,13 @@ Item {
             }
         }
     }
+    WheelHandler {
+        id: contentWheelHandler
+        enabled: root.interactive
+        target: null
+        onWheel: function(event) {
+            root.handleWheel(event);
+        }
+    }
+
 }
