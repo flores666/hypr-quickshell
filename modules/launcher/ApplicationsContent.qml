@@ -25,6 +25,10 @@ Item {
     readonly property real wheelDefaultLines: 3
     property real wheelSpeedMultiplier: 0.575
     property real pixelScrollMultiplier: 0.525
+    readonly property int wheelSmoothDuration: 170
+    readonly property int pixelSmoothDuration: 95
+    property real smoothScrollTargetY: 0
+    property bool smoothScrollRetargeting: false
     property alias searchField: searchBox.inputField
 
     signal queryEdited(string text)
@@ -42,7 +46,9 @@ Item {
     }
 
     function forceContentY(value) {
+        stopSmoothScroll();
         appList.contentY = clampContentY(value);
+        smoothScrollTargetY = appList.contentY;
         return appList.contentY;
     }
 
@@ -77,6 +83,11 @@ Item {
         return -(angleY / 120.0) * systemWheelLines() * root.wheelLineHeight * root.wheelSpeedMultiplier;
     }
 
+    function wheelSmoothDurationForEvent(event) {
+        var pixelY = event && event.pixelDelta ? Number(event.pixelDelta.y || 0) : 0;
+        return pixelY !== 0 ? root.pixelSmoothDuration : root.wheelSmoothDuration;
+    }
+
     function handleWheel(event) {
         if (!root.interactive || !event)
             return false;
@@ -85,12 +96,40 @@ Item {
         if (Math.abs(delta) <= 0.01)
             return false;
 
-        scrollBy(delta);
+        scrollBy(delta, wheelSmoothDurationForEvent(event));
         event.accepted = true;
         return true;
     }
 
-    function scrollBy(delta) {
+    function stopSmoothScroll() {
+        if (!smoothScrollAnimation.running)
+            return;
+
+        smoothScrollRetargeting = true;
+        smoothScrollAnimation.stop();
+        smoothScrollRetargeting = false;
+    }
+
+    function startSmoothScrollTo(value, duration) {
+        var current = clampContentY(appList.contentY);
+        var next = clampContentY(value);
+
+        smoothScrollTargetY = next;
+        if (Math.abs(next - current) <= 0.25) {
+            stopSmoothScroll();
+            appList.contentY = next;
+            root.contentYEdited(next);
+            return;
+        }
+
+        stopSmoothScroll();
+        smoothScrollAnimation.from = current;
+        smoothScrollAnimation.to = next;
+        smoothScrollAnimation.duration = Math.max(1, Number(duration || root.wheelSmoothDuration));
+        smoothScrollAnimation.start();
+    }
+
+    function scrollBy(delta, duration) {
         if (!root.interactive)
             return;
 
@@ -98,13 +137,26 @@ Item {
         if (!isFinite(rawDelta) || Math.abs(rawDelta) <= 0.01)
             return;
 
-        var current = appList.contentY;
-        var next = clampContentY(current + rawDelta);
-        if (Math.abs(next - current) <= 0.25)
-            return;
+        var base = smoothScrollAnimation.running ? smoothScrollTargetY : appList.contentY;
+        var next = clampContentY(base + rawDelta);
+        startSmoothScrollTo(next, duration);
+    }
 
-        appList.contentY = next;
-        root.contentYEdited(next);
+    function clampSmoothScrollState() {
+        var target = clampContentY(smoothScrollTargetY);
+        if (Math.abs(target - smoothScrollTargetY) > 0.25) {
+            smoothScrollTargetY = target;
+            if (smoothScrollAnimation.running)
+                startSmoothScrollTo(target, root.pixelSmoothDuration);
+        }
+
+        if (!smoothScrollAnimation.running) {
+            var current = clampContentY(appList.contentY);
+            if (Math.abs(current - appList.contentY) > 0.25) {
+                appList.contentY = current;
+                root.contentYEdited(current);
+            }
+        }
     }
 
     function appRowsForCount(count) {
@@ -219,6 +271,28 @@ Item {
                 onContentYChanged: {
                     if (root.interactive && !root.syncContentY)
                         root.contentYEdited(contentY);
+                }
+
+                onContentHeightChanged: root.clampSmoothScrollState()
+                onHeightChanged: root.clampSmoothScrollState()
+
+                NumberAnimation {
+                    id: smoothScrollAnimation
+                    target: appList
+                    property: "contentY"
+                    duration: root.wheelSmoothDuration
+                    easing.type: Easing.OutCubic
+                    alwaysRunToEnd: false
+                    onStopped: {
+                        if (root.smoothScrollRetargeting)
+                            return;
+
+                        var applied = root.clampContentY(appList.contentY);
+                        root.smoothScrollTargetY = applied;
+                        if (Math.abs(applied - appList.contentY) > 0.25)
+                            appList.contentY = applied;
+                        root.contentYEdited(applied);
+                    }
                 }
 
                 delegate: Item {
