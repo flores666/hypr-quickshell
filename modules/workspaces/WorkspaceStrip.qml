@@ -20,7 +20,7 @@ Item {
     readonly property int moduleHeight: Math.max(circleSize + 4, Math.round(30 * uiScale))
     readonly property int activeDotSize: Math.max(6, Math.round(8 * uiScale))
     readonly property int contentYOffset: 0
-    readonly property int textSize: Math.max(10, Math.round(11 * uiScale))
+    readonly property int textSize: Math.max(12, Math.round(12 * uiScale))
 
     property int activeWorkspace: Services.ShellState.activeWorkspace
     property int previousWorkspace: Services.ShellState.activeWorkspace

@@ -582,7 +582,7 @@ PopupWindow {
                                     Components.StyledText {
                                         text: "Wi-Fi"
                                         color: "#eef3f8"
-                                        font.pixelSize: 11
+                                        font.pixelSize: 12
                                         font.weight: Font.DemiBold
                                     }
                                 }
@@ -647,7 +647,7 @@ PopupWindow {
                                     Components.StyledText {
                                         text: "Ethernet"
                                         color: "#eef3f8"
-                                        font.pixelSize: 11
+                                        font.pixelSize: 12
                                         font.weight: Font.DemiBold
                                     }
                                 }
@@ -700,7 +700,7 @@ PopupWindow {
                                     Components.StyledText {
                                         text: "Bluetooth"
                                         color: "#eef3f8"
-                                        font.pixelSize: 11
+                                        font.pixelSize: 12
                                         font.weight: Font.DemiBold
                                     }
                                 }
@@ -766,7 +766,7 @@ PopupWindow {
                             Components.StyledText {
                                 text: Services.SystemStatus.hasAudio ? Services.SystemStatus.volume + "%" : "--"
                                 color: "#aeb8c6"
-                                font.pixelSize: 11
+                                font.pixelSize: 12
                                 font.weight: Font.Medium
                             }
 
@@ -817,7 +817,7 @@ PopupWindow {
                                     visible: Services.SystemStatus.sinkInputs.length === 0
                                     text: "No active audio apps"
                                     color: "#8f9aa8"
-                                    font.pixelSize: 10
+                                    font.pixelSize: 12
                                     verticalAlignment: Text.AlignVCenter
                                 }
 
@@ -861,7 +861,7 @@ PopupWindow {
                                                 visible: appIconImage.status !== Image.Ready
                                                 text: root.firstLetter(modelData.name, modelData.app || "A")
                                                 color: "#eef3f8"
-                                                font.pixelSize: 10
+                                                font.pixelSize: 12
                                                 font.weight: Font.DemiBold
                                             }
                                         }
@@ -870,7 +870,7 @@ PopupWindow {
                                             Layout.preferredWidth: 92
                                             text: modelData.name || modelData.app || "App"
                                             color: "#c4ceda"
-                                            font.pixelSize: 10
+                                            font.pixelSize: 12
                                             elide: Text.ElideRight
                                         }
 
@@ -933,7 +933,7 @@ PopupWindow {
                                                 Layout.fillWidth: true
                                                 text: modelData.label || modelData.name || "Audio device"
                                                 color: modelData.active ? "#f4f7fb" : "#c4ceda"
-                                                font.pixelSize: 11
+                                                font.pixelSize: 12
                                                 font.weight: modelData.active ? Font.DemiBold : Font.Medium
                                                 elide: Text.ElideRight
                                             }
@@ -941,7 +941,7 @@ PopupWindow {
                                             Components.StyledText {
                                                 text: modelData.active ? "active" : ""
                                                 color: "#8f9aa8"
-                                                font.pixelSize: 10
+                                                font.pixelSize: 12
                                             }
                                         }
 
@@ -995,7 +995,7 @@ PopupWindow {
                                 Layout.preferredHeight: 18
                                 value: String(Services.SystemStatus.notificationsCount)
                                 textColor: "#aeb8c6"
-                                pixelSize: 11
+                                pixelSize: 12
                                 weight: Font.Medium
                                 horizontalAlignment: Text.AlignRight
                                 elideMode: Text.ElideRight
@@ -1037,7 +1037,7 @@ PopupWindow {
                                     visible: Services.SystemStatus.notifications.length === 0
                                     text: "No notifications"
                                     color: "#8f9aa8"
-                                    font.pixelSize: 11
+                                    font.pixelSize: 12
                                     horizontalAlignment: Text.AlignHCenter
                                     verticalAlignment: Text.AlignVCenter
                                 }
@@ -1158,7 +1158,7 @@ PopupWindow {
                                                         Layout.fillWidth: true
                                                         text: modelData.app || "Notification"
                                                         color: "#d9e0ea"
-                                                        font.pixelSize: 10
+                                                        font.pixelSize: 12
                                                         font.weight: Font.DemiBold
                                                         elide: Text.ElideRight
                                                     }
@@ -1166,7 +1166,7 @@ PopupWindow {
                                                     Components.StyledText {
                                                         text: modelData.time || ""
                                                         color: "#8f9aa8"
-                                                        font.pixelSize: 9
+                                                        font.pixelSize: 12
                                                     }
                                                 }
 
@@ -1174,7 +1174,7 @@ PopupWindow {
                                                     width: parent.width
                                                     text: modelData.title || "Notification"
                                                     color: "#f4f7fb"
-                                                    font.pixelSize: 11
+                                                    font.pixelSize: 12
                                                     font.weight: Font.DemiBold
                                                     elide: Text.ElideRight
                                                 }
@@ -1183,7 +1183,7 @@ PopupWindow {
                                                     width: parent.width
                                                     text: modelData.body || ""
                                                     color: "#aeb8c6"
-                                                    font.pixelSize: 10
+                                                    font.pixelSize: 12
                                                     wrapMode: Text.WordWrap
                                                     maximumLineCount: 2
                                                     elide: Text.ElideRight
@@ -1312,7 +1312,7 @@ PopupWindow {
                             Layout.fillWidth: true
                             text: root.batteryLine()
                             color: "#d9e0ea"
-                            font.pixelSize: 11
+                            font.pixelSize: 12
                             font.weight: Font.Medium
                             elide: Text.ElideRight
                         }
@@ -1500,7 +1500,7 @@ PopupWindow {
                                 anchors.centerIn: parent
                                 text: "Yes"
                                 color: "#f4f7fb"
-                                font.pixelSize: 10
+                                font.pixelSize: 12
                                 font.weight: Font.DemiBold
                             }
 
@@ -1532,7 +1532,7 @@ PopupWindow {
                                 anchors.centerIn: parent
                                 text: "No"
                                 color: "#eef3f8"
-                                font.pixelSize: 10
+                                font.pixelSize: 12
                                 font.weight: Font.DemiBold
                             }
 
@@ -1616,7 +1616,7 @@ PopupWindow {
                             width: parent.width
                             text: Services.SystemStatus.ethernetActive ? "Ethernet is active" : "Ethernet is disconnected"
                             color: "#eef3f8"
-                            font.pixelSize: 11
+                            font.pixelSize: 12
                             font.weight: Font.DemiBold
                             elide: Text.ElideRight
                         }
@@ -1625,7 +1625,7 @@ PopupWindow {
                             width: parent.width
                             text: root.ethernetText()
                             color: "#aeb8c6"
-                            font.pixelSize: 10
+                            font.pixelSize: 12
                             elide: Text.ElideRight
                         }
                     }
@@ -1651,7 +1651,7 @@ PopupWindow {
                                 visible: root.detailMode === "wifi" && Services.SystemStatus.wifiNetworks.length === 0
                                 text: root.detailEmptyText()
                                 color: "#aeb8c6"
-                                font.pixelSize: 11
+                                font.pixelSize: 12
                                 horizontalAlignment: Text.AlignHCenter
                                 verticalAlignment: Text.AlignVCenter
                             }
@@ -1691,7 +1691,7 @@ PopupWindow {
                                             Layout.fillWidth: true
                                             text: modelData.ssid || "Wi-Fi"
                                             color: modelData.active ? "#f4f7fb" : "#c4ceda"
-                                            font.pixelSize: 11
+                                            font.pixelSize: 12
                                             font.weight: modelData.active ? Font.DemiBold : Font.Medium
                                             elide: Text.ElideRight
                                         }
@@ -1699,7 +1699,7 @@ PopupWindow {
                                         Components.StyledText {
                                             text: modelData.active ? "active" : (modelData.signal + "%")
                                             color: "#8f9aa8"
-                                            font.pixelSize: 10
+                                            font.pixelSize: 12
                                         }
                                     }
 
@@ -1740,7 +1740,7 @@ PopupWindow {
                                 visible: root.detailMode === "bluetooth" && Services.SystemStatus.bluetoothDevices.length === 0
                                 text: root.detailEmptyText()
                                 color: "#aeb8c6"
-                                font.pixelSize: 11
+                                font.pixelSize: 12
                                 horizontalAlignment: Text.AlignHCenter
                                 verticalAlignment: Text.AlignVCenter
                             }
@@ -1780,7 +1780,7 @@ PopupWindow {
                                             Layout.fillWidth: true
                                             text: modelData.name || "Bluetooth"
                                             color: modelData.connected ? "#f4f7fb" : "#c4ceda"
-                                            font.pixelSize: 11
+                                            font.pixelSize: 12
                                             font.weight: modelData.connected ? Font.DemiBold : Font.Medium
                                             elide: Text.ElideRight
                                         }
@@ -1788,7 +1788,7 @@ PopupWindow {
                                         Components.StyledText {
                                             text: modelData.connected ? "connected" : ""
                                             color: "#8f9aa8"
-                                            font.pixelSize: 10
+                                            font.pixelSize: 12
                                         }
                                     }
 

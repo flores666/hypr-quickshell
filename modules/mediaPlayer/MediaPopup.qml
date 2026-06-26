@@ -241,7 +241,7 @@ PopupWindow {
                         Layout.preferredWidth: 35
                         text: controller ? controller.formatSeconds(controller.visualPosition) : "0:00"
                         color: "#cfd8e4"
-                        font.pixelSize: 10
+                        font.pixelSize: 12
                         font.weight: Font.DemiBold
                         horizontalAlignment: Text.AlignLeft
                         verticalAlignment: Text.AlignVCenter
@@ -269,7 +269,7 @@ PopupWindow {
                         Layout.preferredWidth: 35
                         text: controller ? controller.formatSeconds(controller.currentLength) : "0:00"
                         color: "#cfd8e4"
-                        font.pixelSize: 10
+                        font.pixelSize: 12
                         font.weight: Font.DemiBold
                         horizontalAlignment: Text.AlignRight
                         verticalAlignment: Text.AlignVCenter

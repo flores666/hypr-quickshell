@@ -117,7 +117,7 @@ PopupWindow {
                     height: visible ? root.rowHeight : 0
                     text: "No layouts found"
                     color: "#aeb8c6"
-                    font.pixelSize: 11
+                    font.pixelSize: 12
                     font.weight: Font.Medium
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
@@ -159,7 +159,7 @@ PopupWindow {
                                 Layout.fillWidth: true
                                 text: modelData.raw
                                 color: activeLayout ? "#b9c3d0" : "#8f9aa8"
-                                font.pixelSize: 10
+                                font.pixelSize: 12
                                 font.weight: Font.Medium
                                 elide: Text.ElideRight
                             }
@@ -167,7 +167,7 @@ PopupWindow {
                             Components.StyledText {
                                 text: activeLayout ? "active" : ""
                                 color: "#8f9aa8"
-                                font.pixelSize: 10
+                                font.pixelSize: 12
                                 font.weight: Font.Medium
                             }
                         }

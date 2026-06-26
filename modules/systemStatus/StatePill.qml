@@ -77,7 +77,7 @@ Rectangle {
                 width: parent.width
                 text: root.inactiveText
                 color: "#eef3f8"
-                font.pixelSize: 10
+                font.pixelSize: 12
                 font.weight: Font.DemiBold
                 horizontalAlignment: Text.AlignHCenter
                 elide: Text.ElideRight
@@ -96,7 +96,7 @@ Rectangle {
                 width: parent.width
                 text: root.activeText
                 color: "#eef3f8"
-                font.pixelSize: 10
+                font.pixelSize: 12
                 font.weight: Font.DemiBold
                 horizontalAlignment: Text.AlignHCenter
                 elide: Text.ElideRight

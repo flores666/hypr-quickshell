@@ -84,7 +84,7 @@ Rectangle {
             titleColor: root.playerActive ? "#f4f7fb" : "#9ba5b2"
             artistColor: root.mutedTextColor
             separatorColor: "#9aa4b1"
-            pixelSize: 11
+            pixelSize: 12
             titleWeight: Font.DemiBold
             artistWeight: Font.Medium
             speedPixelsPerSecond: 22.68

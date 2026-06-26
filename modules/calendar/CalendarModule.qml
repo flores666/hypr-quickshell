@@ -124,7 +124,7 @@ Item {
             anchors.centerIn: parent
             text: root.centerDateText(root.now)
             color: "#eef3f8"
-            font.pixelSize: 11
+            font.pixelSize: 12
             font.weight: Font.DemiBold
         }
 
@@ -352,7 +352,7 @@ Item {
                             verticalAlignment: Text.AlignVCenter
                             text: modelData
                             color: "#8f9aa8"
-                            font.pixelSize: 11
+                            font.pixelSize: 12
                             font.weight: Font.DemiBold
                         }
                     }

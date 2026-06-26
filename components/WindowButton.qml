@@ -58,10 +58,10 @@ Rectangle {
                 text: root.window && root.window.title ? String(root.window.title).substring(0, 1).toUpperCase() : "W"
                 color: "#dff4f7fb"
                 font.family: "Nunito"
-                font.pixelSize: 10
+                font.pixelSize: 12
                 font.weight: Font.DemiBold
-                renderType: Text.NativeRendering
-                font.hintingPreference: Font.PreferFullHinting
+                renderType: Text.QtRendering
+                font.hintingPreference: Font.PreferNoHinting
                 font.kerning: true
             }
         }
@@ -71,7 +71,7 @@ Rectangle {
             Layout.fillWidth: true
             text: root.window && root.window.title ? root.window.title : "Window"
             color: root.trayed ? "#9affffff" : "#f4f7fb"
-            font.pixelSize: 11
+            font.pixelSize: 12
             elide: Text.ElideRight
             verticalAlignment: Text.AlignVCenter
         }

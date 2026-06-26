@@ -1151,8 +1151,8 @@ Scope {
                                     font.pixelSize: 12
                                     font.weight: Font.DemiBold
                                     elide: Text.ElideRight
-                                    renderType: Text.NativeRendering
-                                    font.hintingPreference: Font.PreferFullHinting
+                                    renderType: Text.QtRendering
+                                    font.hintingPreference: Font.PreferNoHinting
                                     font.kerning: true
                                 }
 

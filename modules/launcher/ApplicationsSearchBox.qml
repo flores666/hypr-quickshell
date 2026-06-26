@@ -92,8 +92,8 @@ Item {
         font.weight: Font.Medium
         elide: Text.ElideRight
         verticalAlignment: Text.AlignVCenter
-        renderType: Text.NativeRendering
-        font.hintingPreference: Font.PreferFullHinting
+        renderType: Text.QtRendering
+        font.hintingPreference: Font.PreferNoHinting
         font.kerning: true
     }
 
@@ -116,8 +116,8 @@ Item {
         font.family: "Nunito"
         font.pixelSize: root.searchFontSize
         font.weight: Font.Medium
-        renderType: Text.NativeRendering
-        font.hintingPreference: Font.PreferFullHinting
+        renderType: Text.QtRendering
+        font.hintingPreference: Font.PreferNoHinting
         font.kerning: true
         clip: true
         cursorVisible: root.interactive && searchInput.activeFocus
@@ -133,8 +133,8 @@ Item {
             font.pixelSize: searchInput.font.pixelSize
             font.weight: Font.Medium
             verticalAlignment: Text.AlignVCenter
-            renderType: Text.NativeRendering
-            font.hintingPreference: Font.PreferFullHinting
+            renderType: Text.QtRendering
+            font.hintingPreference: Font.PreferNoHinting
             font.kerning: true
         }
 

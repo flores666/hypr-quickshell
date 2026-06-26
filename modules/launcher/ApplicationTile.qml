@@ -138,8 +138,8 @@ Item {
                         font.family: "Nunito"
                         font.pixelSize: 23
                         font.weight: Font.DemiBold
-                        renderType: Text.NativeRendering
-                        font.hintingPreference: Font.PreferFullHinting
+                        renderType: Text.QtRendering
+                        font.hintingPreference: Font.PreferNoHinting
                         font.kerning: true
                     }
                 }
@@ -159,10 +159,10 @@ Item {
                 wrapMode: Text.WordWrap
                 elide: Text.ElideRight
                 font.family: "Nunito"
-                font.pixelSize: 11
+                font.pixelSize: 12
                 font.weight: Font.DemiBold
-                renderType: Text.NativeRendering
-                font.hintingPreference: Font.PreferFullHinting
+                renderType: Text.QtRendering
+                font.hintingPreference: Font.PreferNoHinting
                 font.kerning: true
             }
 
