@@ -44,6 +44,8 @@ QtObject {
             return "qs-gnome-overview:applications"
         if (action === "refresh-pointer")
             return "qs-gnome-overview:refresh-pointer"
+        if (action === "applications-input-ready")
+            return "qs-gnome-overview:applications-input-ready"
         return Services.ShellState.nativeWorkspaceOverviewToggleDispatcher
     }
 
@@ -59,6 +61,10 @@ QtObject {
 
     function refreshPointerFocus() {
         nativeOverviewDispatch("refresh-pointer")
+    }
+
+    function notifyApplicationsInputReady() {
+        nativeOverviewDispatch("applications-input-ready")
     }
 
     function openWorkspaceOverview() {

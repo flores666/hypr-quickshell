@@ -527,7 +527,15 @@ Scope {
                 return;
             inputContent.forceSearchFocus();
             Services.ShellActions.refreshPointerFocus();
+            notifyApplicationsInputReadyWhenFocused();
         });
+    }
+
+    function notifyApplicationsInputReadyWhenFocused() {
+        if (!inputActive || !inputContent || !inputContent.searchField || !inputContent.searchField.activeFocus)
+            return;
+
+        Services.ShellActions.notifyApplicationsInputReady();
     }
 
     function suppressPointerAfterKeyboardInput() {
@@ -1068,6 +1076,13 @@ Scope {
             }
             onAppLaunched: function (app) {
                 root.launchApp(app);
+            }
+        }
+
+        Connections {
+            target: inputContent.searchField
+            function onActiveFocusChanged() {
+                root.notifyApplicationsInputReadyWhenFocused();
             }
         }
 
