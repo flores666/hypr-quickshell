@@ -110,6 +110,8 @@ static bool g_overviewApplicationsMode = false;
 bool g_overviewApplicationsInputReady = false;
 static std::string g_overviewApplicationsSearchBuffer;
 static int g_overviewApplicationsOriginWorkspaceID = 0;
+static bool g_pendingApplicationsOpenAfterClose = false;
+static std::string g_pendingApplicationsOpenAfterCloseArg;
 static int g_pointerRefreshFrames = 0;
 static std::chrono::steady_clock::time_point g_pointerRefreshUntil = std::chrono::steady_clock::now() - std::chrono::seconds(2);
 static std::chrono::steady_clock::time_point g_mainModLastSafeRelease = std::chrono::steady_clock::now() - std::chrono::seconds(2);
@@ -118,6 +120,7 @@ static constexpr auto MAIN_MOD_DOUBLE_PRESS_INTERVAL = std::chrono::milliseconds
 static constexpr auto MAIN_MOD_OVERVIEW_ACTION_MIN_INTERVAL = std::chrono::milliseconds(140);
 
 static bool isAnyOverviewActive();
+static SDispatchResult dispatchApplicationsOverview(std::string arg);
 
 static void notifyQuickshellOverviewState(const std::string& state) {
     if (g_pEventManager)
@@ -272,6 +275,21 @@ static void resetApplicationsOverviewMode() {
     g_overviewApplicationsOriginWorkspaceID = 0;
 }
 
+static void queueApplicationsOpenAfterClose(const std::string& arg) {
+    g_pendingApplicationsOpenAfterClose = true;
+    g_pendingApplicationsOpenAfterCloseArg = arg;
+}
+
+static void openPendingApplicationsAfterCloseIfNeeded() {
+    if (!g_pendingApplicationsOpenAfterClose)
+        return;
+
+    const std::string arg = g_pendingApplicationsOpenAfterCloseArg;
+    g_pendingApplicationsOpenAfterClose = false;
+    g_pendingApplicationsOpenAfterCloseArg.clear();
+    dispatchApplicationsOverview(arg);
+}
+
 static void showWorkspaceOverviewFromApplications(const std::shared_ptr<CHyprspaceWidget>& widget) {
     if (!widget || !widget->isActive())
         return;
@@ -281,6 +299,7 @@ static void showWorkspaceOverviewFromApplications(const std::shared_ptr<CHyprspa
 
 std::function<void()> overviewAnimatedHideFinishedCallback = []() {
     resetApplicationsOverviewMode();
+    openPendingApplicationsAfterCloseIfNeeded();
 };
 
 std::function<void()> applicationsReturnToOverviewFinishedCallback = []() {
@@ -1114,8 +1133,8 @@ static SDispatchResult dispatchOpenOverview(std::string arg) {
 static SDispatchResult dispatchApplicationsOverview(std::string arg) {
     auto currentMonitorForGate = g_pCompositor->getMonitorFromCursor();
     auto widgetForGate = getWidgetForMonitor(currentMonitorForGate);
-    const bool canPromoteActiveOverview = widgetForGate && widgetForGate->isActive() && !widgetForGate->isClosing() && !g_overviewApplicationsMode;
-    if (widgetForGate && widgetForGate->isAnimating() && !canPromoteActiveOverview) {
+    if (g_overviewApplicationsMode && widgetForGate && widgetForGate->isActive() && widgetForGate->isClosing()) {
+        queueApplicationsOpenAfterClose(arg);
         requestPointerRefresh(6);
         return SDispatchResult{};
     }
@@ -1136,6 +1155,14 @@ static SDispatchResult dispatchApplicationsOverview(std::string arg) {
         return SDispatchResult{};
     }
 
+    const bool canPromoteActiveOverview = widgetForGate && widgetForGate->isActive() && !widgetForGate->isClosing() && !g_overviewApplicationsMode;
+    if (widgetForGate && widgetForGate->isAnimating() && !canPromoteActiveOverview) {
+        requestPointerRefresh(6);
+        return SDispatchResult{};
+    }
+
+    g_pendingApplicationsOpenAfterClose = false;
+    g_pendingApplicationsOpenAfterCloseArg.clear();
     g_overviewApplicationsMode = true;
     g_overviewApplicationsInputReady = false;
     g_overviewApplicationsSearchBuffer.clear();

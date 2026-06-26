@@ -285,6 +285,14 @@ QtObject {
             applicationsOverviewVisualLayerHidden = false;
     }
 
+    function beginApplicationsOverviewClose() {
+        applicationsOverviewVisualLayerSettled = false;
+        applicationsOverviewClosing = true;
+        applicationsOverviewFromWorkspaceOverview = false;
+        workspaceOverviewOpen = false;
+        workspaceOverviewMode = "workspaces";
+    }
+
     function setWorkspaceOverviewOpen(value) {
         var next = !!value;
         if (workspaceOverviewOpen === next)

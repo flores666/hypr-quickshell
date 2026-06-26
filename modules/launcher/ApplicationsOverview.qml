@@ -634,12 +634,15 @@ Scope {
         var hidden = Services.AppPanelService.isHidden(key) || Boolean(app && app.hidden);
         var favorite = Services.AppPanelService.isFavorite(key) || Boolean(app && app.favorite);
         var pinned = Services.AppPanelService.isPinned(key);
-        return [
+        var actions = [
             { "label": "Launch", "action": "launch" },
             { "label": favorite ? "Remove from favorites" : "Add to favorites", "action": favorite ? "unfavorite" : "favorite" },
-            { "label": pinned ? "Unpin from panel" : "Pin to panel", "action": pinned ? "unpin" : "pin" },
-            { "label": hidden ? "Show in applications" : "Hide from applications", "action": hidden ? "show" : "hide" }
+            { "label": pinned ? "Unpin from panel" : "Pin to panel", "action": pinned ? "unpin" : "pin" }
         ];
+        if (hidden)
+            actions.push({ "label": "Show in applications", "action": "show" });
+        actions.push({ "label": "Uninstall from system...", "action": "uninstall" });
+        return actions;
     }
 
     function openContextMenu(app, x, y) {
@@ -685,6 +688,9 @@ Scope {
             Services.AppPanelService.hideFromApplications(key);
         } else if (action === "show") {
             Services.AppPanelService.showInApplications(key);
+        } else if (action === "uninstall") {
+            Services.ShellActions.closeWorkspaceOverview();
+            Services.AppPanelService.uninstallFromSystem(key);
         }
     }
 

@@ -3,6 +3,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -13,7 +14,7 @@ CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / 
 PINS_FILE = CONFIG_DIR / "app-panel.json"
 RUNTIME_DIR = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / APP_NAME
 CACHE_FILE = RUNTIME_DIR / "desktop-apps-cache.json"
-CACHE_VERSION = 8
+CACHE_VERSION = 9
 
 DESKTOP_DIRS = []
 for raw_dir in [
@@ -432,6 +433,7 @@ def app_from_desktop(path: Path) -> Optional[Dict[str, object]]:
         "iconPath": icon_path,
         "command": command,
         "executable": executable,
+        "flatpakId": entry.get("X-Flatpak", "").strip(),
         "startupWmClass": startup_wm_class,
         "noDisplay": entry.get("NoDisplay", "false").lower() == "true",
         "terminal": entry.get("Terminal", "false").lower() == "true",
@@ -787,6 +789,166 @@ def show_app(desktop_id: str) -> None:
     save_config(pins, order, hidden, favorites)
 
 
+def terminal_command(command: str, title: str) -> Optional[List[str]]:
+    configured = shlex.split(os.environ.get("TERMINAL", ""))
+    candidates: List[List[str]] = []
+    if configured:
+        candidates.append(configured)
+    candidates.extend([
+        ["kitty"],
+        ["foot"],
+        ["alacritty"],
+        ["wezterm"],
+        ["konsole"],
+        ["gnome-terminal"],
+        ["xterm"],
+    ])
+
+    seen = set()
+    for candidate in candidates:
+        if not candidate:
+            continue
+        executable = Path(candidate[0]).name
+        if executable in seen:
+            continue
+        seen.add(executable)
+        if not shutil.which(candidate[0]):
+            continue
+        if executable == "kitty":
+            return candidate + ["--title", title, "sh", "-lc", command]
+        if executable == "foot":
+            return candidate + [f"--title={title}", "sh", "-lc", command]
+        if executable == "alacritty":
+            return candidate + ["--title", title, "-e", "sh", "-lc", command]
+        if executable == "wezterm":
+            return candidate + ["start", "--", "sh", "-lc", command]
+        if executable == "konsole":
+            return candidate + ["--new-tab", "-p", f"tabtitle={title}", "-e", "sh", "-lc", command]
+        if executable == "gnome-terminal":
+            return candidate + ["--title", title, "--", "sh", "-lc", command]
+        if executable == "xterm":
+            return candidate + ["-T", title, "-e", "sh", "-lc", command]
+        return candidate + ["-e", "sh", "-lc", command]
+
+    return None
+
+
+def terminal_uninstall_script(name: str, target: str, command: List[str], cleanup_command: List[str]) -> str:
+    command_text = " ".join(shlex.quote(part) for part in command)
+    cleanup_text = " ".join(shlex.quote(part) for part in cleanup_command)
+    return "\n".join([
+        "set +e",
+        f"printf '%s\\n' {shlex.quote('Uninstall from system')}",
+        f"printf '%s\\n' {shlex.quote('Application: ' + name)}",
+        f"printf '%s\\n' {shlex.quote('Target: ' + target)}",
+        f"printf '%s\\n\\n' {shlex.quote('Command: ' + command_text)}",
+        "printf '%s' 'Continue? [y/N] '",
+        "read -r answer",
+        "case \"$answer\" in [yY]|[yY][eE][sS]) ;; *) echo 'Cancelled.'; printf '\\nPress Enter to close...'; read -r _; exit 11 ;; esac",
+        command_text,
+        "status=$?",
+        f"if [ \"$status\" -eq 0 ]; then {cleanup_text} >/dev/null 2>&1; fi",
+        "if [ \"$status\" -eq 0 ]; then echo 'Uninstall completed.'; else echo \"Uninstall failed with status $status.\"; fi",
+        "printf '\\nPress Enter to close...'",
+        "read -r _",
+        "exit \"$status\"",
+    ])
+
+
+def pacman_owner(path: str) -> str:
+    if not path or not shutil.which("pacman"):
+        return ""
+    try:
+        completed = subprocess.run(["pacman", "-Qo", path], check=False, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=2.0)
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    match = re.search(r"\bis owned by\s+(\S+)\s+", completed.stdout or "")
+    return match.group(1) if match else ""
+
+
+def uninstall_plan(app: Dict[str, object], desktop_id: str) -> Tuple[str, str, List[str]]:
+    desktop_path = str(app.get("desktopPath", "")).strip()
+    flatpak_id = str(app.get("flatpakId", "")).strip()
+    if not flatpak_id and desktop_id.endswith(".desktop"):
+        flatpak_id = desktop_id[:-8]
+
+    if flatpak_id and "flatpak/exports/share/applications" in desktop_path and shutil.which("flatpak"):
+        args = ["flatpak", "uninstall"]
+        if ".local/share/flatpak/exports/share/applications" in desktop_path:
+            args.append("--user")
+        args.append(flatpak_id)
+        return "Flatpak app", flatpak_id, args
+
+    package = pacman_owner(desktop_path)
+    if not package:
+        executable = str(app.get("executable", "")).strip()
+        executable_path = shutil.which(executable) if executable else None
+        if executable_path:
+            package = pacman_owner(executable_path)
+    if package:
+        return "Pacman package", package, ["sudo", "pacman", "-Rns", package]
+
+    if "/snapd/desktop/applications/" in desktop_path and shutil.which("snap"):
+        snap_name = desktop_id[:-8] if desktop_id.endswith(".desktop") else desktop_id
+        snap_name = snap_name.split("_", 1)[0]
+        if snap_name:
+            return "Snap package", snap_name, ["sudo", "snap", "remove", snap_name]
+
+    return "", "", []
+
+
+def cleanup_app_config(desktop_id: str, apps: List[Dict[str, object]]) -> None:
+    pins, order, hidden, favorites = load_config(apps)
+    pins = [item for item in pins if item != desktop_id]
+    order = [item for item in order if item != desktop_id]
+    hidden = [item for item in hidden if item != desktop_id]
+    favorites = [item for item in favorites if item != desktop_id]
+    save_config(pins, order, hidden, favorites)
+
+
+def cleanup_uninstalled_app(desktop_id: str) -> None:
+    try:
+        CACHE_FILE.unlink(missing_ok=True)
+    except OSError:
+        pass
+    cleanup_app_config(desktop_id, load_apps(True))
+
+
+def uninstall_app(desktop_id: str) -> None:
+    apps = load_apps(True)
+    desktop_id = resolve_desktop_id(desktop_id, apps)
+    by_id = app_map(apps)
+    app = by_id.get(desktop_id)
+    if not app:
+        warn(f"cannot uninstall missing desktop id: {desktop_id}")
+        return
+
+    name = str(app.get("displayName") or app.get("name") or desktop_id)
+    kind, target, command = uninstall_plan(app, desktop_id)
+    if not command:
+        warn(f"cannot uninstall {desktop_id}: package manager owner was not detected")
+        return
+
+    cleanup_command = [sys.executable or "python3", str(Path(__file__).resolve()), "cleanup-uninstalled", desktop_id]
+    terminal = terminal_command(terminal_uninstall_script(name, f"{kind}: {target}", command, cleanup_command), f"Uninstall {name}")
+    if not terminal:
+        warn(f"cannot uninstall {desktop_id}: no supported terminal emulator found")
+        return
+
+    try:
+        subprocess.Popen(
+            terminal,
+            start_new_session=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            close_fds=True,
+        )
+    except OSError as exc:
+        warn(f"cannot uninstall {desktop_id}: {exc}")
+        return
+
+
 def favorite_app(desktop_id: str) -> None:
     apps = load_apps()
     desktop_id = resolve_desktop_id(desktop_id, apps)
@@ -911,6 +1073,12 @@ def main() -> int:
         hide_app(sys.argv[2])
         print(json.dumps(list_payload(False), ensure_ascii=False))
         return 0
+    if command == "uninstall" and len(sys.argv) > 2:
+        uninstall_app(sys.argv[2])
+        return 0
+    if command == "cleanup-uninstalled" and len(sys.argv) > 2:
+        cleanup_uninstalled_app(sys.argv[2])
+        return 0
     if command == "show" and len(sys.argv) > 2:
         show_app(sys.argv[2])
         print(json.dumps(list_payload(False), ensure_ascii=False))
@@ -926,7 +1094,7 @@ def main() -> int:
     if command == "launch" and len(sys.argv) > 2:
         return launch_app(sys.argv[2])
 
-    warn("usage: app-panel.py list|refresh|pin DESKTOP_ID|pin-at DESKTOP_ID INDEX|move DESKTOP_ID INDEX|set-order DESKTOP_ID...|pin-order DESKTOP_ID ORDER...|unpin-order DESKTOP_ID ORDER...|unpin DESKTOP_ID|hide DESKTOP_ID|show DESKTOP_ID|favorite DESKTOP_ID|unfavorite DESKTOP_ID|launch DESKTOP_ID")
+    warn("usage: app-panel.py list|refresh|pin DESKTOP_ID|pin-at DESKTOP_ID INDEX|move DESKTOP_ID INDEX|set-order DESKTOP_ID...|pin-order DESKTOP_ID ORDER...|unpin-order DESKTOP_ID ORDER...|unpin DESKTOP_ID|hide DESKTOP_ID|uninstall DESKTOP_ID|show DESKTOP_ID|favorite DESKTOP_ID|unfavorite DESKTOP_ID|launch DESKTOP_ID")
     return 1
 
 

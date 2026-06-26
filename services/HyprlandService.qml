@@ -363,8 +363,7 @@ Item {
 
     function beginApplicationsCloseFromPlugin() {
         if (Services.ShellState.workspaceOverviewOpen && Services.ShellState.workspaceOverviewMode === "applications") {
-            Services.ShellState.setApplicationsOverviewVisualLayerSettled(false);
-            Services.ShellState.setApplicationsOverviewClosing(true);
+            Services.ShellState.beginApplicationsOverviewClose();
         }
     }
 

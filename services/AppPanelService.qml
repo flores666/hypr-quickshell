@@ -468,6 +468,12 @@ Item {
         runAction("show", [id]);
     }
 
+    function uninstallFromSystem(desktopId) {
+        if (!desktopId)
+            return;
+        runAction("uninstall", [String(desktopId)]);
+    }
+
     function addFavorite(desktopId) {
         if (!desktopId)
             return;
