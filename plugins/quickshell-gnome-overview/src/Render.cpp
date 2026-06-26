@@ -562,9 +562,7 @@ void CHyprspaceWidget::draw() {
 
     const bool closingAnimationRunning = isClosing() || selectionCloseMorphRunning;
     const bool morphAnimationRunning = rawOpenProgress < 0.999 || closingAnimationRunning;
-    const double openProgress = closingAnimationRunning
-        ? overviewEaseInOutCubic(rawOpenProgress)
-        : overviewEaseOutCubic(rawOpenProgress);
+    const double openProgress = overviewEaseInOutCubic(rawOpenProgress);
 
     g_pHyprRenderer->m_renderData.clipBox = monitorClip;
 
