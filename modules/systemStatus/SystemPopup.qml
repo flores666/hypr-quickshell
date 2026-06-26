@@ -98,8 +98,15 @@ PopupWindow {
         if (value.indexOf("/") === 0)
             return "file://" + value;
 
-        // Do not pass icon theme names like "telegram" or "notify-send" to Image.
-        // They become qrc-relative paths and produce warnings.
+        var themedPath = Quickshell.iconPath(value, true);
+        if (themedPath && themedPath.length > 0 && themedPath.indexOf("image-missing") < 0) {
+            if (themedPath.indexOf("file://") === 0 || themedPath.indexOf("qrc:/") === 0)
+                return themedPath;
+            if (themedPath.charAt(0) === "/")
+                return "file://" + themedPath;
+            return themedPath;
+        }
+
         return "";
     }
 

@@ -2183,16 +2183,20 @@ Item {
                             verticalAlignment: Text.AlignVCenter
                         }
 
-                        Components.StyledText {
+                        Image {
                             anchors.right: parent.right
                             anchors.rightMargin: 9
                             anchors.verticalCenter: parent.verticalCenter
-                            text: "›"
                             visible: modelData.submenu === "workspaces"
-                            color: "#dce6f0"
-                            font.pixelSize: 16
-                            font.weight: Font.Medium
-                            verticalAlignment: Text.AlignVCenter
+                            width: 16
+                            height: 16
+                            source: Qt.resolvedUrl("icons/chevron-right.svg")
+                            sourceSize.width: 32
+                            sourceSize.height: 32
+                            fillMode: Image.PreserveAspectFit
+                            smooth: true
+                            mipmap: true
+                            opacity: 0.9
                         }
 
                         MouseArea {

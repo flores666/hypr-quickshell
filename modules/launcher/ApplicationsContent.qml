@@ -535,28 +535,24 @@ Item {
                                 font.kerning: true
                             }
 
-                            Text {
+                            Image {
                                 id: sectionArrow
                                 anchors {
                                     right: parent.right
                                     verticalCenter: parent.verticalCenter
                                 }
-                                width: 28
-                                height: parent.height
+                                width: 18
+                                height: 18
                                 visible: sectionDelegate.hiddenSection
-                                text: "▸"
+                                source: Qt.resolvedUrl("icons/chevron-right.svg")
+                                sourceSize.width: 36
+                                sourceSize.height: 36
+                                fillMode: Image.PreserveAspectFit
+                                smooth: true
+                                mipmap: true
                                 rotation: sectionDelegate.collapsed ? 0 : 90
                                 transformOrigin: Item.Center
-                                color: "#dce5ee"
                                 opacity: sectionHeaderMouse.containsMouse ? 1.0 : 0.78
-                                font.family: "Nunito"
-                                font.pixelSize: 15
-                                font.weight: Font.DemiBold
-                                horizontalAlignment: Text.AlignRight
-                                verticalAlignment: Text.AlignVCenter
-                                renderType: Text.NativeRendering
-                                font.hintingPreference: Font.PreferFullHinting
-                                font.kerning: true
 
                                 Behavior on rotation {
                                     NumberAnimation {

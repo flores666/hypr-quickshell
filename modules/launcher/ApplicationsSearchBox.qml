@@ -61,31 +61,18 @@ Item {
         width: root.iconWidth
         height: root.iconWidth
         visible: root.showVisuals
-        opacity: 0.9
+        opacity: 0.86
 
-        Rectangle {
-            id: searchIconRing
-            width: root.iconSize - 4
-            height: width
-            x: 1
-            y: 1
-            radius: width / 2
-            color: "transparent"
-            border.width: 2
-            border.color: "#b8c3cf"
-            antialiasing: true
-        }
-
-        Rectangle {
-            width: Math.max(6, Math.round(root.iconSize * 0.42))
-            height: 2
-            x: searchIconRing.x + searchIconRing.width - 1
-            y: searchIconRing.y + searchIconRing.height - 1
-            radius: 1
-            color: "#b8c3cf"
-            antialiasing: true
-            transformOrigin: Item.Left
-            rotation: 45
+        Image {
+            anchors.centerIn: parent
+            width: root.iconSize
+            height: root.iconSize
+            source: Qt.resolvedUrl("icons/search.svg")
+            sourceSize.width: 36
+            sourceSize.height: 36
+            fillMode: Image.PreserveAspectFit
+            smooth: true
+            mipmap: true
         }
     }
 
