@@ -18,6 +18,8 @@ CACHE_VERSION = 8
 DESKTOP_DIRS = []
 for raw_dir in [
     str(Path.home() / ".local/share/applications"),
+    str(Path.home() / ".local/share/flatpak/exports/share/applications"),
+    "/var/lib/flatpak/exports/share/applications",
     *os.environ.get("XDG_DATA_DIRS", "/usr/local/share:/usr/share").split(":"),
 ]:
     directory = Path(raw_dir).expanduser()

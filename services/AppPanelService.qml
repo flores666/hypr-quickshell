@@ -47,17 +47,7 @@ Item {
         var source = list || [];
         for (var i = 0; i < source.length; i++) {
             var app = source[i] || {};
-            result.push([
-                app.desktopId || "",
-                app.name || "",
-                app.icon || "",
-                app.iconName || "",
-                app.command || "",
-                app.hidden ? "hidden" : "visible",
-                app.favorite ? "favorite" : "normal",
-                (app.categories || []).join(","),
-                (app.matchKeys || []).join(",")
-            ].join("|"));
+            result.push([app.desktopId || "", app.name || "", app.icon || "", app.iconName || "", app.command || "", app.hidden ? "hidden" : "visible", app.favorite ? "favorite" : "normal", (app.categories || []).join(","), (app.matchKeys || []).join(",")].join("|"));
         }
         return result.join("\n");
     }
@@ -66,15 +56,7 @@ Item {
         if (!app)
             return "";
 
-        var parts = [
-            app.name || "",
-            app.displayName || "",
-            app.genericName || "",
-            app.desktopId || "",
-            app.sourceDesktopId || "",
-            app.executable || "",
-            app.startupWmClass || ""
-        ];
+        var parts = [app.name || "", app.displayName || "", app.genericName || "", app.desktopId || "", app.sourceDesktopId || "", app.executable || "", app.startupWmClass || ""];
         var keys = app.matchKeys || [];
         for (var i = 0; i < keys.length; i++)
             parts.push(keys[i]);

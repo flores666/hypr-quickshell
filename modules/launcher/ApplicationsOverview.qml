@@ -716,8 +716,7 @@ Scope {
             hiddenSectionExpanded = false;
             query = Services.ShellState.applicationsOverviewInitialQuery;
             Services.ShellState.setApplicationsOverviewInitialQuery("");
-            if (!Services.AppPanelService.ready)
-                Services.AppPanelService.requestRefresh(false);
+            Services.AppPanelService.requestRefresh(false);
             resetGridContentY();
             clearSelection();
             rebuildSections(true);
