@@ -159,11 +159,9 @@ static void renderOverviewBackdrop(PHLMONITOR owner, const CBox& monitorClip, co
     // The overview should feel like one unified GNOME-like canvas. Topbar and
     // AppDock are layer surfaces rendered by Hyprland after this POST_WINDOWS
     // hook, so they remain visible and clickable.
-    // renderFullscreenBackground() can legitimately miss for one frame while
-    // layer-surfaces are being remapped. Do not replace that transient frame
-    // with an opaque black fill: the already-rendered compositor scene is a
-    // safer fallback and avoids black flashes behind the applications panel.
-    renderFullscreenBackground(owner, monitorClip, time);
+    const bool hasBackground = renderFullscreenBackground(owner, monitorClip, time);
+    if (!hasBackground)
+        renderRect(CBox{0, 0, owner->m_transformedSize.x, owner->m_transformedSize.y}, CHyprColor(0.02, 0.025, 0.032, 1.0));
 
     // One global background layer for the whole overview:
     // wallpaper -> blur/dim overlay -> mode content.
@@ -214,16 +212,12 @@ static CBox overviewApplicationCardBox(PHLMONITOR owner, double openProgress) {
     return overviewPixelSnappedBox(overviewLerpBox(cardBox, liftedCardBox, liftProgress));
 }
 
-static double overviewApplicationsLiftProgress(double openProgress) {
-    constexpr double CARD_PHASE_END = 0.48;
-    return overviewEaseInOutCubic((openProgress - CARD_PHASE_END) / (1.0 - CARD_PHASE_END));
-}
-
 static CBox overviewApplicationsLayerBox(PHLMONITOR owner, double openProgress) {
     if (!owner)
         return CBox{0, 0, 1, 1};
 
-    const double liftProgress = overviewApplicationsLiftProgress(openProgress);
+    constexpr double CARD_PHASE_END = 0.48;
+    const double liftProgress = overviewEaseInOutCubic((openProgress - CARD_PHASE_END) / (1.0 - CARD_PHASE_END));
     const double riseOffset = std::max<double>(240.0, owner->m_transformedSize.y * 0.42);
     const double y = overviewLerp(riseOffset, 0.0, liftProgress);
 
@@ -273,7 +267,7 @@ static bool renderApplicationsLayerBelowOverviewCard(PHLMONITOR owner, const CBo
             if (!(layerSize.x > 1.0 && layerSize.y > 1.0))
                 continue;
 
-            const CBox layerBox = overviewPixelSnappedBox(overviewApplicationsLayerBox(owner, openProgress));
+            const CBox layerBox = overviewApplicationsLayerBox(owner, openProgress);
             renderLayerSurfaceStub(layer, owner, layerBox, monitorClip, time, 1.0F);
             return true;
         }
@@ -425,12 +419,7 @@ static void renderApplicationsSideWorkspacePreviews(PHLMONITOR owner,
         }
 
         for (const auto& windowPreview : visibleWindows)
-            renderWindowStub(windowPreview.window, owner, workspace, windowPreview.box, workspaceBox, time, opacity, -1, 2.0F);
-
-        if (std::any_of(visibleWindows.begin(), visibleWindows.end(), [](const SOverviewWindowPreview& windowPreview) {
-                return windowPreview.overlapsWorkspaceCorner;
-            }))
-            renderOverviewCornerMask(owner, workspaceBox, opacity, workspaceRounding, 0.28F);
+            renderWindowStubRoundedClip(windowPreview.window, owner, workspace, windowPreview.box, workspaceBox, workspaceRounding, time, opacity, -1, 2.0F);
     };
 
     for (size_t index = 0; index < workspaces.size(); ++index)
@@ -500,17 +489,13 @@ static void renderApplicationsDesktopCard(PHLMONITOR owner, PHLWORKSPACE workspa
     }
 
     for (const auto& windowPreview : visibleWindows)
-        renderWindowStub(windowPreview.window, owner, workspace, windowPreview.box, workspaceBox, time, alpha, -1, 2.0F);
+        renderWindowStubRoundedClip(windowPreview.window, owner, workspace, windowPreview.box, workspaceBox, rounding, time, alpha, -1, 2.0F);
 
     if (!Config::disableBlur && blurProgress > 0.001F) {
         const float blurAlpha = std::clamp(0.46F * blurProgress * std::max(alpha, 0.24F), 0.0F, 0.46F);
         renderRectWithBlur(workspaceBox, CHyprColor(0.02, 0.025, 0.032, blurAlpha), rounding, 2.0F);
     }
 
-    if (std::any_of(visibleWindows.begin(), visibleWindows.end(), [](const SOverviewWindowPreview& windowPreview) {
-            return windowPreview.overlapsWorkspaceCorner;
-        }))
-        renderOverviewCornerMask(owner, workspaceBox, alpha, rounding, 0.28F);
 }
 
 static bool isPointerOverInteractiveLayerForOverview(PHLMONITOR pMonitor, const Vector2D& coords) {
@@ -882,13 +867,8 @@ void CHyprspaceWidget::draw() {
         }
 
         for (const auto& windowPreview : visibleWindows) {
-            renderWindowStub(windowPreview.window, owner, ws, windowPreview.box, workspaceBox, time, preview.opacity, -1, 2.0F);
+            renderWindowStubRoundedClip(windowPreview.window, owner, ws, windowPreview.box, workspaceBox, preview.rounding, time, preview.opacity, -1, 2.0F);
         }
-
-        if (std::any_of(visibleWindows.begin(), visibleWindows.end(), [](const SOverviewWindowPreview& windowPreview) {
-                return windowPreview.overlapsWorkspaceCorner;
-            }))
-            renderOverviewCornerMask(owner, workspaceBox, preview.opacity, preview.rounding, dimAlpha);
 
         workspaceBoxes.emplace_back(std::make_tuple(preview.wsID, preview.inputBox));
     };
@@ -930,20 +910,22 @@ void CHyprspaceWidget::drawApplicationsBackground() {
     if (!owner)
         return;
 
-    constexpr double APPLICATIONS_PREVIEW_RAW_PROGRESS = APPLICATIONS_FROM_OVERVIEW_START_PROGRESS;
+    constexpr double OVERVIEW_OPEN_ANIMATION_SECONDS = 0.24;
+    constexpr double APPLICATIONS_PREVIEW_RAW_PROGRESS = 0.19585484828218835;
 
     auto setApplicationsRawProgress = [&](double rawProgress) {
         overviewAnimationStarted = true;
         overviewAnimationStartedAt = std::chrono::steady_clock::now() - std::chrono::duration_cast<std::chrono::steady_clock::duration>(
-            std::chrono::duration<double>(APPLICATIONS_OPEN_ANIMATION_SECONDS * std::clamp(rawProgress, 0.0, 1.0)));
+            std::chrono::duration<double>(OVERVIEW_OPEN_ANIMATION_SECONDS * std::clamp(rawProgress, 0.0, 1.0)));
     };
 
     const bool applicationLayerReady = applicationsLayerReady(owner);
-    const bool leavingApplicationsModeNow = isClosing() || applicationsReturningToOverview;
-    if (!leavingApplicationsModeNow && !applicationLayerReady && !applicationsLayerReadyForTransition)
+    if (!isClosing() && !applicationLayerReady) {
+        applicationsLayerReadyForTransition = false;
         setApplicationsRawProgress(applicationsTransitionStartedFromOverview ? APPLICATIONS_PREVIEW_RAW_PROGRESS : 0.0);
+    }
 
-    if (!leavingApplicationsModeNow && applicationLayerReady && !applicationsLayerReadyForTransition) {
+    if (!isClosing() && applicationLayerReady && !applicationsLayerReadyForTransition) {
         applicationsLayerReadyForTransition = true;
         setApplicationsRawProgress(applicationsTransitionStartedFromOverview ? APPLICATIONS_PREVIEW_RAW_PROGRESS : 0.0);
     }
@@ -952,7 +934,7 @@ void CHyprspaceWidget::drawApplicationsBackground() {
     const auto time = Time::steadyNow();
     const bool selectionCloseMorphRunning = workspaceSelectionCloseMorphActive();
     const double selectionProgress = isSelectingWorkspace() ? workspaceSelectionProgress() : 1.0;
-    double rawOpenProgress = selectionCloseMorphRunning ? (1.0 - selectionProgress) : applicationsOverviewOpenProgress();
+    double rawOpenProgress = selectionCloseMorphRunning ? (1.0 - selectionProgress) : overviewOpenProgress();
     double returnProgress = 1.0;
     if (applicationsReturningToOverview) {
         returnProgress = applicationsReturnProgress();
@@ -971,10 +953,12 @@ void CHyprspaceWidget::drawApplicationsBackground() {
     const bool closingAnimationRunning = isClosing() || selectionCloseMorphRunning;
     const bool morphAnimationRunning = rawOpenProgress < 0.999 || closingAnimationRunning;
     const bool returnAnimationFinished = applicationsReturningToOverview && returnProgress >= 0.999;
-    const double openProgress = overviewEaseInOutCubic(rawOpenProgress);
+    const double openProgress = closingAnimationRunning
+        ? overviewEaseInOutCubic(rawOpenProgress)
+        : overviewEaseOutCubic(rawOpenProgress);
 
-    constexpr double CARD_PHASE_END = APPLICATIONS_CARD_PHASE_END;
-    const bool leavingApplicationsMode = leavingApplicationsModeNow;
+    constexpr double CARD_PHASE_END = 0.48;
+    const bool leavingApplicationsMode = isClosing() || applicationsReturningToOverview;
     if (leavingApplicationsMode && !applicationsLayerHiddenForClose && openProgress <= CARD_PHASE_END) {
         applicationsLayerHiddenForClose = true;
         notifyQuickshellApplicationsState("applications-layer-hidden");
@@ -990,7 +974,7 @@ void CHyprspaceWidget::drawApplicationsBackground() {
     // GNOME Applications is not a popup over workspace previews. It is the
     // second overview mode. Render the applications layer inside the plugin,
     // below the shrinking desktop card, so both surfaces animate as one scene.
-    renderOverviewBackdrop(owner, monitorClip, time, openProgress, 0.10);
+    renderOverviewBackdrop(owner, monitorClip, time, openProgress, 0.28);
     renderApplicationsLayerBelowOverviewCard(owner, monitorClip, time, openProgress);
 
     if ((applicationsTransitionStartedFromOverview || applicationsReturningToOverview) && !isClosing()) {
