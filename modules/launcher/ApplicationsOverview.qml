@@ -26,6 +26,7 @@ Scope {
     readonly property int inputPanelMaskHeight: Math.max(0, inputWindow.height - inputBottomMargin)
     readonly property bool visualLayerActive: renderActive && !Services.ShellState.applicationsOverviewVisualLayerHidden
     readonly property bool inputVisualsActive: inputActive || closingHandoffActive
+    readonly property bool inputRenderActive: inputCaptureActive || inputVisualsActive
     readonly property bool searchActive: normalizedQuery().length > 0
     readonly property int contextMenuWidth: 226
     readonly property int contextMenuRowHeight: 38
@@ -842,7 +843,7 @@ Scope {
             right: true
         }
 
-        visible: root.visualLayerActive
+        visible: true
         focusable: false
         implicitHeight: Screen.height
         color: "transparent"
@@ -863,6 +864,7 @@ Scope {
         ApplicationsContent {
             id: visualContent
             anchors.fill: parent
+            visible: root.visualLayerActive
             opacity: root.inputVisualsActive ? 0 : 1
             interactive: false
             showVisuals: true
@@ -888,7 +890,7 @@ Scope {
             right: true
         }
 
-        visible: root.inputCaptureActive
+        visible: true
         focusable: false
         implicitHeight: Screen.height
         color: "transparent"
@@ -955,7 +957,7 @@ Scope {
             right: true
         }
 
-        visible: root.renderActive
+        visible: true
         focusable: root.inputCaptureActive
         implicitHeight: Screen.height
         color: "transparent"
@@ -969,8 +971,8 @@ Scope {
         mask: Region {
             x: 0
             y: 0
-            width: root.inputCaptureActive ? inputWindow.width : 0
-            height: root.inputCaptureActive ? root.inputPanelMaskHeight : 0
+            width: root.inputRenderActive ? inputWindow.width : 0
+            height: root.inputRenderActive ? root.inputPanelMaskHeight : 0
         }
 
         MouseArea {
@@ -1015,6 +1017,7 @@ Scope {
         ApplicationsContent {
             id: inputContent
             anchors.fill: parent
+            visible: root.inputVisualsActive
             opacity: root.inputVisualsActive ? 1 : 0
             interactive: root.inputActive
             showVisuals: true

@@ -45,7 +45,9 @@ Item {
     }
 
     onInteractiveChanged: {
-        if (!interactive)
+        if (interactive)
+            hoverActivationTimer.restart();
+        else
             markUnhovered(root.appKey);
     }
 
@@ -167,10 +169,10 @@ Item {
         MouseArea {
             id: appMouse
             anchors.fill: parent
-            enabled: root.interactive
-            hoverEnabled: root.interactive
-            acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
-            cursorShape: root.hidePointerCursor ? Qt.BlankCursor : Qt.PointingHandCursor
+            enabled: root.showVisuals
+            hoverEnabled: true
+            acceptedButtons: root.interactive ? (Qt.LeftButton | Qt.RightButton | Qt.MiddleButton) : Qt.NoButton
+            cursorShape: root.interactive ? (root.hidePointerCursor ? Qt.BlankCursor : Qt.PointingHandCursor) : Qt.ArrowCursor
 
             onEntered: root.markHovered()
             onPositionChanged: {
@@ -189,6 +191,16 @@ Item {
                 } else if (mouse.button === Qt.RightButton) {
                     root.contextRequested(root.safeApp, tile.x + mouse.x, tile.y + mouse.y);
                 }
+            }
+        }
+
+        Timer {
+            id: hoverActivationTimer
+            interval: 0
+            repeat: false
+            onTriggered: {
+                if (root.interactive && root.pointerInsideTile)
+                    root.markHovered();
             }
         }
 
