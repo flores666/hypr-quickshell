@@ -14,7 +14,7 @@ CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / 
 PINS_FILE = CONFIG_DIR / "app-panel.json"
 RUNTIME_DIR = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / APP_NAME
 CACHE_FILE = RUNTIME_DIR / "desktop-apps-cache.json"
-CACHE_VERSION = 9
+CACHE_VERSION = 10
 
 DESKTOP_DIRS = []
 for raw_dir in [
@@ -137,17 +137,20 @@ def normalize_token(value: str) -> str:
     return value
 
 
-def desktop_dirs_mtime() -> float:
-    mtimes = []
+def desktop_dirs_signature() -> List[List[object]]:
+    signature: List[List[object]] = []
     for directory in DESKTOP_DIRS:
         try:
             if directory.exists():
-                mtimes.append(directory.stat().st_mtime)
+                stat = directory.stat()
+                signature.append([str(directory), int(stat.st_mtime_ns), -1])
                 for child in directory.glob("*.desktop"):
-                    mtimes.append(child.stat().st_mtime)
+                    child_stat = child.stat()
+                    signature.append([str(child), int(child_stat.st_mtime_ns), int(child_stat.st_size)])
         except OSError:
             continue
-    return max(mtimes) if mtimes else 0.0
+    signature.sort()
+    return signature
 
 
 def read_desktop_file(path: Path) -> Optional[Dict[str, str]]:
@@ -442,11 +445,11 @@ def app_from_desktop(path: Path) -> Optional[Dict[str, object]]:
 
 
 def load_apps(force: bool = False) -> List[Dict[str, object]]:
-    current_mtime = desktop_dirs_mtime()
+    current_signature = desktop_dirs_signature()
     if not force:
         try:
             cached = json.loads(CACHE_FILE.read_text(encoding="utf-8"))
-            if cached.get("version") == CACHE_VERSION and cached.get("mtime") == current_mtime and isinstance(cached.get("apps"), list):
+            if cached.get("version") == CACHE_VERSION and cached.get("signature") == current_signature and isinstance(cached.get("apps"), list):
                 return cached["apps"]
         except Exception:
             pass
@@ -472,7 +475,7 @@ def load_apps(force: bool = False) -> List[Dict[str, object]]:
     apps.sort(key=lambda a: str(a.get("name", "")).lower())
     try:
         RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
-        CACHE_FILE.write_text(json.dumps({"version": CACHE_VERSION, "mtime": current_mtime, "apps": apps}, ensure_ascii=False), encoding="utf-8")
+        CACHE_FILE.write_text(json.dumps({"version": CACHE_VERSION, "signature": current_signature, "apps": apps}, ensure_ascii=False), encoding="utf-8")
     except OSError as exc:
         warn(f"cannot write desktop app cache: {exc}")
 

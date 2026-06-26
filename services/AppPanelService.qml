@@ -29,8 +29,10 @@ Item {
     property var launchStartedAt: ({})
     property string pendingCommand: ""
     property var pendingArgs: []
+    property string runningCommand: ""
     property bool pendingRefresh: false
     property bool pendingRefreshForce: false
+    property int uninstallRefreshRemaining: 0
 
     function rebuildAppsById() {
         var next = {};
@@ -343,14 +345,22 @@ Item {
     function startPendingAction() {
         if (!pendingCommand)
             return;
-        var cmd = ["python3", scriptPath, pendingCommand];
+        var commandName = pendingCommand;
+        var cmd = ["python3", scriptPath, commandName];
         for (var i = 0; i < pendingArgs.length; i++)
             cmd.push(String(pendingArgs[i]));
         pendingCommand = "";
         pendingArgs = [];
+        runningCommand = commandName;
         actionProc.command = cmd;
         actionRunning = true;
         actionProc.running = true;
+    }
+
+    function startUninstallRefreshWatch() {
+        uninstallRefreshRemaining = 30;
+        uninstallRefreshTimer.restart();
+        requestRefresh(true);
     }
 
     function pin(desktopId) {
@@ -547,10 +557,25 @@ Item {
     // the Python helper uses its mtime cache and only reparses when needed.
     Timer {
         id: desktopAppsRefreshTimer
-        interval: 60000
-        repeat: true
-        running: true
+        interval: 12000
+        repeat: false
+        running: false
         onTriggered: root.requestRefresh(false)
+    }
+
+    Timer {
+        id: uninstallRefreshTimer
+        interval: 2000
+        repeat: true
+        running: false
+        onTriggered: {
+            if (root.uninstallRefreshRemaining <= 0) {
+                stop();
+                return;
+            }
+            root.uninstallRefreshRemaining -= 1;
+            root.requestRefresh(true);
+        }
     }
 
     Timer {
@@ -591,6 +616,9 @@ Item {
         onExited: {
             actionProc.running = false;
             actionRunning = false;
+            if (root.runningCommand === "uninstall")
+                root.startUninstallRefreshWatch();
+            root.runningCommand = "";
             if (root.pendingCommand)
                 root.startPendingAction();
         }
