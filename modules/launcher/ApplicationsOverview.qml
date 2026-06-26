@@ -1147,6 +1147,7 @@ Scope {
                                     }
                                     text: String(actionDelegate.actionData.label || "")
                                     color: "#f4f7fb"
+                                    font.family: "Montserrat"
                                     font.pixelSize: 13
                                     font.weight: Font.Medium
                                     elide: Text.ElideRight

@@ -1,5 +1,6 @@
 import Quickshell
 import QtQuick
+import "./config" as Config
 import "./services" as Services
 import "./modules/bar" as Bar
 import "./modules/tray" as Tray
@@ -9,6 +10,8 @@ import "./modules/appPanel" as AppPanel
 
 Scope {
     id: root
+
+    Config.FontConfig {}
 
     // Keep services near the root so they live for the whole shell session.
     Services.HyprlandService {}

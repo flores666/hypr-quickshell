@@ -525,6 +525,7 @@ Item {
                                 text: String(sectionDelegate.rowData.title || "")
                                 color: sectionDelegate.hiddenSection ? "#aeb9c5" : "#dce5ee"
                                 opacity: sectionDelegate.hiddenSection ? 0.82 : 1.0
+                                font.family: "Montserrat"
                                 font.pixelSize: 14
                                 font.weight: Font.DemiBold
                                 elide: Text.ElideRight
@@ -548,6 +549,7 @@ Item {
                                 transformOrigin: Item.Center
                                 color: "#dce5ee"
                                 opacity: sectionHeaderMouse.containsMouse ? 1.0 : 0.78
+                                font.family: "Montserrat"
                                 font.pixelSize: 16
                                 font.weight: Font.DemiBold
                                 horizontalAlignment: Text.AlignRight
@@ -770,6 +772,7 @@ Item {
                 wrapMode: Text.WordWrap
                 maximumLineCount: 3
                 elide: Text.ElideRight
+                font.family: "Montserrat"
                 font.pixelSize: 12
                 font.weight: Font.Medium
                 renderType: Text.NativeRendering

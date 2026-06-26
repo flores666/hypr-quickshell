@@ -2,6 +2,7 @@ import QtQuick
 
 Text {
     color: "#eef3f8"
+    font.family: "Montserrat"
     font.pixelSize: 12
     font.weight: Font.Medium
     textFormat: Text.PlainText

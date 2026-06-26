@@ -100,6 +100,7 @@ Item {
         visible: root.showVisuals && !root.interactive
         text: root.queryText.length > 0 ? root.queryText : "Search applications"
         color: root.queryText.length > 0 ? "#f5f8fb" : "#7f8b96"
+        font.family: "Montserrat"
         font.pixelSize: root.searchFontSize
         elide: Text.ElideRight
         verticalAlignment: Text.AlignVCenter
@@ -124,6 +125,7 @@ Item {
         color: "#f5f8fb"
         selectionColor: "#55ffffff"
         selectedTextColor: "#0b1018"
+        font.family: "Montserrat"
         font.pixelSize: root.searchFontSize
         renderType: Text.NativeRendering
         font.hintingPreference: Font.PreferFullHinting
@@ -138,6 +140,7 @@ Item {
             visible: searchInput.text.length === 0
             text: "Search applications"
             color: "#7f8b96"
+            font.family: "Montserrat"
             font.pixelSize: searchInput.font.pixelSize
             verticalAlignment: Text.AlignVCenter
             renderType: Text.NativeRendering
