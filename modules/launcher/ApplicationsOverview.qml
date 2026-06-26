@@ -1147,13 +1147,13 @@ Scope {
                                     }
                                     text: String(actionDelegate.actionData.label || "")
                                     color: "#f4f7fb"
-                                    font.family: "Montserrat"
-                                    font.pixelSize: 13
-                                    font.weight: Font.Medium
+                                    font.family: "Nunito"
+                                    font.pixelSize: 12
+                                    font.weight: Font.DemiBold
                                     elide: Text.ElideRight
                                     renderType: Text.NativeRendering
                                     font.hintingPreference: Font.PreferFullHinting
-                                    font.kerning: false
+                                    font.kerning: true
                                 }
 
                                 MouseArea {

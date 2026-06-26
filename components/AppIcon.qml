@@ -62,12 +62,12 @@ Rectangle {
                 visible: !appIconImage.visible
                 text: root.label.substring(0, 1).toUpperCase()
                 color: "#edf4fa"
-                font.family: "Montserrat"
+                font.family: "Nunito"
                 font.pixelSize: 12
                 font.weight: Font.DemiBold
                 renderType: Text.NativeRendering
                 font.hintingPreference: Font.PreferFullHinting
-                font.kerning: false
+                font.kerning: true
             }
         }
 

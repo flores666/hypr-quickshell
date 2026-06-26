@@ -124,7 +124,7 @@ Item {
             anchors.centerIn: parent
             text: root.centerDateText(root.now)
             color: "#eef3f8"
-            font.pixelSize: 12
+            font.pixelSize: 11
             font.weight: Font.DemiBold
         }
 

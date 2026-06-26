@@ -100,13 +100,14 @@ Item {
         visible: root.showVisuals && !root.interactive
         text: root.queryText.length > 0 ? root.queryText : "Search applications"
         color: root.queryText.length > 0 ? "#f5f8fb" : "#7f8b96"
-        font.family: "Montserrat"
+        font.family: "Nunito"
         font.pixelSize: root.searchFontSize
+        font.weight: Font.Medium
         elide: Text.ElideRight
         verticalAlignment: Text.AlignVCenter
         renderType: Text.NativeRendering
         font.hintingPreference: Font.PreferFullHinting
-        font.kerning: false
+        font.kerning: true
     }
 
     TextInput {
@@ -125,11 +126,12 @@ Item {
         color: "#f5f8fb"
         selectionColor: "#55ffffff"
         selectedTextColor: "#0b1018"
-        font.family: "Montserrat"
+        font.family: "Nunito"
         font.pixelSize: root.searchFontSize
+        font.weight: Font.Medium
         renderType: Text.NativeRendering
         font.hintingPreference: Font.PreferFullHinting
-        font.kerning: false
+        font.kerning: true
         clip: true
         cursorVisible: root.interactive && searchInput.activeFocus
 
@@ -140,12 +142,13 @@ Item {
             visible: searchInput.text.length === 0
             text: "Search applications"
             color: "#7f8b96"
-            font.family: "Montserrat"
+            font.family: "Nunito"
             font.pixelSize: searchInput.font.pixelSize
+            font.weight: Font.Medium
             verticalAlignment: Text.AlignVCenter
             renderType: Text.NativeRendering
             font.hintingPreference: Font.PreferFullHinting
-            font.kerning: false
+            font.kerning: true
         }
 
         Keys.onPressed: function(event) {

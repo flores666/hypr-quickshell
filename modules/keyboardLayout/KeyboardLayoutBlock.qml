@@ -92,7 +92,7 @@ Item {
             anchors.centerIn: parent
             text: root.layoutText
             color: layoutMouse.containsMouse || root.popupOpen ? "#f4f7fb" : "#d9e0ea"
-            font.pixelSize: 12
+            font.pixelSize: 11
             font.weight: Font.DemiBold
 
             Behavior on color {

@@ -135,12 +135,12 @@ Item {
                         anchors.centerIn: parent
                         text: root.displayName.substring(0, 1).toUpperCase()
                         color: "#f5f8fb"
-                        font.family: "Montserrat"
-                        font.pixelSize: 24
+                        font.family: "Nunito"
+                        font.pixelSize: 23
                         font.weight: Font.DemiBold
                         renderType: Text.NativeRendering
                         font.hintingPreference: Font.PreferFullHinting
-                        font.kerning: false
+                        font.kerning: true
                     }
                 }
             }
@@ -158,12 +158,12 @@ Item {
                 maximumLineCount: 2
                 wrapMode: Text.WordWrap
                 elide: Text.ElideRight
-                font.family: "Montserrat"
-                font.pixelSize: 12
-                font.weight: Font.Medium
+                font.family: "Nunito"
+                font.pixelSize: 11
+                font.weight: Font.DemiBold
                 renderType: Text.NativeRendering
                 font.hintingPreference: Font.PreferFullHinting
-                font.kerning: false
+                font.kerning: true
             }
 
         }

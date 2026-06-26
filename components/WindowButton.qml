@@ -57,12 +57,12 @@ Rectangle {
                 visible: !windowIconImage.visible
                 text: root.window && root.window.title ? String(root.window.title).substring(0, 1).toUpperCase() : "W"
                 color: "#dff4f7fb"
-                font.family: "Montserrat"
+                font.family: "Nunito"
                 font.pixelSize: 10
                 font.weight: Font.DemiBold
                 renderType: Text.NativeRendering
                 font.hintingPreference: Font.PreferFullHinting
-                font.kerning: false
+                font.kerning: true
             }
         }
 

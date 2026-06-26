@@ -9,7 +9,7 @@ Item {
     property color titleColor: "#f4f7fb"
     property color artistColor: "#bcc5d0"
     property color separatorColor: "#9aa4b1"
-    property int pixelSize: 12
+    property int pixelSize: 11
     property int titleWeight: Font.DemiBold
     property int artistWeight: Font.Medium
     property int gap: 42
