@@ -107,6 +107,8 @@ static double g_mainModAxisAccumulator = 0.0;
 static std::chrono::steady_clock::time_point g_mainModLastAxisSwitch = std::chrono::steady_clock::now() - std::chrono::milliseconds(120);
 static constexpr auto MAIN_MOD_AXIS_SWITCH_MIN_INTERVAL = std::chrono::milliseconds(120);
 static bool g_overviewApplicationsMode = false;
+bool g_overviewApplicationsInputReady = false;
+static std::string g_overviewApplicationsSearchBuffer;
 static int g_overviewApplicationsOriginWorkspaceID = 0;
 static int g_pointerRefreshFrames = 0;
 static std::chrono::steady_clock::time_point g_pointerRefreshUntil = std::chrono::steady_clock::now() - std::chrono::seconds(2);
@@ -120,6 +122,65 @@ static bool isAnyOverviewActive();
 static void notifyQuickshellOverviewState(const std::string& state) {
     if (g_pEventManager)
         g_pEventManager->postEvent(SHyprIPCEvent{"quickshelloverview", state});
+}
+
+static std::string percentEncodeForOverviewEvent(const std::string& value) {
+    static constexpr char HEX[] = "0123456789ABCDEF";
+    std::string encoded;
+    encoded.reserve(value.size());
+
+    for (const unsigned char ch : value) {
+        const bool unreserved =
+            (ch >= 'A' && ch <= 'Z') ||
+            (ch >= 'a' && ch <= 'z') ||
+            (ch >= '0' && ch <= '9') ||
+            ch == '-' || ch == '_' || ch == '.' || ch == '~';
+
+        if (unreserved) {
+            encoded.push_back(static_cast<char>(ch));
+            continue;
+        }
+
+        encoded.push_back('%');
+        encoded.push_back(HEX[(ch >> 4) & 0x0F]);
+        encoded.push_back(HEX[ch & 0x0F]);
+    }
+
+    return encoded;
+}
+
+static void notifyApplicationsBufferedQuery() {
+    notifyQuickshellOverviewState("applications-query:" + percentEncodeForOverviewEvent(g_overviewApplicationsSearchBuffer));
+}
+
+static std::string textFromKeysym(xkb_keysym_t keysym) {
+    char text[32] = {};
+    xkb_keysym_to_utf8(keysym, text, sizeof(text));
+    std::string result = text;
+
+    if (result.empty())
+        return "";
+
+    const auto first = static_cast<unsigned char>(result[0]);
+    if (first < 0x20 || first == 0x7F)
+        return "";
+
+    return result;
+}
+
+static void eraseLastUtf8Codepoint(std::string& value) {
+    if (value.empty())
+        return;
+
+    size_t pos = value.size() - 1;
+    while (pos > 0 && (static_cast<unsigned char>(value[pos]) & 0xC0) == 0x80)
+        --pos;
+
+    value.erase(pos);
+}
+
+static bool hasTextShortcutModifiers(uint32_t mods) {
+    return (mods & (HL_MODIFIER_CTRL | HL_MODIFIER_ALT | HL_MODIFIER_MOD3 | HL_MODIFIER_MOD5)) != 0;
 }
 
 static void queuePointerRefresh(int frames = 10) {
@@ -206,6 +267,8 @@ static void closeWidgetForCurrentOverviewMode(const std::shared_ptr<CHyprspaceWi
 
 static void resetApplicationsOverviewMode() {
     g_overviewApplicationsMode = false;
+    g_overviewApplicationsInputReady = false;
+    g_overviewApplicationsSearchBuffer.clear();
     g_overviewApplicationsOriginWorkspaceID = 0;
 }
 
@@ -737,6 +800,8 @@ static bool startApplicationsFromActiveOverview(const std::string& initialQuery 
         return false;
 
     g_overviewApplicationsMode = true;
+    g_overviewApplicationsInputReady = false;
+    g_overviewApplicationsSearchBuffer = initialQuery;
     g_overviewApplicationsOriginWorkspaceID = activeWorkspaceIDFromCursor();
     widget->startApplicationsTransitionFromOverview();
     notifyQuickshellOverviewState(initialQuery.empty() ? "applications-from-overview" : "applications:" + initialQuery);
@@ -906,6 +971,24 @@ void onKeyPress(const IKeyboard::SKeyEvent& event, SCallbackInfo& info) {
         }
     }
 
+    if (isAnyOverviewActive() && g_overviewApplicationsMode && !g_overviewApplicationsInputReady && !g_mainModDown) {
+        if (pressed && !hasTextShortcutModifiers(keyboard->getModifiers())) {
+            if (keysym == XKB_KEY_BackSpace) {
+                eraseLastUtf8Codepoint(g_overviewApplicationsSearchBuffer);
+                notifyApplicationsBufferedQuery();
+            } else {
+                const std::string text = textFromKeysym(keysym);
+                if (!text.empty()) {
+                    g_overviewApplicationsSearchBuffer += text;
+                    notifyApplicationsBufferedQuery();
+                }
+            }
+        }
+
+        info.cancelled = true;
+        return;
+    }
+
     // While live overview is visible, do not let text input fall through to the
     // focused client underneath. This still keeps the explicit overview shortcuts
     // above working, but normal typing no longer edits the hidden application.
@@ -1054,6 +1137,8 @@ static SDispatchResult dispatchApplicationsOverview(std::string arg) {
     }
 
     g_overviewApplicationsMode = true;
+    g_overviewApplicationsInputReady = false;
+    g_overviewApplicationsSearchBuffer.clear();
     g_overviewApplicationsOriginWorkspaceID = parseWorkspaceIDArg(arg);
     bool fromActiveOverview = false;
 

@@ -964,6 +964,7 @@ void CHyprspaceWidget::drawApplicationsBackground() {
 
     if (!leavingApplicationsMode && applicationLayerReady && !applicationsLayerSettledNotified && openProgress >= 0.999) {
         applicationsLayerSettledNotified = true;
+        g_overviewApplicationsInputReady = true;
         notifyQuickshellApplicationsState("applications-layer-settled");
     }
 

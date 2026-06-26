@@ -832,6 +832,18 @@ Scope {
         }
     }
 
+    Connections {
+        target: Services.ShellState
+        function onApplicationsOverviewBufferedQueryNonceChanged() {
+            if (!root.overviewActive || root.closingVisualActive)
+                return;
+
+            var nextQuery = Services.ShellState.applicationsOverviewBufferedQuery;
+            if (root.query !== nextQuery)
+                root.query = nextQuery;
+        }
+    }
+
 
     PanelWindow {
         id: visualWindow

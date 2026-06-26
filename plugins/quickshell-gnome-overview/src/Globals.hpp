@@ -40,6 +40,8 @@ CHyprSignalListener listenCancellable(Signal& signal, std::function<void(const E
 
 inline HANDLE pHandle = NULL;
 
+extern bool g_overviewApplicationsInputReady;
+
 namespace Config {
     extern CHyprColor workspaceActiveBackground;
     extern CHyprColor workspaceInactiveBackground;

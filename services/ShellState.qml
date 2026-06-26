@@ -15,6 +15,8 @@ QtObject {
     property bool workspaceOverviewOpen: false
     property string workspaceOverviewMode: "workspaces"
     property string applicationsOverviewInitialQuery: ""
+    property string applicationsOverviewBufferedQuery: ""
+    property int applicationsOverviewBufferedQueryNonce: 0
     property bool applicationsOverviewFromWorkspaceOverview: false
     property bool applicationsOverviewClosing: false
     property bool applicationsOverviewVisualLayerHidden: false
@@ -274,6 +276,8 @@ QtObject {
 
     function resetApplicationsOverviewRuntimeState(resetHiddenLayer) {
         applicationsOverviewInitialQuery = "";
+        applicationsOverviewBufferedQuery = "";
+        applicationsOverviewBufferedQueryNonce = 0;
         applicationsOverviewFromWorkspaceOverview = false;
         applicationsOverviewClosing = false;
         applicationsOverviewVisualLayerSettled = false;
@@ -308,6 +312,11 @@ QtObject {
 
     function setApplicationsOverviewInitialQuery(query) {
         applicationsOverviewInitialQuery = String(query || "");
+    }
+
+    function setApplicationsOverviewBufferedQuery(query) {
+        applicationsOverviewBufferedQuery = String(query || "");
+        applicationsOverviewBufferedQueryNonce += 1;
     }
 
     function setApplicationsOverviewFromWorkspaceOverview(value) {

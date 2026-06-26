@@ -353,6 +353,14 @@ Item {
         Services.ShellState.setWorkspaceOverviewOpen(true);
     }
 
+    function decodeOverviewEventText(value) {
+        try {
+            return decodeURIComponent(String(value || ""));
+        } catch (e) {
+            return String(value || "");
+        }
+    }
+
     function beginApplicationsCloseFromPlugin() {
         if (Services.ShellState.workspaceOverviewOpen && Services.ShellState.workspaceOverviewMode === "applications") {
             Services.ShellState.setApplicationsOverviewVisualLayerSettled(false);
@@ -363,6 +371,11 @@ Item {
     function handleOverviewPluginEvent(overviewState) {
         if (overviewState === "open") {
             openWorkspaceOverviewFromPlugin();
+            return;
+        }
+
+        if (overviewState.indexOf("applications-query:") === 0) {
+            Services.ShellState.setApplicationsOverviewBufferedQuery(decodeOverviewEventText(overviewState.substring(19)));
             return;
         }
 
