@@ -303,7 +303,6 @@ static void showWorkspaceOverviewFromApplications(const std::shared_ptr<CHyprspa
         return;
 
     widget->startApplicationsReturnToOverview();
-    g_overviewApplicationsMode = false;
     resetApplicationsInputState();
     g_pendingApplicationsOpenAfterClose = false;
     g_pendingApplicationsOpenAfterCloseArg.clear();
@@ -1003,22 +1002,28 @@ void onKeyPress(const IKeyboard::SKeyEvent& event, SCallbackInfo& info) {
         }
     }
 
-    if (isAnyOverviewActive() && g_overviewApplicationsMode && !g_overviewApplicationsInputReady && !g_mainModDown) {
+    if (isAnyOverviewActive() && g_overviewApplicationsMode && !g_mainModDown) {
         if (pressed && !hasTextShortcutModifiers(keyboard->getModifiers())) {
             if (keysym == XKB_KEY_BackSpace) {
                 eraseLastUtf8Codepoint(g_overviewApplicationsSearchBuffer);
                 notifyApplicationsBufferedQuery();
+                info.cancelled = true;
+                return;
             } else {
                 const std::string text = textFromKeysym(keysym);
                 if (!text.empty()) {
                     g_overviewApplicationsSearchBuffer += text;
                     notifyApplicationsBufferedQuery();
+                    info.cancelled = true;
+                    return;
                 }
             }
         }
 
-        info.cancelled = true;
-        return;
+        if (!g_overviewApplicationsInputReady) {
+            info.cancelled = true;
+            return;
+        }
     }
 
     // While live overview is visible, do not let text input fall through to the
@@ -1285,10 +1290,8 @@ static SDispatchResult dispatchRefreshPointer(std::string) {
 }
 
 static SDispatchResult dispatchApplicationsInputReady(std::string) {
-    if (g_overviewApplicationsMode && isAnyOverviewActive()) {
+    if (g_overviewApplicationsMode && isAnyOverviewActive())
         g_overviewApplicationsInputReady = true;
-        g_overviewApplicationsSearchBuffer.clear();
-    }
 
     return SDispatchResult{};
 }
