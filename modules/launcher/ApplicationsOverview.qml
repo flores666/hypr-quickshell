@@ -868,7 +868,7 @@ Scope {
             right: true
         }
 
-        visible: true
+        visible: root.visualLayerActive
         focusable: false
         implicitHeight: Screen.height
         color: "transparent"
@@ -915,7 +915,7 @@ Scope {
             right: true
         }
 
-        visible: true
+        visible: root.inputCaptureActive
         focusable: false
         implicitHeight: Screen.height
         color: "transparent"
@@ -982,7 +982,7 @@ Scope {
             right: true
         }
 
-        visible: true
+        visible: root.inputRenderActive
         focusable: root.inputCaptureActive
         implicitHeight: Screen.height
         color: "transparent"
