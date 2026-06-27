@@ -29,7 +29,7 @@ PanelWindow {
     WlrLayershell.namespace: "quickshell:taskbar"
     WlrLayershell.layer: WlrLayer.Top
 
-    exclusiveZone: 37
+    exclusiveZone: 40
 
     function anyPopupOpen() {
         return popupsOpen;

@@ -77,27 +77,9 @@ static int overviewWorkspaceRounding(PHLMONITOR pMonitor) {
     return std::max(8, static_cast<int>(std::round(10.0 * pMonitor->m_scale)));
 }
 
-static bool overviewBoxOverlapsWorkspaceCorner(const CBox& box, const CBox& workspaceBox, int rounding) {
-    const double radius = std::min<double>(std::max(0, rounding), std::floor(std::min(workspaceBox.w, workspaceBox.h) * 0.5));
-    if (radius <= 1.0)
-        return false;
-
-    const CBox topLeft{workspaceBox.x, workspaceBox.y, radius, radius};
-    const CBox topRight{workspaceBox.x + workspaceBox.w - radius, workspaceBox.y, radius, radius};
-    const CBox bottomLeft{workspaceBox.x, workspaceBox.y + workspaceBox.h - radius, radius, radius};
-    const CBox bottomRight{workspaceBox.x + workspaceBox.w - radius, workspaceBox.y + workspaceBox.h - radius, radius, radius};
-
-    return overviewBoxesIntersect(box, topLeft) ||
-        overviewBoxesIntersect(box, topRight) ||
-        overviewBoxesIntersect(box, bottomLeft) ||
-        overviewBoxesIntersect(box, bottomRight);
-}
-
 struct SOverviewWindowPreview {
     PHLWINDOW window;
     CBox box;
-    bool coversWorkspace = false;
-    bool overlapsWorkspaceCorner = false;
 };
 
 struct SOverviewWorkspaceWindows {
@@ -394,29 +376,18 @@ static void renderApplicationsSideWorkspacePreviews(PHLMONITOR owner,
                 if (!overviewBoxesIntersect(windowBox, workspaceBox))
                     continue;
 
-                const bool coversWorkspace = wX <= workspaceBox.x + 1.0 &&
-                    wY <= workspaceBox.y + 1.0 &&
-                    wX + wW >= workspaceBox.x + workspaceBox.w - 1.0 &&
-                    wY + wH >= workspaceBox.y + workspaceBox.h - 1.0;
-                const bool overlapsWorkspaceCorner = overviewBoxOverlapsWorkspaceCorner(windowBox, workspaceBox, workspaceRounding);
-                visibleWindows.push_back({w, windowBox, coversWorkspace, overlapsWorkspaceCorner});
+                visibleWindows.push_back({w, windowBox});
             }
         }
 
         renderWorkspacePreviewShadow(owner, workspaceBox, workspaceRounding, opacity);
 
-        const bool fullCoverWindowVisible = std::any_of(visibleWindows.begin(), visibleWindows.end(), [](const SOverviewWindowPreview& windowPreview) {
-            return windowPreview.coversWorkspace;
-        });
-
-        if (!fullCoverWindowVisible) {
-            const bool backgroundRendered = renderWorkspaceBackgroundTexture(owner, workspaceBox, workspaceBox, opacity, workspaceRounding, 2.0F);
-            CHyprColor tintColor = Config::workspaceInactiveBackground;
-            tintColor.a = backgroundRendered
-                ? std::max<float>(tintColor.a * opacity, 0.10F * opacity)
-                : std::max<float>(tintColor.a * opacity, 0.22F * opacity);
-            renderRect(workspaceBox, tintColor, workspaceRounding, 2.0F);
-        }
+        const bool backgroundRendered = renderWorkspaceBackgroundTexture(owner, workspaceBox, workspaceBox, opacity, workspaceRounding, 2.0F);
+        CHyprColor tintColor = Config::workspaceInactiveBackground;
+        tintColor.a = backgroundRendered
+            ? std::max<float>(tintColor.a * opacity, 0.10F * opacity)
+            : std::max<float>(tintColor.a * opacity, 0.22F * opacity);
+        renderRect(workspaceBox, tintColor, workspaceRounding, 2.0F);
 
         for (const auto& windowPreview : visibleWindows)
             renderWindowStubRoundedClip(windowPreview.window, owner, workspace, windowPreview.box, workspaceBox, workspaceRounding, time, opacity, -1, 2.0F);
@@ -463,30 +434,19 @@ static void renderApplicationsDesktopCard(PHLMONITOR owner, PHLWORKSPACE workspa
         if (!overviewBoxesIntersect(windowBox, workspaceBox))
             continue;
 
-        const bool coversWorkspace = wX <= workspaceBox.x + 1.0 &&
-            wY <= workspaceBox.y + 1.0 &&
-            wX + wW >= workspaceBox.x + workspaceBox.w - 1.0 &&
-            wY + wH >= workspaceBox.y + workspaceBox.h - 1.0;
-        const bool overlapsWorkspaceCorner = overviewBoxOverlapsWorkspaceCorner(windowBox, workspaceBox, rounding);
-        visibleWindows.push_back({w, windowBox, coversWorkspace, overlapsWorkspaceCorner});
+        visibleWindows.push_back({w, windowBox});
     }
 
     renderWorkspacePreviewShadow(owner, workspaceBox, rounding, alpha);
 
-    const bool fullCoverWindowVisible = std::any_of(visibleWindows.begin(), visibleWindows.end(), [](const SOverviewWindowPreview& windowPreview) {
-        return windowPreview.coversWorkspace;
-    });
-
-    if (!fullCoverWindowVisible) {
-        const bool backgroundRendered = renderWorkspaceBackgroundTexture(owner, workspaceBox, workspaceBox, alpha, rounding, 2.0F);
-        CHyprColor tintColor = Config::workspaceActiveBackground;
-        const float tintProgress = static_cast<float>(overviewClamp01(openProgress));
-        tintColor.a = backgroundRendered
-            ? std::max<float>(tintColor.a * alpha * tintProgress, 0.10F * alpha * tintProgress)
-            : std::max<float>(tintColor.a * alpha * tintProgress, 0.22F * alpha * tintProgress);
-        if (tintColor.a > 0.001F)
-            renderRect(workspaceBox, tintColor, rounding, 2.0F);
-    }
+    const bool backgroundRendered = renderWorkspaceBackgroundTexture(owner, workspaceBox, workspaceBox, alpha, rounding, 2.0F);
+    CHyprColor tintColor = Config::workspaceActiveBackground;
+    const float tintProgress = static_cast<float>(overviewClamp01(openProgress));
+    tintColor.a = backgroundRendered
+        ? std::max<float>(tintColor.a * alpha * tintProgress, 0.10F * alpha * tintProgress)
+        : std::max<float>(tintColor.a * alpha * tintProgress, 0.22F * alpha * tintProgress);
+    if (tintColor.a > 0.001F)
+        renderRect(workspaceBox, tintColor, rounding, 2.0F);
 
     for (const auto& windowPreview : visibleWindows)
         renderWindowStubRoundedClip(windowPreview.window, owner, workspace, windowPreview.box, workspaceBox, rounding, time, alpha, -1, 2.0F);
@@ -830,12 +790,7 @@ void CHyprspaceWidget::draw() {
                     if (!overviewBoxesIntersect(windowBox, workspaceBox))
                         continue;
 
-                    const bool coversWorkspace = wX <= workspaceBox.x + 1.0 &&
-                        wY <= workspaceBox.y + 1.0 &&
-                        wX + wW >= workspaceBox.x + workspaceBox.w - 1.0 &&
-                        wY + wH >= workspaceBox.y + workspaceBox.h - 1.0;
-                    const bool overlapsWorkspaceCorner = overviewBoxOverlapsWorkspaceCorner(windowBox, workspaceBox, preview.rounding);
-                    visibleWindows.push_back({w, windowBox, coversWorkspace, overlapsWorkspaceCorner});
+                    visibleWindows.push_back({w, windowBox});
                 }
             }
         }
@@ -845,24 +800,17 @@ void CHyprspaceWidget::draw() {
 
         renderWorkspacePreviewShadow(owner, workspaceBox, preview.rounding, preview.opacity);
 
-        const bool fullCoverWindowVisible = !morphAnimationRunning && !selectionAnimationRunning && preview.opacity >= 0.999F &&
-            std::any_of(visibleWindows.begin(), visibleWindows.end(), [](const SOverviewWindowPreview& windowPreview) {
-                return windowPreview.coversWorkspace;
-            });
+        float backgroundOpacity = preview.opacity;
+        if (preview.wsID == morphTargetWorkspaceID && (morphAnimationRunning || selectionAnimationRunning))
+            backgroundOpacity *= static_cast<float>(openProgress);
 
-        if (!fullCoverWindowVisible) {
-            float backgroundOpacity = preview.opacity;
-            if (preview.wsID == morphTargetWorkspaceID && (morphAnimationRunning || selectionAnimationRunning))
-                backgroundOpacity *= static_cast<float>(openProgress);
+        const bool backgroundRendered = renderWorkspaceBackgroundTexture(owner, workspaceBox, workspaceBox, backgroundOpacity, preview.rounding, 2.0F);
 
-            const bool backgroundRendered = renderWorkspaceBackgroundTexture(owner, workspaceBox, workspaceBox, backgroundOpacity, preview.rounding, 2.0F);
-
-            CHyprColor tintColor = preview.wsID == morphTargetWorkspaceID ? Config::workspaceActiveBackground : Config::workspaceInactiveBackground;
-            tintColor.a = backgroundRendered
-                ? std::max<float>(tintColor.a * backgroundOpacity, 0.10F * backgroundOpacity)
-                : std::max<float>(tintColor.a * backgroundOpacity, 0.22F * backgroundOpacity);
-            renderRect(workspaceBox, tintColor, preview.rounding, 2.0F);
-        }
+        CHyprColor tintColor = preview.wsID == morphTargetWorkspaceID ? Config::workspaceActiveBackground : Config::workspaceInactiveBackground;
+        tintColor.a = backgroundRendered
+            ? std::max<float>(tintColor.a * backgroundOpacity, 0.10F * backgroundOpacity)
+            : std::max<float>(tintColor.a * backgroundOpacity, 0.22F * backgroundOpacity);
+        renderRect(workspaceBox, tintColor, preview.rounding, 2.0F);
 
         for (const auto& windowPreview : visibleWindows) {
             renderWindowStubRoundedClip(windowPreview.window, owner, ws, windowPreview.box, workspaceBox, preview.rounding, time, preview.opacity, -1, 2.0F);
