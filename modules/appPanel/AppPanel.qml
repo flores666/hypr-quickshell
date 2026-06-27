@@ -2142,7 +2142,7 @@ Item {
             Components.GlassPanel {
                 anchors.fill: parent
                 radiusSize: 18
-                glassColor: "#b006080c"
+                glassColor: "#98000000"
                 clip: true
                 antialiasing: true
             }
@@ -2250,7 +2250,7 @@ Item {
             Components.GlassPanel {
                 anchors.fill: parent
                 radiusSize: 16
-                glassColor: "#b006080c"
+                glassColor: "#98000000"
                 clip: true
                 antialiasing: true
             }
@@ -2358,7 +2358,7 @@ Item {
             Components.GlassPanel {
                 anchors.fill: parent
                 radiusSize: 11
-                glassColor: "#b006080c"
+                glassColor: "#98000000"
                 clip: true
                 antialiasing: true
             }

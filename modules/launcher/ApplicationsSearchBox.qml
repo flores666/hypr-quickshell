@@ -43,7 +43,7 @@ Item {
         id: searchBackground
         anchors.fill: parent
         radiusSize: Math.round(height / 2)
-        glassColor: "#b006080c"
+        glassColor: "#8a000000"
         antialiasing: true
     }
 

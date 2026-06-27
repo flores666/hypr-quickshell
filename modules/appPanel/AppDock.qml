@@ -186,7 +186,7 @@ PanelWindow {
             width: Math.max(82, Math.min(root.width - 16, appPanel.implicitWidth + root.dockHorizontalPadding * 2))
             height: root.dockBackgroundHeight
             radiusSize: 28
-            glassColor: "#b006080c"
+            glassColor: "#8a000000"
             antialiasing: true
         }
 

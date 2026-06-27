@@ -100,7 +100,7 @@ PanelWindow {
             rightMargin: root.panelSideInset
         }
         radiusSize: 28
-        glassColor: "#b006080c"
+        glassColor: "#8a000000"
     }
 
     Item {
