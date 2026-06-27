@@ -216,6 +216,45 @@ def hypr_client_title_for_pid(pid, app_name=""):
     return ""
 
 
+def hypr_client_icon_candidates_for_pid(pid):
+    pid_text = str(pid or "").strip()
+    if not pid_text or not has_cmd("hyprctl"):
+        return []
+
+    global _hypr_clients_cache
+    if _hypr_clients_cache is None:
+        raw = run(["hyprctl", "clients", "-j"], timeout=0.75)
+        try:
+            data = json.loads(raw) if raw else []
+        except Exception:
+            data = []
+        _hypr_clients_cache = data if isinstance(data, list) else []
+
+    try:
+        pid_value = int(pid_text)
+    except Exception:
+        return []
+
+    result = []
+    for client in _hypr_clients_cache:
+        if not isinstance(client, dict):
+            continue
+        try:
+            client_pid = int(client.get("pid") or -1)
+        except Exception:
+            continue
+        if client_pid != pid_value:
+            continue
+
+        for key in ("class", "initialClass", "appId", "initialTitle"):
+            value = str(client.get(key) or "").strip()
+            if value:
+                result.append(value)
+        break
+
+    return result
+
+
 def sink_input_app_name(props=None, app=""):
     props = props or {}
     return clean_display_text(
@@ -278,17 +317,19 @@ def parse_pactl_sink_blocks():
     return sinks
 
 def resolve_audio_app_icon(props, app):
+    hypr_candidates = hypr_client_icon_candidates_for_pid(props.get("application.process.id"))
     candidates = [
-        props.get("media.icon_name"),
-        props.get("media.icon"),
+        props.get("application.icon_name"),
+        props.get("application.desktop"),
+        *hypr_candidates,
+        props.get("application.process.binary"),
+        props.get("application.name"),
         props.get("window.icon_name"),
         props.get("window.icon"),
         props.get("node.icon_name"),
         props.get("node.icon"),
-        props.get("application.icon_name"),
-        props.get("application.desktop"),
-        props.get("application.process.binary"),
-        props.get("application.name"),
+        props.get("media.icon_name"),
+        props.get("media.icon"),
         app,
     ]
 
@@ -297,13 +338,23 @@ def resolve_audio_app_icon(props, app):
         value = str(candidate or "").strip()
         if not value:
             continue
-        key = value.casefold()
-        if key in seen:
-            continue
-        seen.add(key)
-        resolved = resolve_icon_file(value)
-        if resolved:
-            return resolved
+        variants = [
+            value,
+            value.lower(),
+            value.strip().lower().replace(" ", "-"),
+            re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-"),
+        ]
+        for variant in variants:
+            variant = str(variant or "").strip()
+            if not variant:
+                continue
+            key = variant.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            resolved = resolve_icon_file(variant)
+            if resolved:
+                return resolved
     return ""
 
 

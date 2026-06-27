@@ -859,7 +859,7 @@ PopupWindow {
                                             Components.StyledText {
                                                 anchors.centerIn: parent
                                                 visible: appIconImage.status !== Image.Ready
-                                                text: root.firstLetter(modelData.name, modelData.app || "A")
+                                                text: root.firstLetter(modelData.app, modelData.name || "A")
                                                 color: "#eef3f8"
                                                 font.pixelSize: 12
                                                 font.weight: Font.DemiBold
