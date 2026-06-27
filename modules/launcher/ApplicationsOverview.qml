@@ -65,6 +65,8 @@ Scope {
     property bool hiddenSectionExpanded: false
     property bool pointerSuppressedByKeyboard: false
     property bool pointerRefreshGuardActive: false
+    property bool inputReadyNotified: false
+    property int inputFocusAttemptsRemaining: 0
 
 
     function clamp01(value) {
@@ -521,21 +523,38 @@ Scope {
         setGridContentY(preservedViewportY);
     }
 
+    function requestSearchFocusAttempt() {
+        if (!inputActive || !inputContent || !inputContent.searchField)
+            return false;
+
+        inputContent.forceSearchFocus();
+        Services.ShellActions.refreshPointerFocus();
+        return inputContent.searchField.activeFocus;
+    }
+
     function focusSearchFieldWhenReady() {
+        if (!inputActive)
+            return;
+
+        inputFocusAttemptsRemaining = Math.max(inputFocusAttemptsRemaining, 10);
+        inputFocusRetryTimer.restart();
         Qt.callLater(function () {
-            if (!root.inputActive)
-                return;
-            inputContent.forceSearchFocus();
-            Services.ShellActions.refreshPointerFocus();
-            notifyApplicationsInputReadyWhenFocused();
+            if (root.inputActive && !root.inputReadyNotified)
+                inputFocusRetryTimer.restart();
         });
     }
 
     function notifyApplicationsInputReadyWhenFocused() {
-        if (!inputActive || !inputContent || !inputContent.searchField || !inputContent.searchField.activeFocus)
+        if (inputReadyNotified || !inputActive || !inputContent || !inputContent.searchField || !inputContent.searchField.activeFocus)
             return;
 
+        inputReadyNotified = true;
         Services.ShellActions.notifyApplicationsInputReady();
+    }
+
+    function clearSearchFocus() {
+        if (inputContent)
+            inputContent.clearSearchFocus();
     }
 
     function suppressPointerAfterKeyboardInput() {
@@ -573,6 +592,9 @@ Scope {
         closeAnimationKickTimer.stop();
         closeCleanupTimer.stop();
         closingVisualActive = false;
+        inputReadyNotified = false;
+        inputFocusAttemptsRemaining = 0;
+        inputFocusRetryTimer.stop();
         closeContextMenu();
         animationBehaviorEnabled = false;
         animationProgress = Services.ShellState.applicationsOverviewFromWorkspaceOverview ? desktopCardPhaseEnd + 0.04 : 0;
@@ -608,6 +630,10 @@ Scope {
         Services.ShellState.setApplicationsOverviewClosing(false);
         Services.ShellState.setApplicationsOverviewVisualLayerSettled(false);
         query = "";
+        inputReadyNotified = false;
+        inputFocusAttemptsRemaining = 0;
+        inputFocusRetryTimer.stop();
+        clearSearchFocus();
         clearPointerSuppression();
         closeContextMenu();
         clearSelection();
@@ -726,6 +752,11 @@ Scope {
 
     onOverviewActiveChanged: {
         clearPointerSuppression();
+        inputReadyNotified = false;
+        inputFocusAttemptsRemaining = 0;
+        inputFocusRetryTimer.stop();
+        if (!overviewActive)
+            clearSearchFocus();
         if (overviewActive) {
             hiddenSectionExpanded = false;
             query = Services.ShellState.applicationsOverviewInitialQuery;
@@ -748,8 +779,13 @@ Scope {
     onInputActiveChanged: {
         if (inputActive)
             focusSearchFieldWhenReady();
-        else
+        else {
+            inputReadyNotified = false;
+            inputFocusAttemptsRemaining = 0;
+            inputFocusRetryTimer.stop();
+            clearSearchFocus();
             closeContextMenu();
+        }
     }
 
     onInputCaptureActiveChanged: {
@@ -821,6 +857,30 @@ Scope {
         interval: 120
         repeat: false
         onTriggered: root.pointerRefreshGuardActive = false
+    }
+
+    Timer {
+        id: inputFocusRetryTimer
+        interval: 16
+        repeat: true
+        onTriggered: {
+            if (!root.inputActive || root.inputReadyNotified) {
+                inputFocusAttemptsRemaining = 0;
+                stop();
+                return;
+            }
+
+            var focused = root.requestSearchFocusAttempt();
+            inputFocusAttemptsRemaining -= 1;
+            if (focused) {
+                root.notifyApplicationsInputReadyWhenFocused();
+                stop();
+                return;
+            }
+
+            if (inputFocusAttemptsRemaining <= 0)
+                stop();
+        }
     }
 
     Connections {

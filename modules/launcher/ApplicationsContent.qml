@@ -71,6 +71,10 @@ Item {
         searchBox.forceSearchFocus();
     }
 
+    function clearSearchFocus() {
+        searchBox.clearSearchFocus();
+    }
+
 
     function notifyPointerMoved() {
         if (root.pointerMovedCallback)

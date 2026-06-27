@@ -37,6 +37,10 @@ Item {
         return Qt.formatDateTime(d, "ddd MMM d") + "  " + formatTime(d);
     }
 
+    function centerDateOnlyText(d) {
+        return Qt.formatDateTime(d, "ddd MMM d");
+    }
+
     function monthTitle(d) {
         return Qt.formatDateTime(d, "MMMM yyyy");
     }
@@ -105,7 +109,7 @@ Item {
     Rectangle {
         id: clockButton
         anchors.centerIn: parent
-        width: clockText.implicitWidth + 16
+        width: clockContent.implicitWidth + 16
         height: 24
         radius: 12
         color: root.popupOpen
@@ -119,13 +123,34 @@ Item {
             ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic }
         }
 
-        Components.StyledText {
-            id: clockText
+        Row {
+            id: clockContent
             anchors.centerIn: parent
-            text: root.centerDateText(root.now)
-            color: "#eef3f8"
-            font.pixelSize: 12
-            font.weight: Font.DemiBold
+            spacing: 6
+
+            Components.StyledText {
+                anchors.verticalCenter: parent.verticalCenter
+                text: root.centerDateOnlyText(root.now)
+                color: "#eef3f8"
+                font.pixelSize: 12
+                font.weight: Font.DemiBold
+            }
+
+            Components.StyledText {
+                anchors.verticalCenter: parent.verticalCenter
+                text: "•"
+                color: "#9aa4b1"
+                font.pixelSize: 10
+                font.weight: Font.DemiBold
+            }
+
+            Components.StyledText {
+                anchors.verticalCenter: parent.verticalCenter
+                text: root.formatTime(root.now)
+                color: "#eef3f8"
+                font.pixelSize: 14
+                font.weight: Font.DemiBold
+            }
         }
 
         MouseArea {

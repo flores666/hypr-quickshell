@@ -262,10 +262,13 @@ static void closeWidgetForCurrentOverviewMode(const std::shared_ptr<CHyprspaceWi
     if (!widget || !widget->isActive())
         return;
 
-    if (g_overviewApplicationsMode)
+    if (g_overviewApplicationsMode) {
+        g_overviewApplicationsInputReady = false;
+        g_overviewApplicationsSearchBuffer.clear();
         widget->hideKeepingWorkspace(applicationsReturnWorkspaceID());
-    else
+    } else {
         widget->hide();
+    }
 }
 
 static void resetApplicationsOverviewMode() {
@@ -273,6 +276,11 @@ static void resetApplicationsOverviewMode() {
     g_overviewApplicationsInputReady = false;
     g_overviewApplicationsSearchBuffer.clear();
     g_overviewApplicationsOriginWorkspaceID = 0;
+}
+
+static void resetApplicationsInputState() {
+    g_overviewApplicationsInputReady = false;
+    g_overviewApplicationsSearchBuffer.clear();
 }
 
 static void queueApplicationsOpenAfterClose(const std::string& arg) {
@@ -295,6 +303,11 @@ static void showWorkspaceOverviewFromApplications(const std::shared_ptr<CHyprspa
         return;
 
     widget->startApplicationsReturnToOverview();
+    g_overviewApplicationsMode = false;
+    resetApplicationsInputState();
+    g_pendingApplicationsOpenAfterClose = false;
+    g_pendingApplicationsOpenAfterCloseArg.clear();
+    requestPointerRefresh(10);
 }
 
 std::function<void()> overviewAnimatedHideFinishedCallback = []() {
@@ -1141,6 +1154,7 @@ static SDispatchResult dispatchApplicationsOverview(std::string arg) {
 
     if (g_overviewApplicationsMode && isAnyOverviewActive()) {
         const int returnWorkspaceID = applicationsReturnWorkspaceID();
+        resetApplicationsInputState();
         if (arg.contains("all")) {
             for (auto& widget : g_overviewWidgets) {
                 if (widget && widget->isActive())

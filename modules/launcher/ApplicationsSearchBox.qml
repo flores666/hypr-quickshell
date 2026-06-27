@@ -36,6 +36,10 @@ Item {
         searchInput.cursorPosition = searchInput.text.length;
     }
 
+    function clearSearchFocus() {
+        searchInput.focus = false;
+    }
+
     opacity: showVisuals ? 1 : 0
     visible: showVisuals || interactive
 
