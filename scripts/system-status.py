@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import atexit
+import html
 import json
 import os
 import re
@@ -723,7 +724,8 @@ def extract_dunst_value(value):
 
 
 def clean_notification_text(value):
-    text = re.sub(r"<[^>]+>", "", str(value or ""))
+    text = html.unescape(str(value or ""))
+    text = re.sub(r"<[^>]+>", "", text)
     return re.sub(r"\s+", " ", text).strip()
 
 

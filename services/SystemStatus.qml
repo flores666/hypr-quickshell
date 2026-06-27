@@ -87,8 +87,27 @@ Item {
     property string iconResolveResult: ""
     property var resolvedIconCache: ({})
 
-    function stripNotificationMarkup(text) {
+    function decodeNotificationEntities(text) {
         return String(text || "")
+            .replace(/&amp;/g, "&")
+            .replace(/&quot;/g, "\"")
+            .replace(/&apos;/g, "'")
+            .replace(/&#39;/g, "'")
+            .replace(/&#x27;/gi, "'")
+            .replace(/&lt;/g, "<")
+            .replace(/&gt;/g, ">")
+            .replace(/&#(\d+);/g, function(match, code) {
+                var value = Number(code);
+                return value > 0 ? String.fromCharCode(value) : match;
+            })
+            .replace(/&#x([0-9a-f]+);/gi, function(match, code) {
+                var value = parseInt(code, 16);
+                return value > 0 ? String.fromCharCode(value) : match;
+            });
+    }
+
+    function stripNotificationMarkup(text) {
+        return decodeNotificationEntities(text)
             .replace(/<[^>]+>/g, "")
             .replace(/\s+/g, " ")
             .trim();
