@@ -21,6 +21,9 @@ QtObject {
     property bool applicationsOverviewClosing: false
     property bool applicationsOverviewVisualLayerHidden: false
     property bool applicationsOverviewVisualLayerSettled: false
+    readonly property bool applicationsOverviewOpen: workspaceOverviewOpen && workspaceOverviewMode === "applications"
+    readonly property bool applicationsOverviewActive: applicationsOverviewOpen || applicationsOverviewClosing
+    readonly property bool workspaceOverviewOnlyOpen: workspaceOverviewOpen && workspaceOverviewMode === "workspaces"
     // The dock button controls the native Hyprland live overview plugin.
     // Quickshell fallback overview was removed, so these dispatchers are always used.
     property string nativeWorkspaceOverviewOpenDispatcher: "qs-gnome-overview:open"
@@ -42,6 +45,10 @@ QtObject {
     property bool topbarPopupOpen: false
     property bool appDockPopupOpen: false
     readonly property bool shellPopupOpen: topbarPopupOpen || appDockPopupOpen
+    property string activeModalLayer: ""
+    property string inputCaptureOwner: ""
+    readonly property bool inputCaptured: inputCaptureOwner.length > 0
+    readonly property bool anyOverlayOpen: workspaceOverviewOpen || applicationsOverviewClosing || shellPopupOpen || inputCaptured
 
 
     function requestCloseTopbarPopups() {
@@ -57,16 +64,47 @@ QtObject {
         closeAppDockPopupsNonce += 1;
     }
 
+    function modalLayerForCurrentState() {
+        if (inputCaptureOwner.length > 0)
+            return inputCaptureOwner;
+        if (applicationsOverviewActive)
+            return "applicationsOverview";
+        if (workspaceOverviewOnlyOpen)
+            return "workspaceOverview";
+        if (topbarPopupOpen)
+            return "topbarPopup";
+        if (appDockPopupOpen)
+            return "appDockPopup";
+        return "";
+    }
+
+    function syncActiveModalLayer() {
+        var next = modalLayerForCurrentState();
+        if (activeModalLayer !== next)
+            activeModalLayer = next;
+    }
+
+    function setInputCaptureOwner(owner, active) {
+        var nextOwner = active ? String(owner || "") : "";
+        if (nextOwner.length === 0 && String(owner || "") !== inputCaptureOwner)
+            return;
+        if (inputCaptureOwner !== nextOwner)
+            inputCaptureOwner = nextOwner;
+        syncActiveModalLayer();
+    }
+
     function setTopbarPopupOpen(value) {
         var next = !!value;
         if (topbarPopupOpen !== next)
             topbarPopupOpen = next;
+        syncActiveModalLayer();
     }
 
     function setAppDockPopupOpen(value) {
         var next = !!value;
         if (appDockPopupOpen !== next)
             appDockPopupOpen = next;
+        syncActiveModalLayer();
     }
 
     function normalizeSpecialWorkspaceName(value) {
@@ -291,6 +329,7 @@ QtObject {
         applicationsOverviewFromWorkspaceOverview = false;
         workspaceOverviewOpen = false;
         workspaceOverviewMode = "workspaces";
+        syncActiveModalLayer();
     }
 
     function setWorkspaceOverviewOpen(value) {
@@ -304,6 +343,7 @@ QtObject {
             // the reverse animation. It is cleared on the next applications open.
             resetApplicationsOverviewRuntimeState(false);
         }
+        syncActiveModalLayer();
     }
 
     function setWorkspaceOverviewMode(mode) {
@@ -316,6 +356,7 @@ QtObject {
             applicationsOverviewClosing = false;
             applicationsOverviewVisualLayerSettled = false;
         }
+        syncActiveModalLayer();
     }
 
     function setApplicationsOverviewInitialQuery(query) {
@@ -335,6 +376,7 @@ QtObject {
         var next = !!value;
         if (applicationsOverviewClosing !== next)
             applicationsOverviewClosing = next;
+        syncActiveModalLayer();
     }
 
     function setApplicationsOverviewVisualLayerHidden(value) {

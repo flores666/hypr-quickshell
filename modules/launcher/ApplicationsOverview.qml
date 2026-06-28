@@ -789,12 +789,16 @@ Scope {
     }
 
     onInputCaptureActiveChanged: {
+        Services.ShellState.setInputCaptureOwner("applicationsOverview", inputCaptureActive);
         if (!inputCaptureActive) {
             clearPointerSuppression();
             closeContextMenu();
             clearSelection();
         }
     }
+
+    Component.onCompleted: Services.ShellState.setInputCaptureOwner("applicationsOverview", inputCaptureActive)
+    Component.onDestruction: Services.ShellState.setInputCaptureOwner("applicationsOverview", false)
 
     onCloseRequestedChanged: {
         if (closeRequested && (overviewActive || renderActive))
