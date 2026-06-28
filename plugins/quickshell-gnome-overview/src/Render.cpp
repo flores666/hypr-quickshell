@@ -122,17 +122,6 @@ static double overviewSmoothStep(double edge0, double edge1, double value) {
     return t * t * (3.0 - 2.0 * t);
 }
 
-static double overviewTopCropProgress(double rawOpenProgress, double easedOpenProgress, bool closingAnimationRunning) {
-    if (closingAnimationRunning)
-        return easedOpenProgress;
-
-    // Keep the fullscreen desktop shrinking from its real position. If the
-    // topbar crop follows the full open easing, the wallpaper appears to slide
-    // from a different origin than the windows. Apply the crop early, then let
-    // the workspace geometry be the only visible motion.
-    return overviewSmoothStep(0.0, 0.14, rawOpenProgress);
-}
-
 static double overviewLerp(double from, double to, double progress) {
     return from + (to - from) * progress;
 }
@@ -533,10 +522,7 @@ void CHyprspaceWidget::draw() {
 
     const bool closingAnimationRunning = isClosing() || selectionCloseMorphRunning;
     const bool morphAnimationRunning = rawOpenProgress < 0.999 || closingAnimationRunning;
-    const double openProgress = closingAnimationRunning
-        ? overviewEaseInOutCubic(rawOpenProgress)
-        : overviewEaseOutCubic(rawOpenProgress);
-    const double topCropProgress = overviewTopCropProgress(rawOpenProgress, openProgress, closingAnimationRunning);
+    const double openProgress = overviewEaseInOutCubic(rawOpenProgress);
 
     g_pHyprRenderer->m_renderData.clipBox = monitorClip;
 
@@ -556,6 +542,12 @@ void CHyprspaceWidget::draw() {
     const double topReservedPixels = overviewTopReservedPixels(owner);
     const double previewSourceTopInset = std::max<double>(0.0, topReservedPixels - 1.0);
     const double previewSourceH = std::max<double>(120.0, owner->m_transformedSize.y - previewSourceTopInset);
+    const CBox morphSourceWorkspaceBox = CBox{
+        0,
+        previewSourceTopInset,
+        owner->m_transformedSize.x,
+        previewSourceH,
+    };
     const int workspaceRounding = overviewWorkspaceRounding(owner);
 
     const double visualCenterIndex = visualCenterWorkspaceIndex(workspaces);
@@ -650,6 +642,7 @@ void CHyprspaceWidget::draw() {
         int wsID = 0;
         PHLWORKSPACE ws;
         CBox box;
+        CBox backgroundBox;
         CBox inputBox;
         double monitorScaleForPreview = 1.0;
         double previewScale = 1.0;
@@ -705,10 +698,13 @@ void CHyprspaceWidget::draw() {
         }
 
         CBox workspaceBox = baseWorkspaceBoxes[index];
+        CBox backgroundBox = workspaceBox;
         workspaceBox.x += fractionalOffsetX;
+        backgroundBox.x += fractionalOffsetX;
         if (passiveTrailingPreview && passiveAppearProgress < 1.0F) {
             const double slide = owner->m_transformedSize.x * 0.035 * (1.0F - passiveAppearProgress);
             workspaceBox.x += slide;
+            backgroundBox.x += slide;
         }
 
         CBox baseInputBox = workspaceBox;
@@ -736,7 +732,8 @@ void CHyprspaceWidget::draw() {
                 // moving from the old workspace to the clicked one. The clicked
                 // preview therefore swipes toward the center and grows toward
                 // fullscreen in one combined GNOME-like motion.
-                workspaceBox = overviewLerpBox(fullWorkspaceBox, workspaceBox, openProgress);
+                backgroundBox = overviewLerpBox(fullWorkspaceBox, backgroundBox, openProgress);
+                workspaceBox = overviewLerpBox(morphSourceWorkspaceBox, workspaceBox, openProgress);
             } else {
                 const double sideExitProgress = overviewClamp01((rawOpenProgress - 0.30) / 0.70);
                 const double sideProgress = closingAnimationRunning
@@ -746,6 +743,7 @@ void CHyprspaceWidget::draw() {
                 CBox sideStartBox = workspaceBox;
                 sideStartBox.x += (directionFromTarget < 0 ? -slideDistance : slideDistance);
                 workspaceBox = overviewLerpBox(sideStartBox, workspaceBox, sideProgress);
+                backgroundBox = workspaceBox;
                 previewOpacity = static_cast<float>(sideProgress);
             }
         }
@@ -753,9 +751,10 @@ void CHyprspaceWidget::draw() {
         preview.wsID = wsID;
         preview.ws = ws;
         preview.box = workspaceBox;
+        preview.backgroundBox = backgroundBox;
         preview.previewScale = workspaceBox.w / std::max<double>(owner->m_transformedSize.x, 1.0);
         preview.monitorScaleForPreview = preview.previewScale * owner->m_scale;
-        preview.topInset = previewSourceTopInset * topCropProgress;
+        preview.topInset = previewSourceTopInset;
         preview.rounding = static_cast<int>(std::round(workspaceRounding * openProgress));
         preview.opacity = previewOpacity;
         preview.hovered = pointerOverWorkspace;
@@ -772,7 +771,8 @@ void CHyprspaceWidget::draw() {
     auto renderPreview = [&](const SWorkspacePreview& preview) {
         const auto ws = preview.ws;
         const CBox workspaceBox = overviewPixelSnappedBox(preview.box);
-        CBox visibleBounds = workspaceBox;
+        const CBox backgroundBox = overviewPixelSnappedBox(preview.backgroundBox);
+        CBox visibleBounds = backgroundBox;
         visibleBounds.x -= 48.0;
         visibleBounds.y -= 48.0;
         visibleBounds.w += 96.0;
@@ -812,23 +812,23 @@ void CHyprspaceWidget::draw() {
         if (preview.opacity <= 0.001F)
             return;
 
-        renderWorkspacePreviewShadow(owner, workspaceBox, preview.rounding, preview.opacity);
+        renderWorkspacePreviewShadow(owner, backgroundBox, preview.rounding, preview.opacity);
 
         float backgroundOpacity = preview.opacity;
         float tintOpacity = preview.opacity;
         if (preview.wsID == morphTargetWorkspaceID && (morphAnimationRunning || selectionAnimationRunning))
             tintOpacity *= static_cast<float>(openProgress);
 
-        const bool backgroundRendered = renderWorkspaceBackgroundTexture(owner, workspaceBox, workspaceBox, backgroundOpacity, preview.rounding, 2.0F);
+        const bool backgroundRendered = renderWorkspaceBackgroundTexture(owner, backgroundBox, backgroundBox, backgroundOpacity, preview.rounding, 2.0F);
 
         CHyprColor tintColor = preview.wsID == morphTargetWorkspaceID ? Config::workspaceActiveBackground : Config::workspaceInactiveBackground;
         tintColor.a = backgroundRendered
             ? std::max<float>(tintColor.a * tintOpacity, 0.10F * tintOpacity)
             : std::max<float>(tintColor.a * tintOpacity, 0.22F * tintOpacity);
-        renderRect(workspaceBox, tintColor, preview.rounding, 2.0F);
+        renderRect(backgroundBox, tintColor, preview.rounding, 2.0F);
 
         for (const auto& windowPreview : visibleWindows) {
-            renderWindowStubRoundedClip(windowPreview.window, owner, ws, windowPreview.box, workspaceBox, preview.rounding, time, preview.opacity, -1, 2.0F);
+            renderWindowStubRoundedClip(windowPreview.window, owner, ws, windowPreview.box, backgroundBox, preview.rounding, time, preview.opacity, -1, 2.0F);
         }
 
         workspaceBoxes.emplace_back(std::make_tuple(preview.wsID, preview.inputBox));
