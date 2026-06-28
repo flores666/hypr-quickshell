@@ -1296,6 +1296,13 @@ static SDispatchResult dispatchApplicationsInputReady(std::string) {
     return SDispatchResult{};
 }
 
+static SDispatchResult dispatchApplicationsInputNotReady(std::string) {
+    if (g_overviewApplicationsMode && isAnyOverviewActive())
+        g_overviewApplicationsInputReady = false;
+
+    return SDispatchResult{};
+}
+
 template <typename T>
 T getConfigValueOr(const std::string& name, const T& fallback) {
     const auto* value = HyprlandAPI::getConfigValue(pHandle, name);
@@ -1437,6 +1444,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE inHandle) {
     HyprlandAPI::addDispatcherV2(pHandle, "overview:prev", ::dispatchPrevOverview);
     HyprlandAPI::addDispatcherV2(pHandle, "overview:applications", ::dispatchApplicationsOverview);
     HyprlandAPI::addDispatcherV2(pHandle, "overview:applications-input-ready", ::dispatchApplicationsInputReady);
+    HyprlandAPI::addDispatcherV2(pHandle, "overview:applications-input-not-ready", ::dispatchApplicationsInputNotReady);
     HyprlandAPI::addDispatcherV2(pHandle, "qs-gnome-overview:toggle", ::dispatchToggleOverview);
     HyprlandAPI::addDispatcherV2(pHandle, "qs-gnome-overview:open", ::dispatchOpenOverview);
     HyprlandAPI::addDispatcherV2(pHandle, "qs-gnome-overview:close", ::dispatchCloseOverview);
@@ -1446,6 +1454,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE inHandle) {
     HyprlandAPI::addDispatcherV2(pHandle, "qs-gnome-overview:applications", ::dispatchApplicationsOverview);
     HyprlandAPI::addDispatcherV2(pHandle, "qs-gnome-overview:refresh-pointer", ::dispatchRefreshPointer);
     HyprlandAPI::addDispatcherV2(pHandle, "qs-gnome-overview:applications-input-ready", ::dispatchApplicationsInputReady);
+    HyprlandAPI::addDispatcherV2(pHandle, "qs-gnome-overview:applications-input-not-ready", ::dispatchApplicationsInputNotReady);
 
     g_pRenderHook = Event::bus()->m_events.render.stage.listen([](eRenderStage stage) { onRender(stage); });
 

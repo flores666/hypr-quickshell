@@ -74,7 +74,11 @@ class CHyprspaceWidget {
     static constexpr double APPLICATIONS_CLOSE_ANIMATION_SECONDS = 0.30;
     static constexpr double APPLICATIONS_RETURN_ANIMATION_SECONDS = 0.30;
     static constexpr double APPLICATIONS_CARD_PHASE_END = 0.48;
-    static constexpr double APPLICATIONS_FROM_OVERVIEW_START_PROGRESS = APPLICATIONS_CARD_PHASE_END;
+    // Raw overview progress whose eased value is APPLICATIONS_CARD_PHASE_END.
+    // It keeps the applications-enter animation on the same desktop-card
+    // position used by the mainMod applications-exit path.
+    static constexpr double APPLICATIONS_PREVIEW_RAW_PROGRESS = 0.19585484828218835;
+    static constexpr double APPLICATIONS_FROM_OVERVIEW_START_PROGRESS = APPLICATIONS_PREVIEW_RAW_PROGRESS;
     int workspaceSelectionFromID = 0;
     int workspaceSelectionToID = 0;
 

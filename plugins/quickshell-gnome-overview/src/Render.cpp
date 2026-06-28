@@ -871,9 +871,6 @@ void CHyprspaceWidget::drawApplicationsBackground() {
     if (!owner)
         return;
 
-    constexpr double OVERVIEW_OPEN_ANIMATION_SECONDS = 0.24;
-    constexpr double APPLICATIONS_PREVIEW_RAW_PROGRESS = 0.19585484828218835;
-
     auto setApplicationsRawProgress = [&](double rawProgress) {
         overviewAnimationStarted = true;
         overviewAnimationStartedAt = std::chrono::steady_clock::now() - std::chrono::duration_cast<std::chrono::steady_clock::duration>(

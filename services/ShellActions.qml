@@ -46,6 +46,8 @@ QtObject {
             return "qs-gnome-overview:refresh-pointer"
         if (action === "applications-input-ready")
             return "qs-gnome-overview:applications-input-ready"
+        if (action === "applications-input-not-ready")
+            return "qs-gnome-overview:applications-input-not-ready"
         return Services.ShellState.nativeWorkspaceOverviewToggleDispatcher
     }
 
@@ -65,6 +67,10 @@ QtObject {
 
     function notifyApplicationsInputReady() {
         nativeOverviewDispatch("applications-input-ready")
+    }
+
+    function notifyApplicationsInputNotReady() {
+        nativeOverviewDispatch("applications-input-not-ready")
     }
 
     function openWorkspaceOverview() {

@@ -576,7 +576,7 @@ void CHyprspaceWidget::startApplicationsTransitionFromOverview() {
 
     overviewAnimationStarted = true;
     overviewAnimationStartedAt = std::chrono::steady_clock::now() - std::chrono::duration_cast<std::chrono::steady_clock::duration>(
-        std::chrono::duration<double>(APPLICATIONS_OPEN_ANIMATION_SECONDS * APPLICATIONS_FROM_OVERVIEW_START_PROGRESS));
+        std::chrono::duration<double>(OVERVIEW_OPEN_ANIMATION_SECONDS * APPLICATIONS_FROM_OVERVIEW_START_PROGRESS));
 
     setOverviewCursor();
     g_pHyprRenderer->damageMonitor(owner);

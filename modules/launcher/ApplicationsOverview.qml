@@ -9,7 +9,8 @@ Scope {
 
     readonly property bool overviewActive: Services.ShellState.workspaceOverviewOpen && Services.ShellState.workspaceOverviewMode === "applications"
     readonly property bool closeRequested: Services.ShellState.applicationsOverviewClosing
-    readonly property bool inputActive: overviewActive && Services.ShellState.applicationsOverviewVisualLayerSettled && !closeRequested && !closingVisualActive
+    readonly property bool ownsInputCapture: Services.ShellState.inputCaptureOwner === "applicationsOverview"
+    readonly property bool inputActive: overviewActive && ownsInputCapture && Services.ShellState.applicationsOverviewVisualLayerSettled && !closeRequested && !closingVisualActive
     readonly property int inputTopMargin: 56
     readonly property int inputBottomMargin: 116
     readonly property int visualContentYOffset: 38
@@ -552,6 +553,27 @@ Scope {
         Services.ShellActions.notifyApplicationsInputReady();
     }
 
+    function notifyApplicationsInputNotReady() {
+        if (!inputReadyNotified)
+            return;
+
+        inputReadyNotified = false;
+        Services.ShellActions.notifyApplicationsInputNotReady();
+    }
+
+    function keepSearchFocusWhileOwned() {
+        if (!inputActive || !inputContent || !inputContent.searchField)
+            return;
+
+        if (inputContent.searchField.activeFocus) {
+            notifyApplicationsInputReadyWhenFocused();
+            return;
+        }
+
+        inputFocusAttemptsRemaining = Math.max(inputFocusAttemptsRemaining, 8);
+        inputFocusRetryTimer.restart();
+    }
+
     function clearSearchFocus() {
         if (inputContent)
             inputContent.clearSearchFocus();
@@ -780,7 +802,7 @@ Scope {
         if (inputActive)
             focusSearchFieldWhenReady();
         else {
-            inputReadyNotified = false;
+            notifyApplicationsInputNotReady();
             inputFocusAttemptsRemaining = 0;
             inputFocusRetryTimer.stop();
             clearSearchFocus();
@@ -813,6 +835,7 @@ Scope {
             if (!active)
                 clearSelection();
             rebuildSections(active);
+            Qt.callLater(root.keepSearchFocusWhileOwned);
         }
     }
 
@@ -918,6 +941,7 @@ Scope {
             var nextQuery = Services.ShellState.applicationsOverviewBufferedQuery;
             if (root.query !== nextQuery)
                 root.query = nextQuery;
+            Qt.callLater(root.keepSearchFocusWhileOwned);
         }
     }
 
@@ -1152,7 +1176,13 @@ Scope {
         Connections {
             target: inputContent.searchField
             function onActiveFocusChanged() {
-                root.notifyApplicationsInputReadyWhenFocused();
+                if (inputContent.searchField.activeFocus) {
+                    root.notifyApplicationsInputReadyWhenFocused();
+                    return;
+                }
+
+                root.notifyApplicationsInputNotReady();
+                Qt.callLater(root.keepSearchFocusWhileOwned);
             }
         }
 
