@@ -1016,9 +1016,9 @@ Scope {
 
         mask: Region {
             x: 0
-            y: 0
+            y: root.inputCaptureActive ? root.inputPanelMaskHeight : 0
             width: root.inputCaptureActive ? inputBlockerWindow.width : 0
-            height: root.inputCaptureActive ? inputBlockerWindow.height : 0
+            height: root.inputCaptureActive ? Math.max(0, inputBlockerWindow.height - root.inputPanelMaskHeight) : 0
         }
 
         MouseArea {
@@ -1149,6 +1149,7 @@ Scope {
             onQueryEdited: function (text) {
                 root.suppressPointerAfterKeyboardInput();
                 root.query = text;
+                Services.ShellActions.setApplicationsInputQuery(text);
             }
             pointerMovedCallback: function() { root.revealPointerAfterMouseMove(); }
             onMoveSelectionRequested: function(direction) {

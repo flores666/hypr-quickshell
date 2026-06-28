@@ -152,6 +152,37 @@ static std::string percentEncodeForOverviewEvent(const std::string& value) {
     return encoded;
 }
 
+static int overviewHexValue(char ch) {
+    if (ch >= '0' && ch <= '9')
+        return ch - '0';
+    if (ch >= 'A' && ch <= 'F')
+        return ch - 'A' + 10;
+    if (ch >= 'a' && ch <= 'f')
+        return ch - 'a' + 10;
+    return -1;
+}
+
+static std::string percentDecodeOverviewDispatcherArg(const std::string& value) {
+    std::string decoded;
+    decoded.reserve(value.size());
+
+    for (size_t i = 0; i < value.size(); ++i) {
+        if (value[i] == '%' && i + 2 < value.size()) {
+            const int hi = overviewHexValue(value[i + 1]);
+            const int lo = overviewHexValue(value[i + 2]);
+            if (hi >= 0 && lo >= 0) {
+                decoded.push_back(static_cast<char>((hi << 4) | lo));
+                i += 2;
+                continue;
+            }
+        }
+
+        decoded.push_back(value[i]);
+    }
+
+    return decoded;
+}
+
 static void notifyApplicationsBufferedQuery() {
     notifyQuickshellOverviewState("applications-query:" + percentEncodeForOverviewEvent(g_overviewApplicationsSearchBuffer));
 }
@@ -1303,6 +1334,13 @@ static SDispatchResult dispatchApplicationsInputNotReady(std::string) {
     return SDispatchResult{};
 }
 
+static SDispatchResult dispatchApplicationsSetQuery(std::string arg) {
+    if (g_overviewApplicationsMode && isAnyOverviewActive())
+        g_overviewApplicationsSearchBuffer = percentDecodeOverviewDispatcherArg(arg);
+
+    return SDispatchResult{};
+}
+
 template <typename T>
 T getConfigValueOr(const std::string& name, const T& fallback) {
     const auto* value = HyprlandAPI::getConfigValue(pHandle, name);
@@ -1445,6 +1483,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE inHandle) {
     HyprlandAPI::addDispatcherV2(pHandle, "overview:applications", ::dispatchApplicationsOverview);
     HyprlandAPI::addDispatcherV2(pHandle, "overview:applications-input-ready", ::dispatchApplicationsInputReady);
     HyprlandAPI::addDispatcherV2(pHandle, "overview:applications-input-not-ready", ::dispatchApplicationsInputNotReady);
+    HyprlandAPI::addDispatcherV2(pHandle, "overview:applications-set-query", ::dispatchApplicationsSetQuery);
     HyprlandAPI::addDispatcherV2(pHandle, "qs-gnome-overview:toggle", ::dispatchToggleOverview);
     HyprlandAPI::addDispatcherV2(pHandle, "qs-gnome-overview:open", ::dispatchOpenOverview);
     HyprlandAPI::addDispatcherV2(pHandle, "qs-gnome-overview:close", ::dispatchCloseOverview);
@@ -1455,6 +1494,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE inHandle) {
     HyprlandAPI::addDispatcherV2(pHandle, "qs-gnome-overview:refresh-pointer", ::dispatchRefreshPointer);
     HyprlandAPI::addDispatcherV2(pHandle, "qs-gnome-overview:applications-input-ready", ::dispatchApplicationsInputReady);
     HyprlandAPI::addDispatcherV2(pHandle, "qs-gnome-overview:applications-input-not-ready", ::dispatchApplicationsInputNotReady);
+    HyprlandAPI::addDispatcherV2(pHandle, "qs-gnome-overview:applications-set-query", ::dispatchApplicationsSetQuery);
 
     g_pRenderHook = Event::bus()->m_events.render.stage.listen([](eRenderStage stage) { onRender(stage); });
 

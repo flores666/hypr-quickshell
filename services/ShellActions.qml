@@ -48,6 +48,8 @@ QtObject {
             return "qs-gnome-overview:applications-input-ready"
         if (action === "applications-input-not-ready")
             return "qs-gnome-overview:applications-input-not-ready"
+        if (action === "applications-set-query")
+            return "qs-gnome-overview:applications-set-query"
         return Services.ShellState.nativeWorkspaceOverviewToggleDispatcher
     }
 
@@ -71,6 +73,10 @@ QtObject {
 
     function notifyApplicationsInputNotReady() {
         nativeOverviewDispatch("applications-input-not-ready")
+    }
+
+    function setApplicationsInputQuery(query) {
+        nativeOverviewDispatch("applications-set-query", encodeURIComponent(String(query || "")))
     }
 
     function openWorkspaceOverview() {
