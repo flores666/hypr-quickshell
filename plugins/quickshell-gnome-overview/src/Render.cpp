@@ -250,7 +250,7 @@ static bool renderApplicationsLayerBelowOverviewCard(PHLMONITOR owner, const CBo
                 continue;
 
             const CBox layerBox = overviewApplicationsLayerBox(owner, openProgress);
-            renderLayerSurfaceStub(layer, owner, layerBox, monitorClip, time, 1.0F);
+            renderLayerSurfaceTextureStub(layer, layerBox, monitorClip, 1.0F);
             return true;
         }
     }

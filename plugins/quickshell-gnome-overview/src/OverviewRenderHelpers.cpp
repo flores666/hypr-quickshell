@@ -3,13 +3,9 @@
 
 #include <hyprland/src/helpers/memory/Memory.hpp>
 #include <hyprland/src/render/pass/RectPassElement.hpp>
-#include <hyprland/src/render/pass/RendererHintsPassElement.hpp>
-#include <hyprland/src/render/pass/SurfacePassElement.hpp>
 #include <hyprland/src/render/pass/TexPassElement.hpp>
-#include <hyprutils/utils/ScopeGuard.hpp>
 
 #include <algorithm>
-#include <any>
 #include <cmath>
 
 static bool boxesIntersectForOverview(const CBox& a, const CBox& b) {
@@ -177,57 +173,15 @@ void renderWindowStubRoundedClip(PHLWINDOW pWindow, PHLMONITOR pMonitor, PHLWORK
 }
 
 void renderLayerSurfaceStub(PHLLS pLayer, PHLMONITOR pMonitor, CBox rectOverride, CBox clipBox, const Time::steady_tp& time, float alpha, int rounding, float roundingPower) {
-    if (!pLayer || !pMonitor) return;
+    (void)pMonitor;
+    (void)time;
 
-    if (!pLayer->m_mapped || pLayer->m_readyToDelete || !pLayer->m_layerSurface || !pLayer->wlSurface() || !pLayer->wlSurface()->resource()) return;
-
-    Vector2D oRealPosition = pLayer->m_realPosition->value();
-    Vector2D oSize = pLayer->m_realSize->value();
-
-    const float curScaling = rectOverride.w / (oSize.x);
-    if (!(curScaling > 0.F) || !(rectOverride.w > 0 && rectOverride.h > 0)) return;
-
-    Render::SRenderModifData renderModif;
-
-    renderModif.modifs.push_back(std::make_pair(Render::SRenderModifData::eRenderModifType::RMOD_TYPE_TRANSLATE, std::any(pMonitor->m_position + (rectOverride.pos() / curScaling) - oRealPosition)));
-    renderModif.modifs.push_back(std::make_pair(Render::SRenderModifData::eRenderModifType::RMOD_TYPE_SCALE, std::any(curScaling)));
-    renderModif.enabled = true;
-
-    g_pHyprRenderer->m_renderPass.add(makeUnique<CRendererHintsPassElement>(CRendererHintsPassElement::SData{.renderModif = renderModif}));
-    Hyprutils::Utils::CScopeGuard x([] {
-        g_pHyprRenderer->m_renderPass.add(makeUnique<CRendererHintsPassElement>(CRendererHintsPassElement::SData{.renderModif = Render::SRenderModifData{}}));
-    });
-
-    CSurfacePassElement::SRenderData renderdata = {pMonitor, time, oRealPosition};
-    renderdata.fadeAlpha = std::clamp(alpha, 0.F, 1.F);
-    renderdata.alpha = std::clamp(alpha, 0.F, 1.F);
-    renderdata.blur = false;
-    renderdata.surface = pLayer->wlSurface()->resource();
-    renderdata.decorate = false;
-    renderdata.w = oSize.x;
-    renderdata.h = oSize.y;
-    renderdata.pLS = pLayer;
-    renderdata.clipBox = clipBox;
-    renderdata.rounding = rounding;
-    renderdata.roundingPower = roundingPower;
-    renderdata.surfaceCounter = 0;
-
-    pLayer->wlSurface()->resource()->breadthfirst(
-        [&renderdata, &pLayer](SP<CWLSurfaceResource> s, const Vector2D& offset, void*) {
-            if (!s || !s->m_current.texture)
-                return;
-
-            if (s->m_current.size.x < 1 || s->m_current.size.y < 1)
-                return;
-
-            renderdata.localPos = offset;
-            renderdata.texture = s->m_current.texture;
-            renderdata.surface = s;
-            renderdata.mainSurface = s == pLayer->wlSurface()->resource();
-            g_pHyprRenderer->m_renderPass.add(makeUnique<CSurfacePassElement>(renderdata));
-            renderdata.surfaceCounter++;
-        },
-        &renderdata);
+    // Use a texture pass for layer-shell surfaces in overview. Hyprland's
+    // CSurfacePassElement can enter live-blur monitor-resource code even with
+    // blur disabled, and some builds crash there while the overview is changing
+    // workspaces. The texture pass is enough for wallpaper/applications layers
+    // and avoids that unstable path completely.
+    renderLayerSurfaceTextureStub(pLayer, rectOverride, clipBox, alpha, rounding, roundingPower);
 }
 
 void renderLayerSurfaceTextureStub(PHLLS pLayer, CBox rectOverride, CBox clipBox, float alpha, int rounding, float roundingPower) {
@@ -300,7 +254,7 @@ bool renderFullscreenBackground(PHLMONITOR pMonitor, const CBox& monitorClip, co
         if (!(layerSize.x > 1 && layerSize.y > 1))
             continue;
 
-        renderLayerSurfaceStub(layer, pMonitor, CBox{layerPos, layerSize}, monitorClip, time);
+        renderLayerSurfaceTextureStub(layer, CBox{layerPos, layerSize}, monitorClip);
         rendered = true;
     }
 
