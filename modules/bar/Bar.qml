@@ -35,9 +35,6 @@ PanelWindow {
         return popupsOpen;
     }
 
-    onPopupsOpenChanged: Services.ShellState.setTopbarPopupOpen(popupsOpen)
-    Component.onDestruction: Services.ShellState.setTopbarPopupOpen(false)
-
     function closePopups() {
         calendar.closePopup();
         mediaPlayer.closePopup();
@@ -46,7 +43,7 @@ PanelWindow {
     }
 
     function closeAllShellPopups() {
-        Services.ShellState.requestCloseShellPopups();
+        Services.ShellState.requestClosePopups("all");
     }
 
     function closePopupsFromOutside() {
@@ -67,13 +64,13 @@ PanelWindow {
 
     Component.onCompleted: {
         Hyprland.rawEvent.connect(handleHyprlandRawEvent);
-        Services.ShellState.setTopbarPopupOpen(popupsOpen);
     }
 
     Connections {
         target: Services.ShellState
-        function onCloseTopbarPopupsNonceChanged() {
-            root.closePopups();
+        function onClosePopupsNonceChanged() {
+            if (Services.ShellState.closePopupsScope === "all" || Services.ShellState.closePopupsScope === "topbar")
+                root.closePopups();
         }
     }
 
@@ -86,7 +83,7 @@ PanelWindow {
     Shortcut {
         sequence: "Esc"
         context: Qt.ApplicationShortcut
-        enabled: Services.ShellState.shellPopupOpen
+        enabled: Services.ShellState.hasActivePopup
         onActivated: root.closeAllShellPopups()
     }
 
@@ -152,7 +149,7 @@ PanelWindow {
             panelHeight: root.implicitHeight
             popupBaseX: barContent.x + x
             onPopupOpened: {
-                Services.ShellState.requestCloseAppDockPopups();
+                Services.ShellState.requestClosePopups("appDock");
                 mediaPlayer.closePopup();
                 keyboardLayout.closePopup();
                 systemStatus.closePopup();
@@ -172,7 +169,7 @@ PanelWindow {
             panelHeight: root.implicitHeight
             popupBaseX: barContent.x + x
             onPopupOpened: {
-                Services.ShellState.requestCloseAppDockPopups();
+                Services.ShellState.requestClosePopups("appDock");
                 calendar.closePopup();
                 keyboardLayout.closePopup();
                 systemStatus.closePopup();
@@ -192,7 +189,7 @@ PanelWindow {
             panelHeight: root.implicitHeight
             popupBaseX: barContent.x + x
             onPopupOpened: {
-                Services.ShellState.requestCloseAppDockPopups();
+                Services.ShellState.requestClosePopups("appDock");
                 calendar.closePopup();
                 mediaPlayer.closePopup();
                 systemStatus.closePopup();
@@ -211,7 +208,7 @@ PanelWindow {
             panelHeight: root.implicitHeight
             popupBaseX: barContent.x + x
             onPopupOpened: {
-                Services.ShellState.requestCloseAppDockPopups();
+                Services.ShellState.requestClosePopups("appDock");
                 calendar.closePopup();
                 mediaPlayer.closePopup();
                 keyboardLayout.closePopup();

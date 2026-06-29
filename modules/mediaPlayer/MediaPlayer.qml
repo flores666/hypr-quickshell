@@ -354,15 +354,17 @@ Item {
             return;
 
         popupOpen = true;
+        Services.ShellState.openPopup("mediaPopup", "topbar");
         popupOpened();
     }
 
     function closePopup() {
         popupOpen = false;
+        Services.ShellState.closePopup("mediaPopup");
     }
 
     function closeStalePlayerIfNoSources() {
-        Services.ShellState.requestCloseShellPopups();
+        Services.ShellState.requestClosePopups("all");
         if (playersList().length > 0)
             return;
 
@@ -382,7 +384,7 @@ Item {
     }
 
     function togglePopup() {
-        Services.ShellState.requestCloseAppDockPopups();
+        Services.ShellState.requestClosePopups("appDock");
         if (popupOpen)
             closePopup();
         else

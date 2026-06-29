@@ -36,8 +36,8 @@ PopupWindow {
     Shortcut {
         sequence: "Esc"
         context: Qt.ApplicationShortcut
-        enabled: Services.ShellState.shellPopupOpen
-        onActivated: Services.ShellState.requestCloseShellPopups()
+        enabled: Services.ShellState.hasActivePopup
+        onActivated: Services.ShellState.requestClosePopups("all")
     }
 
     Components.AnimatedPopupState {

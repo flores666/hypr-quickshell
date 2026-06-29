@@ -81,6 +81,7 @@ Item {
 
     function openPopup() {
         popupOpen = true;
+        Services.ShellState.openPopup("systemStatusPopup", "topbar");
         Services.SystemStatus.preparePopupOpen();
         popupOpened();
         deferredOpenRefresh.restart();
@@ -88,10 +89,11 @@ Item {
 
     function closePopup() {
         popupOpen = false;
+        Services.ShellState.closePopup("systemStatusPopup");
     }
 
     function togglePopup() {
-        Services.ShellState.requestCloseAppDockPopups();
+        Services.ShellState.requestClosePopups("appDock");
         if (popupOpen)
             closePopup();
         else
@@ -180,7 +182,7 @@ Item {
                 if (mouse.button === Qt.LeftButton)
                     root.togglePopup();
                 else
-                    Services.ShellState.requestCloseShellPopups();
+                    Services.ShellState.requestClosePopups("all");
                 mouse.accepted = true;
             }
         }

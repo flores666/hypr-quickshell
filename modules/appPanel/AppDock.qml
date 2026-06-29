@@ -58,7 +58,7 @@ PanelWindow {
     }
 
     function showDock() {
-        Services.ShellState.requestCloseTopbarPopups();
+        Services.ShellState.requestClosePopups("topbar");
         hideTimer.stop();
         var wasShown = dockShown;
         dockShown = true;
@@ -105,8 +105,11 @@ PanelWindow {
         }
     }
 
-    Component.onCompleted: Services.ShellState.setAppDockPopupOpen(appPanel.shellPopupOpen)
-    Component.onDestruction: Services.ShellState.setAppDockPopupOpen(false)
+    Component.onCompleted: {
+        if (appPanel.dockPopupSurfaceOpen)
+            Services.ShellState.openPopup("appDock", "appDock");
+    }
+    Component.onDestruction: Services.ShellState.closePopup("appDock")
 
 
     Connections {
@@ -213,8 +216,11 @@ PanelWindow {
             }
 
             onPopupOpened: root.showDock()
-            onShellPopupOpenChanged: {
-                Services.ShellState.setAppDockPopupOpen(shellPopupOpen);
+            onDockPopupSurfaceOpenChanged: {
+                if (dockPopupSurfaceOpen)
+                    Services.ShellState.openPopup("appDock", "appDock");
+                else
+                    Services.ShellState.closePopup("appDock");
             }
 
             onPopupOpenChanged: {

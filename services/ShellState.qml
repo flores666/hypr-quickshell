@@ -40,41 +40,87 @@ QtObject {
     property int overviewWorkspaceCount: 1
     property string activeSpecialWorkspaceName: ""
     property string focusedAddress: ""
-    property int closeTopbarPopupsNonce: 0
-    property int closeAppDockPopupsNonce: 0
-    property bool topbarPopupOpen: false
-    property bool appDockPopupOpen: false
-    readonly property bool shellPopupOpen: topbarPopupOpen || appDockPopupOpen
+    property int closePopupsNonce: 0
+    property string closePopupsScope: "all"
+    property string activePopupOwner: ""
+    property string activePopupGroup: ""
     property string activeModalLayer: ""
     property string inputCaptureOwner: ""
+    readonly property bool hasActivePopup: activePopupOwner.length > 0
     readonly property bool inputCaptured: inputCaptureOwner.length > 0
-    readonly property bool anyOverlayOpen: workspaceOverviewOpen || applicationsOverviewClosing || shellPopupOpen || inputCaptured
+    readonly property bool anyOverlayOpen: workspaceOverviewOpen || applicationsOverviewClosing || hasActivePopup || inputCaptured
 
 
-    function requestCloseTopbarPopups() {
-        closeTopbarPopupsNonce += 1;
+    function normalizePopupGroup(group) {
+        var normalized = String(group || "all").trim();
+        return normalized.length > 0 ? normalized : "all";
     }
 
-    function requestCloseAppDockPopups() {
-        closeAppDockPopupsNonce += 1;
+    function popupMatchesScope(scope) {
+        var normalized = normalizePopupGroup(scope);
+        return normalized === "all" || activePopupGroup === normalized || activePopupOwner === normalized;
     }
 
-    function requestCloseShellPopups() {
-        closeTopbarPopupsNonce += 1;
-        closeAppDockPopupsNonce += 1;
+    function requestClosePopupOwner(owner) {
+        var normalized = String(owner || "").trim();
+        if (normalized.length === 0)
+            return;
+
+        closePopupsScope = normalized;
+        closePopupsNonce += 1;
+    }
+
+    function openPopup(owner, group) {
+        var nextOwner = String(owner || "").trim();
+        if (nextOwner.length === 0)
+            return;
+
+        var nextGroup = normalizePopupGroup(group || "topbar");
+        if (activePopupOwner.length > 0 && activePopupOwner !== nextOwner)
+            requestClosePopupOwner(activePopupOwner);
+
+        if (activePopupOwner !== nextOwner)
+            activePopupOwner = nextOwner;
+        if (activePopupGroup !== nextGroup)
+            activePopupGroup = nextGroup;
+        syncActiveModalLayer();
+    }
+
+    function closePopup(owner) {
+        var normalized = String(owner || "").trim();
+        if (normalized.length === 0 || normalized !== activePopupOwner)
+            return;
+
+        activePopupOwner = "";
+        activePopupGroup = "";
+        syncActiveModalLayer();
+    }
+
+    function closeCurrentPopup() {
+        if (activePopupOwner.length === 0)
+            return;
+
+        activePopupOwner = "";
+        activePopupGroup = "";
+        syncActiveModalLayer();
+    }
+
+    function requestClosePopups(scope) {
+        closePopupsScope = normalizePopupGroup(scope);
+        closePopupsNonce += 1;
+        if (popupMatchesScope(closePopupsScope))
+            closeCurrentPopup();
     }
 
     function modalLayerForCurrentState() {
         if (inputCaptureOwner.length > 0)
             return inputCaptureOwner;
+        if (activePopupOwner.length > 0)
+            return activePopupOwner;
         if (applicationsOverviewActive)
             return "applicationsOverview";
         if (workspaceOverviewOnlyOpen)
             return "workspaceOverview";
-        if (topbarPopupOpen)
-            return "topbarPopup";
-        if (appDockPopupOpen)
-            return "appDockPopup";
         return "";
     }
 
@@ -90,20 +136,6 @@ QtObject {
             return;
         if (inputCaptureOwner !== nextOwner)
             inputCaptureOwner = nextOwner;
-        syncActiveModalLayer();
-    }
-
-    function setTopbarPopupOpen(value) {
-        var next = !!value;
-        if (topbarPopupOpen !== next)
-            topbarPopupOpen = next;
-        syncActiveModalLayer();
-    }
-
-    function setAppDockPopupOpen(value) {
-        var next = !!value;
-        if (appDockPopupOpen !== next)
-            appDockPopupOpen = next;
         syncActiveModalLayer();
     }
 

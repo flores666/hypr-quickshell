@@ -17,7 +17,7 @@ Item {
     property bool bottomDock: false
     readonly property real popupGap: 2
     readonly property bool popupOpen: contextOpen || workspaceMenuOpen || contextSwitchPending || contextRenderVisible
-    readonly property bool shellPopupOpen: popupOpen || tooltipOpen
+    readonly property bool dockPopupSurfaceOpen: popupOpen || tooltipOpen
     property bool contextOpen: false
     property bool contextRenderVisible: false
     property bool contextSwitchPending: false
@@ -71,16 +71,18 @@ Item {
 
     Connections {
         target: Services.ShellState
-        function onCloseAppDockPopupsNonceChanged() {
-            root.closePopup();
+        function onClosePopupsNonceChanged() {
+            var scope = Services.ShellState.closePopupsScope;
+            if (scope === "all" || scope === "appDock")
+                root.closePopup();
         }
     }
 
     Shortcut {
         sequence: "Esc"
         context: Qt.ApplicationShortcut
-        enabled: Services.ShellState.shellPopupOpen
-        onActivated: Services.ShellState.requestCloseShellPopups()
+        enabled: Services.ShellState.hasActivePopup
+        onActivated: Services.ShellState.requestClosePopups("all")
     }
 
     HoverHandler {
@@ -1554,6 +1556,7 @@ Item {
     }
 
     function openContextMenu(item, localCenterX) {
+        Services.ShellState.requestClosePopups("applications");
         hideTooltip();
         workspaceMenuOpen = false;
         workspaceMenuHovered = false;
@@ -1826,7 +1829,7 @@ Item {
                 onEntered: root.hideTooltip()
                 onClicked: function(mouse) {
                     root.closePopup();
-                    Services.ShellState.requestCloseTopbarPopups();
+                    Services.ShellState.requestClosePopups("topbar");
                     Services.ShellActions.toggleApplicationsOverview();
                     mouse.accepted = true;
                 }
@@ -2107,8 +2110,8 @@ Item {
         Shortcut {
             sequence: "Esc"
             context: Qt.ApplicationShortcut
-            enabled: Services.ShellState.shellPopupOpen
-            onActivated: Services.ShellState.requestCloseShellPopups()
+            enabled: Services.ShellState.hasActivePopup
+            onActivated: Services.ShellState.requestClosePopups("all")
         }
 
         Components.AnimatedPopupState {
@@ -2249,7 +2252,7 @@ Item {
 
             Components.GlassPanel {
                 anchors.fill: parent
-                radiusSize: 16
+                radiusSize: 18
                 glassColor: "#98000000"
                 clip: true
                 antialiasing: true

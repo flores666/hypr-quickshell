@@ -28,7 +28,7 @@ Item {
     readonly property real dockBelowHeight: Math.max(1, -dockPopupBottomY)
 
     function closeFromOutside(mouse) {
-        Services.ShellState.requestCloseShellPopups();
+        Services.ShellState.requestClosePopups("all");
         if (controller)
             controller.closePopup();
 

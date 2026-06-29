@@ -36,16 +36,18 @@ Item {
 
     function openPopup() {
         popupOpen = true;
+        Services.ShellState.openPopup("keyboardLayoutPopup", "topbar");
         Services.KeyboardLayoutService.requestLayouts();
         popupOpened();
     }
 
     function closePopup() {
         popupOpen = false;
+        Services.ShellState.closePopup("keyboardLayoutPopup");
     }
 
     function togglePopup() {
-        Services.ShellState.requestCloseAppDockPopups();
+        Services.ShellState.requestClosePopups("appDock");
         if (popupOpen)
             closePopup();
         else
@@ -124,7 +126,7 @@ Item {
                 if (mouse.button === Qt.LeftButton)
                     root.togglePopup();
                 else
-                    Services.ShellState.requestCloseShellPopups();
+                    Services.ShellState.requestClosePopups("all");
                 mouse.accepted = true;
             }
         }

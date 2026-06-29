@@ -751,18 +751,20 @@ Scope {
     function openContextMenu(app, x, y) {
         if (!app || !app.desktopId)
             return;
+        Services.ShellState.requestClosePopups("all");
         contextApp = app;
         contextActions = appContextActions(app);
         contextMenuX = clampContextX(x + 8);
         contextMenuY = clampContextY(y + 8);
         contextMenuOpen = true;
-        Services.ShellState.requestCloseTopbarPopups();
+        Services.ShellState.openPopup("launcherContextMenu", "applications");
     }
 
     function closeContextMenu() {
         contextMenuOpen = false;
         contextActions = [];
         contextApp = ({});
+        Services.ShellState.closePopup("launcherContextMenu");
     }
 
     function runContextAction(action) {
@@ -819,7 +821,7 @@ Scope {
     function handleAppPressed(app, button) {
         clearPointerSuppression();
         closeContextMenu();
-        Services.ShellState.requestCloseTopbarPopups();
+        Services.ShellState.requestClosePopups("all");
         if (inputContent)
             inputContent.forceSearchFocus();
         var key = appKey(app);
@@ -848,7 +850,10 @@ Scope {
     onApplicationsInputCaptureRequiredChanged: setApplicationsInputCapture(applicationsInputCaptureRequired)
 
     Component.onCompleted: setApplicationsInputCapture(applicationsInputCaptureRequired)
-    Component.onDestruction: Services.ShellState.setInputCaptureOwner("applicationsOverview", false)
+    Component.onDestruction: {
+        root.closeContextMenu();
+        Services.ShellState.setInputCaptureOwner("applicationsOverview", false);
+    }
 
     onApplicationsClosingChanged: {
         if (applicationsClosing && (applicationsOpen || applicationsRendering))
@@ -971,6 +976,12 @@ Scope {
                 root.query = nextQuery;
             Qt.callLater(root.keepSearchFocusWhileOwned);
         }
+
+        function onClosePopupsNonceChanged() {
+            var scope = Services.ShellState.closePopupsScope;
+            if (scope === "all" || scope === "applications" || scope === "launcherContextMenu")
+                root.closeContextMenu();
+        }
     }
 
 
@@ -1064,7 +1075,7 @@ Scope {
                     return;
                 root.closeContextMenu();
                 inputContent.forceSearchFocus();
-                Services.ShellState.requestCloseTopbarPopups();
+                Services.ShellState.requestClosePopups("all");
             }
 
             onPressed: function(mouse) {
@@ -1132,7 +1143,7 @@ Scope {
                     return;
                 root.closeContextMenu();
                 inputContent.forceSearchFocus();
-                Services.ShellState.requestCloseTopbarPopups();
+                Services.ShellState.requestClosePopups("all");
             }
 
             onPressed: function(mouse) {
@@ -1228,9 +1239,8 @@ Scope {
                 width: root.contextMenuWidth
                 height: contextColumn.implicitHeight + 12
                 radius: 18
-                color: "#ef111821"
-                border.width: 1
-                border.color: "#2effffff"
+                color: "#98000000"
+                border.width: 0
                 antialiasing: true
 
                 Column {

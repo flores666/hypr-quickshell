@@ -78,15 +78,17 @@ Item {
     function openPopup() {
         visibleMonth = new Date(now.getFullYear(), now.getMonth(), 1);
         popupOpen = true;
+        Services.ShellState.openPopup("calendarPopup", "topbar");
         popupOpened();
     }
 
     function closePopup() {
         popupOpen = false;
+        Services.ShellState.closePopup("calendarPopup");
     }
 
     function togglePopup() {
-        Services.ShellState.requestCloseAppDockPopups();
+        Services.ShellState.requestClosePopups("appDock");
         if (popupOpen)
             closePopup();
         else
@@ -174,7 +176,7 @@ Item {
                 if (mouse.button === Qt.LeftButton)
                     root.togglePopup();
                 else
-                    Services.ShellState.requestCloseShellPopups();
+                    Services.ShellState.requestClosePopups("all");
                 mouse.accepted = true;
             }
         }
@@ -205,8 +207,8 @@ Item {
         Shortcut {
             sequence: "Esc"
             context: Qt.ApplicationShortcut
-            enabled: Services.ShellState.shellPopupOpen
-            onActivated: Services.ShellState.requestCloseShellPopups()
+            enabled: Services.ShellState.hasActivePopup
+            onActivated: Services.ShellState.requestClosePopups("all")
         }
 
         Components.AnimatedPopupState {
