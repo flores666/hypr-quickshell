@@ -3,6 +3,7 @@ import Quickshell.Wayland
 import QtQuick
 import QtQuick.Layouts
 import "../../services" as Services
+import "../../components" as Components
 
 Scope {
     id: root
@@ -1232,25 +1233,13 @@ Scope {
             visible: root.contextMenuOpen && root.applicationsInputInteractive
             z: 10000
 
-            Rectangle {
+            Components.PopupGlassSurface {
                 id: contextMenu
                 x: Math.round(root.contextMenuX)
                 y: Math.round(root.contextMenuY)
                 width: root.contextMenuWidth
                 height: contextColumn.implicitHeight + 12
-                radius: 18
-                color: "#98000000"
-                border.width: 0
-                antialiasing: true
-
-                TapHandler {
-                    acceptedButtons: Qt.AllButtons
-                    onPressedChanged: {
-                        if (pressed)
-                            Services.ShellState.suppressNextExternalPointerClose();
-                    }
-                }
-
+                radiusSize: 18
                 Column {
                     id: contextColumn
                     anchors {
@@ -1310,6 +1299,8 @@ Scope {
                         }
                     }
                 }
+
+                Components.PopupInteractionBoundary { }
             }
         }
 

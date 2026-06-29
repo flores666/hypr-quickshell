@@ -204,19 +204,11 @@ Item {
         color: "transparent"
         surfaceFormat.opaque: false
 
-        Shortcut {
-            sequence: "Esc"
-            context: Qt.ApplicationShortcut
-            enabled: Services.ShellState.hasActivePopup
-            onActivated: Services.ShellState.requestClosePopups("all")
-        }
+        Components.PopupEscapeShortcut { }
 
-        Components.AnimatedPopupState {
+        Components.PopupAnimatedState {
             id: popupState
             targetVisible: root.popupOpen
-            openDuration: motion.popupOpenDuration
-            closeDuration: motion.popupCloseDuration
-            closeSafetyDelay: motion.popupCloseDuration + 55
         }
 
         Item {
@@ -229,17 +221,7 @@ Item {
             enabled: root.popupOpen && popupState.reveal > 0.45
             layer.enabled: popupState.reveal > 0.001 && popupState.reveal < 0.999
             layer.smooth: true
-
-        TapHandler {
-            acceptedButtons: Qt.AllButtons
-            onPressedChanged: {
-                if (pressed)
-                    Services.ShellState.suppressNextExternalPointerClose();
-            }
-        }
-
-
-            Components.GlassPanel {
+            Components.PopupGlassSurface {
                 id: panel
                 anchors.fill: parent
                 radiusSize: 18
@@ -450,6 +432,8 @@ Item {
                     }
                 }
             }
+
+            Components.PopupInteractionBoundary { }
         }
     }
 }

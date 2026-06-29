@@ -78,12 +78,7 @@ Item {
         }
     }
 
-    Shortcut {
-        sequence: "Esc"
-        context: Qt.ApplicationShortcut
-        enabled: Services.ShellState.hasActivePopup
-        onActivated: Services.ShellState.requestClosePopups("all")
-    }
+    Components.PopupEscapeShortcut { }
 
     HoverHandler {
         id: rootHover
@@ -2107,19 +2102,11 @@ Item {
         color: "transparent"
         surfaceFormat.opaque: false
 
-        Shortcut {
-            sequence: "Esc"
-            context: Qt.ApplicationShortcut
-            enabled: Services.ShellState.hasActivePopup
-            onActivated: Services.ShellState.requestClosePopups("all")
-        }
+        Components.PopupEscapeShortcut { }
 
-        Components.AnimatedPopupState {
+        Components.PopupAnimatedState {
             id: popupState
             targetVisible: root.contextOpen
-            openDuration: motion.popupOpenDuration
-            closeDuration: motion.popupCloseDuration
-            closeSafetyDelay: motion.popupCloseDuration + 55
             onRenderVisibleChanged: root.contextRenderVisible = renderVisible
             onClosed: {
                 root.contextRenderVisible = false;
@@ -2141,16 +2128,7 @@ Item {
             enabled: root.contextOpen && popupState.reveal > 0.45
             layer.enabled: popupState.reveal > 0.001 && popupState.reveal < 0.999
             layer.smooth: true
-
-            TapHandler {
-                acceptedButtons: Qt.AllButtons
-                onPressedChanged: {
-                    if (pressed)
-                        Services.ShellState.suppressNextExternalPointerClose();
-                }
-            }
-
-            Components.GlassPanel {
+            Components.PopupGlassSurface {
                 anchors.fill: parent
                 radiusSize: 18
                 glassColor: "#98000000"
@@ -2239,6 +2217,8 @@ Item {
                     }
                 }
             }
+
+            Components.PopupInteractionBoundary { }
         }
     }
 
@@ -2257,16 +2237,7 @@ Item {
             anchors.fill: parent
             clip: true
             enabled: root.workspaceMenuOpen && root.contextOpen
-
-            TapHandler {
-                acceptedButtons: Qt.AllButtons
-                onPressedChanged: {
-                    if (pressed)
-                        Services.ShellState.suppressNextExternalPointerClose();
-                }
-            }
-
-            Components.GlassPanel {
+            Components.PopupGlassSurface {
                 anchors.fill: parent
                 radiusSize: 18
                 glassColor: "#98000000"
@@ -2342,6 +2313,7 @@ Item {
                     }
                 }
             }
+
         }
     }
 
@@ -2356,12 +2328,9 @@ Item {
         color: "transparent"
         surfaceFormat.opaque: false
 
-        Components.AnimatedPopupState {
+        Components.PopupAnimatedState {
             id: tooltipState
             targetVisible: root.tooltipOpen && !root.contextOpen
-            openDuration: motion.popupOpenDuration
-            closeDuration: motion.popupCloseDuration
-            closeSafetyDelay: motion.popupCloseDuration + 55
         }
 
         Item {

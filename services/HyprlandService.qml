@@ -18,6 +18,7 @@ Item {
     property bool compactWorkspaceQueued: false
 
     property string pendingExternalPointerCloseOwner: ""
+    property int pendingExternalPointerCloseSerial: 0
 
     function queueExternalPointerClose() {
         var owner = String(Services.ShellState.activePopupOwner || "").trim();
@@ -25,6 +26,7 @@ Item {
             return;
 
         pendingExternalPointerCloseOwner = owner;
+        pendingExternalPointerCloseSerial = Services.ShellState.beginExternalPointerClose(owner);
         externalPointerCloseTimer.restart();
     }
 
@@ -452,12 +454,14 @@ Item {
 
     Timer {
         id: externalPointerCloseTimer
-        interval: 18
+        interval: 64
         repeat: false
         onTriggered: {
             var owner = service.pendingExternalPointerCloseOwner;
+            var serial = service.pendingExternalPointerCloseSerial;
             service.pendingExternalPointerCloseOwner = "";
-            Services.ShellState.commitExternalPointerClose(owner);
+            service.pendingExternalPointerCloseSerial = 0;
+            Services.ShellState.commitExternalPointerClose(owner, serial);
         }
     }
 

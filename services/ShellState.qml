@@ -45,7 +45,8 @@ QtObject {
     property string activePopupOwner: ""
     property string activePopupGroup: ""
     property string pendingExternalPointerCloseOwner: ""
-    property bool externalPointerCloseSuppressed: false
+    property int externalPointerCloseSerial: 0
+    property int suppressedExternalPointerCloseSerial: 0
     property string activeModalLayer: ""
     property string inputCaptureOwner: ""
     readonly property bool hasActivePopup: activePopupOwner.length > 0
@@ -114,18 +115,27 @@ QtObject {
             closeCurrentPopup();
     }
 
-    function suppressNextExternalPointerClose() {
-        externalPointerCloseSuppressed = true;
+    function beginExternalPointerClose(owner) {
+        var normalized = String(owner || "").trim();
+        pendingExternalPointerCloseOwner = normalized;
+        externalPointerCloseSerial += 1;
+        return externalPointerCloseSerial;
     }
 
-    function commitExternalPointerClose(owner) {
+    function suppressCurrentExternalPointerClose() {
+        if (externalPointerCloseSerial > 0)
+            suppressedExternalPointerCloseSerial = externalPointerCloseSerial;
+    }
+
+    function commitExternalPointerClose(owner, serial) {
         var normalized = String(owner || "").trim();
+        var closeSerial = Number(serial || 0);
         pendingExternalPointerCloseOwner = "";
-        if (normalized.length === 0)
+        if (normalized.length === 0 || closeSerial <= 0)
             return;
 
-        if (externalPointerCloseSuppressed) {
-            externalPointerCloseSuppressed = false;
+        if (suppressedExternalPointerCloseSerial === closeSerial) {
+            suppressedExternalPointerCloseSerial = 0;
             return;
         }
 

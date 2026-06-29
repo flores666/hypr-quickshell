@@ -33,24 +33,16 @@ PopupWindow {
     color: "transparent"
     surfaceFormat.opaque: false
 
-    Shortcut {
-        sequence: "Esc"
-        context: Qt.ApplicationShortcut
-        enabled: Services.ShellState.hasActivePopup
-        onActivated: Services.ShellState.requestClosePopups("all")
-    }
+    Components.PopupEscapeShortcut { }
 
     onTargetVisibleChanged: {
         if (targetVisible)
             Services.KeyboardLayoutService.requestLayouts();
     }
 
-    Components.AnimatedPopupState {
+    Components.PopupAnimatedState {
         id: popupState
         targetVisible: root.targetVisible
-        openDuration: motion.popupOpenDuration
-        closeDuration: motion.popupCloseDuration
-        closeSafetyDelay: motion.popupCloseDuration + 55
     }
 
     Components.AnimationTokens { id: motion }
@@ -65,17 +57,7 @@ PopupWindow {
         enabled: root.targetVisible && root.reveal > 0.45
         layer.enabled: root.reveal > 0.001 && root.reveal < 0.999
         layer.smooth: true
-
-        TapHandler {
-            acceptedButtons: Qt.AllButtons
-            onPressedChanged: {
-                if (pressed)
-                    Services.ShellState.suppressNextExternalPointerClose();
-            }
-        }
-
-
-        Components.GlassPanel {
+        Components.PopupGlassSurface {
             id: panel
             anchors.fill: parent
             radiusSize: 18
@@ -199,5 +181,7 @@ PopupWindow {
                 }
             }
         }
+
+        Components.PopupInteractionBoundary { }
     }
 }

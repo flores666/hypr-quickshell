@@ -83,12 +83,7 @@ PanelWindow {
         repeat: false
     }
 
-    Shortcut {
-        sequence: "Esc"
-        context: Qt.ApplicationShortcut
-        enabled: Services.ShellState.hasActivePopup
-        onActivated: root.closeAllShellPopups()
-    }
+    Components.PopupEscapeShortcut { }
 
     Components.GlassPanel {
         id: background
