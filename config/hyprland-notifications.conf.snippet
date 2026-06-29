@@ -1,5 +1,5 @@
-# Blur для системных уведомлений.
-# Используется тот же синтаксис, что и для quickshell taskbar.
+# Notification layer rules.
+# Compositor blur is disabled for stability on Hyprland 0.55.x.
+# The crash reports point to CSurfacePassElement::needsLiveBlur()/CMonitor::useFP16().
 
-layerrule = blur true, match:namespace notifications
 layerrule = ignore_alpha 0.2, match:namespace notifications

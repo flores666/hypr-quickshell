@@ -26,7 +26,7 @@ PanelWindow {
     color: "transparent"
     surfaceFormat.opaque: false
 
-    WlrLayershell.namespace: "quickshell:launcher"
+    WlrLayershell.namespace: "quickshell:legacy-launcher"
     WlrLayershell.layer: WlrLayer.Overlay
 
     Components.GlassPanel {

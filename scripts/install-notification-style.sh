@@ -153,7 +153,7 @@ write_hypr_blur_snippet() {
 # Blur для системных уведомлений.
 # Используется тот же синтаксис, что и для quickshell taskbar.
 
-layerrule = blur true, match:namespace notifications
+# disabled for stability: layerrule = blur true, match:namespace notifications
 layerrule = ignore_alpha 0.2, match:namespace notifications
 EOF
 }

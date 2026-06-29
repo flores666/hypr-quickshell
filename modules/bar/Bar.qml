@@ -26,7 +26,7 @@ PanelWindow {
     color: "transparent"
     surfaceFormat.opaque: false
 
-    WlrLayershell.namespace: "quickshell:taskbar"
+    WlrLayershell.namespace: "quickshell:bar"
     WlrLayershell.layer: WlrLayer.Top
 
     exclusiveZone: 40

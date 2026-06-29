@@ -91,7 +91,7 @@ plugin {
         overrideGaps = false
         autoDrag = false
         disableGestures = true
-        disableBlur = false
+        disableBlur = true
         exitOnClick = true
         exitOnSwitch = true
         exitKey = Escape

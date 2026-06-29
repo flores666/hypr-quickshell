@@ -1,26 +1,19 @@
-# Start quickshell for current user.
+# Start hypr-quickshell for current user.
 exec-once = sh -lc 'qs -p "$HOME/hypr-quickshell/shell.qml"'
 
-# Blur for quickshell topbar, dock and popups.
-# Both topbar and app dock reuse the quickshell:taskbar namespace.
+# Runtime stability guard for Hyprland 0.55.x live-blur crashes.
+# Keep transparency in QML itself; compositor layer blur is intentionally disabled.
+# Do not add layerrule = blur ... for Quickshell layer surfaces here.
 
-layerrule = blur true, match:namespace quickshell:taskbar
-layerrule = blur_popups true, match:namespace quickshell:taskbar
+# Quickshell layer alpha rules. Both old and new namespaces are kept so this
+# snippet is safe across the pre-hardening and post-hardening QML namespace sets.
 layerrule = ignore_alpha 0.2, match:namespace quickshell:taskbar
-
-# Additional panels:
-layerrule = blur true, match:namespace quickshell:tray-panel
-layerrule = blur_popups true, match:namespace quickshell:tray-panel
 layerrule = ignore_alpha 0.2, match:namespace quickshell:tray-panel
-
-layerrule = blur true, match:namespace quickshell:launcher
-layerrule = blur_popups true, match:namespace quickshell:launcher
 layerrule = ignore_alpha 0.2, match:namespace quickshell:launcher
-
-# Stable explicit overview/application binds.
-# На ноуте одиночный SUPER отключён в plugin config, чтобы SUPER+A не закрывал панель при отпускании SUPER.
+layerrule = ignore_alpha 0.2, match:namespace quickshell:bar
+layerrule = ignore_alpha 0.2, match:namespace quickshell:app-dock
+layerrule = ignore_alpha 0.2, match:namespace quickshell:tray
+layerrule = ignore_alpha 0.2, match:namespace quickshell:legacy-launcher
 
 # hypr-quickshell explicit binds.
-# mainMod alone is handled by the plugin through mainModToggle=true.
 bind = $mainMod, A, qs-gnome-overview:applications
-bind = $mainMod, TAB, qs-gnome-overview:toggle

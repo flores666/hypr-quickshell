@@ -4,7 +4,6 @@
 #include <hyprland/src/helpers/memory/Memory.hpp>
 #include <hyprland/src/render/pass/RectPassElement.hpp>
 #include <hyprland/src/render/pass/TexPassElement.hpp>
-
 #include <algorithm>
 #include <cmath>
 
@@ -41,13 +40,13 @@ void renderRect(CBox box, CHyprColor color, int rounding, float roundingPower) {
 }
 
 void renderRectWithBlur(CBox box, CHyprColor color, int rounding, float roundingPower) {
-    CRectPassElement::SRectData rectdata;
-    rectdata.color = color;
-    rectdata.box = box;
-    rectdata.round = rounding;
-    rectdata.roundingPower = roundingPower;
-    rectdata.blur = true;
-    g_pHyprRenderer->m_renderPass.add(makeUnique<CRectPassElement>(rectdata));
+    // Stability mode: never request compositor live blur from the plugin.
+    // On affected Hyprland 0.55.x builds with AMD iGPU this can crash in
+    // CMonitor::useFP16()/getBlurTexture() while a browser surface repaints
+    // heavily during overview/workspace transitions. Keep the function as a
+    // compatibility wrapper so call-sites remain simple, but render a normal
+    // translucent rect instead of a live-blur rect.
+    renderRect(box, color, rounding, roundingPower);
 }
 
 void renderWindowStub(PHLWINDOW pWindow, PHLMONITOR pMonitor, PHLWORKSPACE pWorkspaceOverride, CBox rectOverride, CBox clipBox, const Time::steady_tp& time, float alpha, int forcedRounding, float forcedRoundingPower) {
@@ -173,14 +172,14 @@ void renderWindowStubRoundedClip(PHLWINDOW pWindow, PHLMONITOR pMonitor, PHLWORK
 }
 
 void renderLayerSurfaceStub(PHLLS pLayer, PHLMONITOR pMonitor, CBox rectOverride, CBox clipBox, const Time::steady_tp& time, float alpha, int rounding, float roundingPower) {
-    (void)pMonitor;
-    (void)time;
+    // Do not use CSurfacePassElement here. Several Hyprland builds can crash in
+    // CSurfacePassElement::needsLiveBlur() when a layer or a browser surface is
+    // continuously repainting while overview is animating. The texture path is
+    // enough for overview thumbnails and never asks Hyprland for a live blur
+    // texture through the layer-surface render path.
+    if (!pLayer || !pMonitor)
+        return;
 
-    // Use a texture pass for layer-shell surfaces in overview. Hyprland's
-    // CSurfacePassElement can enter live-blur monitor-resource code even with
-    // blur disabled, and some builds crash there while the overview is changing
-    // workspaces. The texture pass is enough for wallpaper/applications layers
-    // and avoids that unstable path completely.
     renderLayerSurfaceTextureStub(pLayer, rectOverride, clipBox, alpha, rounding, roundingPower);
 }
 
@@ -254,7 +253,7 @@ bool renderFullscreenBackground(PHLMONITOR pMonitor, const CBox& monitorClip, co
         if (!(layerSize.x > 1 && layerSize.y > 1))
             continue;
 
-        renderLayerSurfaceTextureStub(layer, CBox{layerPos, layerSize}, monitorClip);
+        renderLayerSurfaceStub(layer, pMonitor, CBox{layerPos, layerSize}, monitorClip, time);
         rendered = true;
     }
 

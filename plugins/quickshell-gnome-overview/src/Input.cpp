@@ -50,22 +50,23 @@ bool CHyprspaceWidget::buttonEvent(bool pressed, Vector2D coords) {
             const int currentCenteredWorkspaceID = centeredWorkspaceID > 0
                 ? centeredWorkspaceID
                 : (owner ? std::max(1, static_cast<int>(owner->activeWorkspaceID())) : 1);
-            // Commit the real workspace switch from the input callback, not from
-            // render-completion. The visual transition still runs via
-            // workspaceSelectionAnimating, but Hyprland's workspace switch happens
-            // here where it is safe on builds that crash when changeWorkspace() is
-            // called from draw().
-            if (targetWorkspaceID != currentCenteredWorkspaceID || owner->activeWorkspaceID() != targetWorkspaceID) {
-                applyingWorkspaceActivation = true;
-                suppressWorkspaceTransitionAnimation();
-                warpWorkspaceTransitionState(targetWorkspaceID);
-                if (owner->activeWorkspaceID() != targetWorkspaceID)
-                    activateWorkspaceForOverview(targetWorkspaceID);
-                warpWorkspaceTransitionState(targetWorkspaceID);
-            }
-
             if (!startWorkspaceSelectionAnimation(targetWorkspaceID, true))
-                hide();
+                return false;
+
+            // Commit the real workspace switch from the input callback, not from
+            // draw(). The overview keeps rendering the old -> new visual motion
+            // using workspaceSelectionFromID/workspaceSelectionToID, so mouse
+            // selection has animation without render-time changeWorkspace().
+            applyingWorkspaceActivation = true;
+            suppressWorkspaceTransitionAnimation();
+            warpWorkspaceTransitionState(currentCenteredWorkspaceID);
+            if (owner && owner->activeWorkspaceID() != targetWorkspaceID)
+                activateWorkspaceForOverview(targetWorkspaceID);
+            warpWorkspaceTransitionState(targetWorkspaceID);
+            if (owner) {
+                g_pHyprRenderer->damageMonitor(owner);
+                g_pCompositor->scheduleFrameForMonitor(owner);
+            }
         }
         return false;
     }

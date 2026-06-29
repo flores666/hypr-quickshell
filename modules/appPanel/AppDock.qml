@@ -31,9 +31,9 @@ PanelWindow {
     color: "transparent"
     surfaceFormat.opaque: false
 
-    // Reuse the topbar namespace so the existing Hyprland blur rules apply
+    // Dedicated namespace; do not reuse topbar blur rules.
     // to the dock too.
-    WlrLayershell.namespace: "quickshell:taskbar"
+    WlrLayershell.namespace: "quickshell:app-dock"
     WlrLayershell.layer: Services.ShellState.workspaceOverviewOpen && Services.ShellState.workspaceOverviewMode === "applications" ? WlrLayer.Overlay : WlrLayer.Top
 
     // Keep the dock floating like GNOME/macOS and do not move windows.
