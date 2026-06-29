@@ -16,6 +16,8 @@ Item {
     property real panelHeight: 70
     property bool bottomDock: false
     readonly property real popupGap: 2
+    readonly property int contextMenuWidth: 206
+    readonly property int workspaceSubmenuWidth: 154
     readonly property bool popupOpen: contextOpen || workspaceMenuOpen || contextSwitchPending || contextRenderVisible
     readonly property bool dockPopupSurfaceOpen: popupOpen || tooltipOpen
     property bool contextOpen: false
@@ -25,6 +27,8 @@ Item {
     property var contextActions: []
     property real contextAnchorX: 0
     property string contextWindowAddress: ""
+    property int contextWindowWorkspace: 0
+    property string contextWindowWorkspaceName: ""
     property var contextAllWindows: []
     property bool workspaceMenuOpen: false
     property bool workspaceMenuHovered: false
@@ -33,6 +37,8 @@ Item {
     property var pendingContextActions: []
     property real pendingContextAnchorX: 0
     property string pendingContextWindowAddress: ""
+    property int pendingContextWindowWorkspace: 0
+    property string pendingContextWindowWorkspaceName: ""
     property var pendingContextAllWindows: []
     property bool draggingItem: false
     property string draggingItemId: ""
@@ -1466,10 +1472,15 @@ Item {
 
     function workspaceMenuItems() {
         var result = [{ label: "Special workspace", workspace: "special" }];
-        var maxWorkspace = Math.max(workspaceCount, Services.ShellState.activeWorkspace || 1) + 4;
+        var maxWorkspace = 10;
         for (var i = 1; i <= maxWorkspace; i++)
             result.push({ label: "Workspace " + i, workspace: i });
         return result;
+    }
+
+    function contextMenuHeight() {
+        var count = (contextActions || []).length;
+        return Math.max(46, 16 + count * 31 + Math.max(0, count - 1) * 5);
     }
 
     function workspaceMenuHeight() {
@@ -1478,9 +1489,9 @@ Item {
     }
 
     function workspaceMenuXFor(width) {
-        var mainX = popupXFor(206);
+        var mainX = popupXFor(contextMenuWidth);
         var gap = 2;
-        var right = mainX + 206 + gap;
+        var right = mainX + contextMenuWidth + gap;
         if (right + width <= hostWidth - 6)
             return right;
         return Math.max(6, mainX - width - gap);
@@ -1489,57 +1500,90 @@ Item {
     function workspaceMenuYFor(height) {
         if (bottomDock)
             return popupTopY - Math.max(1, height) - popupGap;
-        return popupYFor(contextMenu.implicitHeight);
+        return popupYFor(contextMenuHeight());
     }
 
     function workspaceMenuIsRight() {
-        return workspaceMenuXFor(154) >= contextMenu.anchor.rect.x;
+        return workspaceMenuXFor(workspaceSubmenuWidth) >= popupXFor(contextMenuWidth);
+    }
+
+    function contextTargetWorkspaceName() {
+        var win = contextTargetWindow(contextItem);
+        var liveName = String(win && win.workspaceName || "");
+        if (liveName.length > 0)
+            return liveName;
+        return String(contextWindowWorkspaceName || "");
+    }
+
+    function contextTargetWorkspaceId() {
+        var win = contextTargetWindow(contextItem);
+        var liveId = Number(win && win.workspace || 0);
+        if (!isNaN(liveId) && liveId > 0)
+            return Math.floor(liveId);
+        var snapshotId = Number(contextWindowWorkspace || 0);
+        if (!isNaN(snapshotId) && snapshotId > 0)
+            return Math.floor(snapshotId);
+        return 0;
     }
 
     function isCurrentContextWorkspace(workspace) {
-        var win = contextTargetWindow(contextItem);
-        if (!win)
-            return false;
-
-        var workspaceName = String(win.workspaceName || "");
+        var workspaceName = contextTargetWorkspaceName();
         if (workspace === "special")
             return workspaceName === Services.ShellActions.normalizedSpecialWorkspaceName();
 
         if (workspaceName.indexOf("special:") === 0)
             return false;
-        return Number(win.workspace || 0) === Number(workspace || 0);
+
+        var targetWorkspace = contextTargetWorkspaceId();
+        return targetWorkspace > 0 && targetWorkspace === Number(workspace || 0);
     }
 
     function protectedPopupX() {
         if (!workspaceMenuOpen)
-            return popupXFor(206);
-        return Math.min(popupXFor(206), workspaceMenuXFor(154));
+            return popupXFor(contextMenuWidth);
+        return Math.min(popupXFor(contextMenuWidth), workspaceMenuXFor(workspaceSubmenuWidth));
     }
 
     function protectedPopupY() {
         if (!workspaceMenuOpen)
-            return popupYFor(contextMenu.implicitHeight);
-        return Math.min(popupYFor(contextMenu.implicitHeight), workspaceMenuYFor(workspaceMenu.implicitHeight));
+            return popupYFor(contextMenuHeight());
+        return Math.min(popupYFor(contextMenuHeight()), workspaceMenuYFor(workspaceMenuHeight()));
     }
 
     function protectedPopupWidth() {
-        var mainX = popupXFor(206);
-        var mainRight = mainX + 206;
+        var mainX = popupXFor(contextMenuWidth);
+        var mainRight = mainX + contextMenuWidth;
         if (!workspaceMenuOpen)
-            return 206;
-        var subX = workspaceMenuXFor(154);
-        var subRight = subX + 154;
+            return contextMenuWidth;
+        var subX = workspaceMenuXFor(workspaceSubmenuWidth);
+        var subRight = subX + workspaceSubmenuWidth;
         return Math.max(mainRight, subRight) - Math.min(mainX, subX);
     }
 
     function protectedPopupHeight() {
-        var mainY = popupYFor(contextMenu.implicitHeight);
-        var mainBottom = mainY + contextMenu.implicitHeight;
+        var mainY = popupYFor(contextMenuHeight());
+        var mainBottom = mainY + contextMenuHeight();
         if (!workspaceMenuOpen)
-            return contextMenu.implicitHeight;
-        var subY = workspaceMenuYFor(workspaceMenu.implicitHeight);
-        var subBottom = subY + workspaceMenu.implicitHeight;
+            return contextMenuHeight();
+        var subY = workspaceMenuYFor(workspaceMenuHeight());
+        var subBottom = subY + workspaceMenuHeight();
         return Math.max(mainBottom, subBottom) - Math.min(mainY, subY);
+    }
+
+    function contextMenuXInSurface() {
+        return popupXFor(contextMenuWidth) - protectedPopupX();
+    }
+
+    function contextMenuYInSurface() {
+        return popupYFor(contextMenuHeight()) - protectedPopupY();
+    }
+
+    function workspaceMenuXInSurface() {
+        return workspaceMenuXFor(workspaceSubmenuWidth) - protectedPopupX();
+    }
+
+    function workspaceMenuYInSurface() {
+        return workspaceMenuYFor(workspaceMenuHeight()) - protectedPopupY();
     }
 
     function applyPendingContext() {
@@ -1547,6 +1591,8 @@ Item {
         contextActions = pendingContextActions || [];
         contextAnchorX = pendingContextAnchorX;
         contextWindowAddress = pendingContextWindowAddress;
+        contextWindowWorkspace = pendingContextWindowWorkspace;
+        contextWindowWorkspaceName = pendingContextWindowWorkspaceName;
         contextAllWindows = pendingContextAllWindows || [];
     }
 
@@ -1561,6 +1607,8 @@ Item {
         pendingContextActions = menuActionsFor(item);
         pendingContextAnchorX = localCenterX;
         pendingContextWindowAddress = String(win && win.address || "");
+        pendingContextWindowWorkspace = Number(win && win.workspace || 0);
+        pendingContextWindowWorkspaceName = String(win && win.workspaceName || "");
         pendingContextAllWindows = (item && (item.allWindows || item.windows)) ? (item.allWindows || item.windows).slice() : [];
 
         if (contextOpen || contextRenderVisible) {
@@ -2094,10 +2142,10 @@ Item {
     PopupWindow {
         id: contextMenu
         anchor.window: root.hostWindow
-        anchor.rect.x: root.popupXFor(implicitWidth)
-        anchor.rect.y: root.popupYFor(implicitHeight)
-        implicitWidth: 206
-        implicitHeight: Math.max(46, 16 + menuColumn.implicitHeight)
+        anchor.rect.x: root.protectedPopupX()
+        anchor.rect.y: root.protectedPopupY()
+        implicitWidth: root.protectedPopupWidth()
+        implicitHeight: root.protectedPopupHeight()
         visible: popupState.renderVisible
         color: "transparent"
         surfaceFormat.opaque: false
@@ -2128,90 +2176,188 @@ Item {
             enabled: root.contextOpen && popupState.reveal > 0.45
             layer.enabled: popupState.reveal > 0.001 && popupState.reveal < 0.999
             layer.smooth: true
-            Components.PopupGlassSurface {
-                anchors.fill: parent
-                radiusSize: 18
-                glassColor: "#98000000"
+
+            Item {
+                id: contextMenuPanel
+                x: root.contextMenuXInSurface()
+                y: root.contextMenuYInSurface()
+                width: root.contextMenuWidth
+                height: root.contextMenuHeight()
                 clip: true
-                antialiasing: true
-            }
 
-            ColumnLayout {
-                id: menuColumn
-                anchors.fill: parent
-                anchors.margins: 8
-                spacing: 5
+                Components.PopupGlassSurface {
+                    anchors.fill: parent
+                    radiusSize: 18
+                    glassColor: "#98000000"
+                    clip: true
+                    antialiasing: true
+                }
 
-                Repeater {
-                    model: root.contextActions
+                ColumnLayout {
+                    id: menuColumn
+                    anchors.fill: parent
+                    anchors.margins: 8
+                    spacing: 5
 
-                    delegate: Rectangle {
-                        id: actionRow
+                    Repeater {
+                        model: root.contextActions
 
-                        required property var modelData
+                        delegate: Rectangle {
+                            id: actionRow
 
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 31
-                        radius: 10
-                        color: actionMouse.pressed ? "#20ffffff" : (actionMouse.containsMouse ? "#14ffffff" : "transparent")
-                        antialiasing: true
+                            required property var modelData
 
-                        Behavior on color { ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic } }
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 31
+                            radius: 10
+                            color: actionMouse.pressed ? "#20ffffff" : (actionMouse.containsMouse ? "#14ffffff" : "transparent")
+                            antialiasing: true
 
-                        Components.StyledText {
-                            anchors.left: parent.left
-                            anchors.leftMargin: 9
-                            anchors.right: parent.right
-                            anchors.rightMargin: modelData.submenu === "workspaces" ? 24 : 9
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: modelData.label || "Action"
-                            color: "#eef3f8"
-                            font.pixelSize: 12
-                            font.weight: Font.Medium
-                            elide: Text.ElideRight
-                            verticalAlignment: Text.AlignVCenter
-                        }
+                            Behavior on color { ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic } }
 
-                        Image {
-                            anchors.right: parent.right
-                            anchors.rightMargin: 9
-                            anchors.verticalCenter: parent.verticalCenter
-                            visible: modelData.submenu === "workspaces"
-                            width: 16
-                            height: 16
-                            source: Qt.resolvedUrl("icons/chevron-right.svg")
-                            sourceSize.width: 32
-                            sourceSize.height: 32
-                            fillMode: Image.PreserveAspectFit
-                            smooth: true
-                            mipmap: true
-                            opacity: 0.9
-                        }
+                            Components.StyledText {
+                                anchors.left: parent.left
+                                anchors.leftMargin: 9
+                                anchors.right: parent.right
+                                anchors.rightMargin: modelData.submenu === "workspaces" ? 24 : 9
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: modelData.label || "Action"
+                                color: "#eef3f8"
+                                font.pixelSize: 12
+                                font.weight: Font.Medium
+                                elide: Text.ElideRight
+                                verticalAlignment: Text.AlignVCenter
+                            }
 
-                        MouseArea {
-                            id: actionMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            acceptedButtons: Qt.LeftButton
-                            cursorShape: Qt.PointingHandCursor
+                            Image {
+                                anchors.right: parent.right
+                                anchors.rightMargin: 9
+                                anchors.verticalCenter: parent.verticalCenter
+                                visible: modelData.submenu === "workspaces"
+                                width: 16
+                                height: 16
+                                source: Qt.resolvedUrl("icons/chevron-right.svg")
+                                sourceSize.width: 32
+                                sourceSize.height: 32
+                                fillMode: Image.PreserveAspectFit
+                                smooth: true
+                                mipmap: true
+                                opacity: 0.9
+                            }
 
-                            onEntered: {
-                                if (modelData.submenu === "workspaces") {
-                                    root.workspaceMenuHovered = false;
-                                    workspaceMenuCloseTimer.stop();
-                                    root.workspaceMenuOpen = true;
-                                } else {
-                                    root.workspaceMenuHovered = false;
-                                    root.workspaceMenuOpen = false;
-                                    workspaceMenuCloseTimer.stop();
+                            MouseArea {
+                                id: actionMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                acceptedButtons: Qt.LeftButton
+                                cursorShape: Qt.PointingHandCursor
+
+                                onEntered: {
+                                    if (modelData.submenu === "workspaces") {
+                                        root.workspaceMenuHovered = false;
+                                        workspaceMenuCloseTimer.stop();
+                                        root.workspaceMenuOpen = true;
+                                    } else {
+                                        root.workspaceMenuHovered = false;
+                                        root.workspaceMenuOpen = false;
+                                        workspaceMenuCloseTimer.stop();
+                                    }
+                                }
+
+                                onExited: {
+                                }
+
+                                onClicked: {
+                                    root.runMenuAction(modelData.action);
                                 }
                             }
+                        }
+                    }
+                }
+            }
 
-                            onExited: {
+            Item {
+                id: workspaceMenu
+                x: root.workspaceMenuXInSurface()
+                y: root.workspaceMenuYInSurface()
+                width: root.workspaceSubmenuWidth
+                height: root.workspaceMenuHeight()
+                visible: root.workspaceMenuOpen && root.contextOpen
+                clip: true
+                enabled: visible
+
+                Components.PopupGlassSurface {
+                    anchors.fill: parent
+                    radiusSize: 18
+                    glassColor: "#98000000"
+                    clip: true
+                    antialiasing: true
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    acceptedButtons: Qt.NoButton
+                    onEntered: {
+                        root.workspaceMenuHovered = true;
+                        workspaceMenuCloseTimer.stop();
+                    }
+                    onExited: {
+                        root.workspaceMenuHovered = false;
+                    }
+                }
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 8
+                    spacing: 4
+
+                    Repeater {
+                        model: root.workspaceMenuItems()
+
+                        delegate: Rectangle {
+                            id: workspaceRow
+
+                            required property var modelData
+
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 28
+                            radius: 9
+                            color: workspaceMouse.pressed ? "#20ffffff" : (workspaceMouse.containsMouse ? "#14ffffff" : (workspaceRow.currentWorkspace ? "#12ffffff" : "transparent"))
+                            antialiasing: true
+
+                            Behavior on color { ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic } }
+
+                            readonly property bool currentWorkspace: root.isCurrentContextWorkspace(modelData.workspace)
+
+                            Components.StyledText {
+                                anchors.left: parent.left
+                                anchors.leftMargin: 9
+                                anchors.right: parent.right
+                                anchors.rightMargin: 9
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: modelData.label || "Workspace"
+                                color: workspaceRow.currentWorkspace ? "#ffffff" : "#eef3f8"
+                                font.pixelSize: 12
+                                font.weight: workspaceRow.currentWorkspace ? Font.DemiBold : Font.Medium
+                                elide: Text.ElideRight
+                                verticalAlignment: Text.AlignVCenter
                             }
 
-                            onClicked: {
-                                root.runMenuAction(modelData.action);
+                            MouseArea {
+                                id: workspaceMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                acceptedButtons: Qt.LeftButton
+                                cursorShape: Qt.PointingHandCursor
+                                onEntered: {
+                                    root.workspaceMenuHovered = true;
+                                    workspaceMenuCloseTimer.stop();
+                                }
+                                onExited: {
+                                    root.workspaceMenuHovered = false;
+                                }
+                                onClicked: root.moveContextWindowToWorkspace(modelData.workspace)
                             }
                         }
                     }
@@ -2219,101 +2365,6 @@ Item {
             }
 
             Components.PopupInteractionBoundary { }
-        }
-    }
-
-    PopupWindow {
-        id: workspaceMenu
-        anchor.window: root.hostWindow
-        anchor.rect.x: root.workspaceMenuXFor(154)
-        anchor.rect.y: root.workspaceMenuYFor(implicitHeight)
-        implicitWidth: 154
-        implicitHeight: root.workspaceMenuHeight()
-        visible: root.workspaceMenuOpen && root.contextOpen
-        color: "transparent"
-        surfaceFormat.opaque: false
-
-        Item {
-            anchors.fill: parent
-            clip: true
-            enabled: root.workspaceMenuOpen && root.contextOpen
-            Components.PopupGlassSurface {
-                anchors.fill: parent
-                radiusSize: 18
-                glassColor: "#98000000"
-                clip: true
-                antialiasing: true
-            }
-
-            MouseArea {
-                anchors.fill: parent
-                hoverEnabled: true
-                acceptedButtons: Qt.NoButton
-                onEntered: {
-                    root.workspaceMenuHovered = true;
-                    workspaceMenuCloseTimer.stop();
-                }
-                onExited: {
-                    root.workspaceMenuHovered = false;
-                }
-            }
-
-            ColumnLayout {
-                anchors.fill: parent
-                anchors.margins: 8
-                spacing: 4
-
-                Repeater {
-                    model: root.workspaceMenuItems()
-
-                    delegate: Rectangle {
-                        id: workspaceRow
-
-                        required property var modelData
-
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 28
-                        radius: 9
-                        color: workspaceMouse.pressed ? "#20ffffff" : (workspaceMouse.containsMouse ? "#14ffffff" : "transparent")
-                        antialiasing: true
-
-                        Behavior on color { ColorAnimation { duration: motion.hoverDuration; easing.type: Easing.OutCubic } }
-
-                        readonly property bool currentWorkspace: root.isCurrentContextWorkspace(modelData.workspace)
-
-                        Components.StyledText {
-                            anchors.left: parent.left
-                            anchors.leftMargin: 9
-                            anchors.right: parent.right
-                            anchors.rightMargin: 9
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: modelData.label || "Workspace"
-                            color: "#eef3f8"
-                            font.pixelSize: 12
-                            font.weight: workspaceRow.currentWorkspace ? Font.DemiBold : Font.Medium
-                            elide: Text.ElideRight
-                            verticalAlignment: Text.AlignVCenter
-                        }
-
-                        MouseArea {
-                            id: workspaceMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            acceptedButtons: Qt.LeftButton
-                            cursorShape: Qt.PointingHandCursor
-                            onEntered: {
-                                root.workspaceMenuHovered = true;
-                                workspaceMenuCloseTimer.stop();
-                            }
-                            onExited: {
-                                root.workspaceMenuHovered = false;
-                            }
-                            onClicked: root.moveContextWindowToWorkspace(modelData.workspace)
-                        }
-                    }
-                }
-            }
-
         }
     }
 
