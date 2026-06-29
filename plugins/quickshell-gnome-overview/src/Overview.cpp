@@ -319,34 +319,11 @@ void CHyprspaceWidget::finishWorkspaceSelectionAnimation() {
     workspaceHoverProgress.clear();
     lastWorkspaceHoverFrameValid = false;
 
-    if (owner && targetWorkspaceID > 0 && shouldClose) {
-        suppressWorkspaceTransitionAnimation();
-
-        // This workspace switch is owned by the overview close animation. Keep
-        // onWorkspaceChange from treating it as a new external switch, otherwise
-        // the strip can briefly sync back to the previous workspace and then to
-        // the target again.
-        applyingWorkspaceActivation = true;
-
-        // Put Hyprland workspace render vars into the final state before and
-        // after the actual change. The overlay covers this frame, but it prevents
-        // the compositor's own workspace swipe from leaking through after the
-        // GNOME-like morph has finished.
-        warpWorkspaceTransitionState(targetWorkspaceID);
-        if (owner->activeWorkspaceID() != targetWorkspaceID)
-            activateWorkspaceForOverview(targetWorkspaceID);
-        warpWorkspaceTransitionState(targetWorkspaceID);
-
-        // Keep the guard enabled until finishHide() flips active to false. Some
-        // Hyprland workspace-change notifications can be delivered after
-        // changeWorkspace() returns but before the overview overlay is released.
-    }
-
     if (shouldClose) {
-        // The preview has already swiped and morphed to fullscreen during the
-        // selection animation, so do not start a second exit morph. Switch to
-        // the real workspace at the final frame and immediately release the
-        // overlay.
+        // Do not call changeWorkspace() from the render-completion path.
+        // Callers that need activation commit it before starting the close
+        // animation. This keeps the visual animation but avoids render-time
+        // Hyprland crashes.
         finishHide();
         if (owner)
             g_pHyprRenderer->damageMonitor(owner);
@@ -409,7 +386,22 @@ bool CHyprspaceWidget::activateWorkspaceInOverview(int targetWorkspaceID) {
     if (!active || isClosing() || isSelectingWorkspace() || targetWorkspaceID < 1)
         return false;
 
-    return startWorkspaceSelectionAnimation(targetWorkspaceID, true);
+    auto owner = getOwner();
+    if (!owner)
+        return false;
+
+    targetWorkspaceID = std::clamp(targetWorkspaceID, 1, maxSelectableWorkspaceID());
+
+    centeredWorkspaceID = targetWorkspaceID;
+    applyingWorkspaceActivation = true;
+    suppressWorkspaceTransitionAnimation();
+    warpWorkspaceTransitionState(targetWorkspaceID);
+    if (owner->activeWorkspaceID() != targetWorkspaceID)
+        activateWorkspaceForOverview(targetWorkspaceID);
+    warpWorkspaceTransitionState(targetWorkspaceID);
+
+    hide();
+    return true;
 }
 
 bool CHyprspaceWidget::selectWorkspaceInOverviewBy(int direction) {
@@ -713,11 +705,14 @@ void CHyprspaceWidget::hide() {
     if (!workspaceSelectionAnimating && !overviewClosing && centeredWorkspaceID > 0) {
         const int activeWorkspaceID = std::max(1, static_cast<int>(owner->activeWorkspaceID()));
         if (centeredWorkspaceID != activeWorkspaceID) {
-            // Closing commits the workspace currently targeted by the overview
-            // ribbon. This lets scroll/dock/Super/Escape behave like one flow:
-            // browse first, activate on close.
-            startWorkspaceSelectionAnimation(centeredWorkspaceID, true);
-            return;
+            // Commit the selected workspace before the close morph instead of
+            // doing it at the end from draw(). The overview remains on top, so
+            // the user still sees the GNOME-like close animation.
+            applyingWorkspaceActivation = true;
+            suppressWorkspaceTransitionAnimation();
+            warpWorkspaceTransitionState(centeredWorkspaceID);
+            activateWorkspaceForOverview(centeredWorkspaceID);
+            warpWorkspaceTransitionState(centeredWorkspaceID);
         }
     }
 
@@ -739,7 +734,7 @@ void CHyprspaceWidget::hide() {
         workspaceHoverProgress.clear();
         lastWorkspaceHoverFrameValid = false;
         workspaceScrollAccumulator = 0.0;
-        notifyQuickshellOverviewState("close");
+        notifyQuickshellOverviewState(applicationsModeResetPendingForAnimatedHide ? "applications-closing" : "close");
     }
 
     g_pHyprRenderer->damageMonitor(owner);

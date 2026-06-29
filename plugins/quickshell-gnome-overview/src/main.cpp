@@ -664,6 +664,18 @@ static void cancelMainModToggleGesture() {
         g_mainModCancelled = true;
 }
 
+static void cancelMainModGestureAfterExplicitDispatcher() {
+    if (!g_mainModDown)
+        return;
+
+    // Explicit Hyprland binds such as SUPER+A or SUPER+TAB already performed
+    // their action. The later Super release must not be interpreted as a
+    // standalone mainMod tap, otherwise the plugin opens and immediately closes.
+    g_mainModCancelled = true;
+    g_mainModLastSafeRelease = std::chrono::steady_clock::now();
+}
+
+
 static bool isConfiguredMainMod(xkb_keysym_t keysym) {
     if (keysym == g_mainModKeysym)
         return true;
@@ -1109,6 +1121,7 @@ void onTouchUp(const ITouch::SUpEvent& event, SCallbackInfo& info) {
 }
 
 static SDispatchResult dispatchToggleOverview(std::string arg) {
+    cancelMainModGestureAfterExplicitDispatcher();
     auto currentMonitor = g_pCompositor->getMonitorFromCursor();
     auto widget = getWidgetForMonitor(currentMonitor);
     if (widget) {
@@ -1145,6 +1158,7 @@ static SDispatchResult dispatchToggleOverview(std::string arg) {
 }
 
 static SDispatchResult dispatchOpenOverview(std::string arg) {
+    cancelMainModGestureAfterExplicitDispatcher();
     resetApplicationsOverviewMode();
     bool opened = false;
 
@@ -1180,6 +1194,7 @@ static SDispatchResult dispatchOpenOverview(std::string arg) {
 }
 
 static SDispatchResult dispatchApplicationsOverview(std::string arg) {
+    cancelMainModGestureAfterExplicitDispatcher();
     auto currentMonitorForGate = g_pCompositor->getMonitorFromCursor();
     auto widgetForGate = getWidgetForMonitor(currentMonitorForGate);
     if (g_overviewApplicationsMode && widgetForGate && widgetForGate->isActive() && widgetForGate->isClosing()) {
@@ -1254,6 +1269,7 @@ static SDispatchResult dispatchApplicationsOverview(std::string arg) {
 }
 
 static SDispatchResult dispatchCloseOverview(std::string arg) {
+    cancelMainModGestureAfterExplicitDispatcher();
     const bool wasApplicationsMode = g_overviewApplicationsMode;
     bool closedAny = false;
     if (arg.contains("all")) {
@@ -1281,6 +1297,7 @@ static SDispatchResult dispatchCloseOverview(std::string arg) {
 }
 
 static SDispatchResult dispatchSelectOverview(std::string arg) {
+    cancelMainModGestureAfterExplicitDispatcher();
     const int workspaceID = parseWorkspaceIDArg(arg);
     if (workspaceID <= 0)
         return SDispatchResult{};
@@ -1298,6 +1315,7 @@ static SDispatchResult dispatchSelectOverview(std::string arg) {
 }
 
 static SDispatchResult dispatchNextOverview(std::string) {
+    cancelMainModGestureAfterExplicitDispatcher();
     auto currentMonitor = g_pCompositor->getMonitorFromCursor();
     auto widget = getWidgetForMonitor(currentMonitor);
     if (widget && widget->isActive())
@@ -1307,6 +1325,7 @@ static SDispatchResult dispatchNextOverview(std::string) {
 }
 
 static SDispatchResult dispatchPrevOverview(std::string) {
+    cancelMainModGestureAfterExplicitDispatcher();
     auto currentMonitor = g_pCompositor->getMonitorFromCursor();
     auto widget = getWidgetForMonitor(currentMonitor);
     if (widget && widget->isActive())

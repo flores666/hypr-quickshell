@@ -50,8 +50,27 @@ bool CHyprspaceWidget::buttonEvent(bool pressed, Vector2D coords) {
             const int currentCenteredWorkspaceID = centeredWorkspaceID > 0
                 ? centeredWorkspaceID
                 : (owner ? std::max(1, static_cast<int>(owner->activeWorkspaceID())) : 1);
-            const bool targetIsCentered = targetWorkspaceID == currentCenteredWorkspaceID;
-            startWorkspaceSelectionAnimation(targetWorkspaceID, targetIsCentered);
+            // Stability mode: do not switch workspace from the render-completion path.
+            // Some Hyprland builds crash when changeWorkspace() is called from draw()
+            // at the end of the overview selection animation. Commit immediately
+            // from the input callback instead.
+            centeredWorkspaceID = targetWorkspaceID;
+            workspaceSelectionAnimating = false;
+            closeAfterWorkspaceSelectionAnimation = false;
+            closeNotifiedForWorkspaceSelection = false;
+            closeNotifyPendingForAnimatedHide = true;
+            releaseAfterCloseNotification = false;
+            applicationsModeResetPendingForAnimatedHide = false;
+            applyingWorkspaceActivation = true;
+            suppressWorkspaceTransitionAnimation();
+            warpWorkspaceTransitionState(targetWorkspaceID);
+            activateWorkspaceForOverview(targetWorkspaceID);
+            warpWorkspaceTransitionState(targetWorkspaceID);
+            finishHide();
+            if (owner) {
+                g_pHyprRenderer->damageMonitor(owner);
+                g_pCompositor->scheduleFrameForMonitor(owner);
+            }
         }
         return false;
     }

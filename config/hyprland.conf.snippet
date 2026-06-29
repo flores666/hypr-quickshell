@@ -16,3 +16,11 @@ layerrule = ignore_alpha 0.2, match:namespace quickshell:tray-panel
 layerrule = blur true, match:namespace quickshell:launcher
 layerrule = blur_popups true, match:namespace quickshell:launcher
 layerrule = ignore_alpha 0.2, match:namespace quickshell:launcher
+
+# Stable explicit overview/application binds.
+# На ноуте одиночный SUPER отключён в plugin config, чтобы SUPER+A не закрывал панель при отпускании SUPER.
+
+# hypr-quickshell explicit binds.
+# mainMod alone is handled by the plugin through mainModToggle=true.
+bind = $mainMod, A, qs-gnome-overview:applications
+bind = $mainMod, TAB, qs-gnome-overview:toggle

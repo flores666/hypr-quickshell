@@ -3,9 +3,6 @@
 # It renders one fullscreen wallpaper blur/dim layer and a live workspace ribbon above it.
 
 exec-once = sh -lc 'hyprctl plugin load "$HOME/hypr-quickshell/plugins/quickshell-gnome-overview/quickshell-gnome-overview.so"'
-
-bind = $mainMod, A, qs-gnome-overview:applications
-
 plugin {
     overview {
         panelColor = rgba(0506086b)
