@@ -32,7 +32,7 @@ PanelWindow {
     exclusiveZone: 40
 
     function anyPopupOpen() {
-        return popupsOpen;
+        return Services.ShellState.hasActivePopup;
     }
 
     function closePopups() {
@@ -47,8 +47,11 @@ PanelWindow {
     }
 
     function closePopupsFromOutside() {
-        if (anyPopupOpen())
-            closePopups();
+        if (!anyPopupOpen())
+            return;
+
+        Services.ShellState.requestClosePopups("all");
+        closePopups();
     }
 
     function handleHyprlandRawEvent(event) {

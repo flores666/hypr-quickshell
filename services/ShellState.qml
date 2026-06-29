@@ -44,6 +44,8 @@ QtObject {
     property string closePopupsScope: "all"
     property string activePopupOwner: ""
     property string activePopupGroup: ""
+    property string pendingExternalPointerCloseOwner: ""
+    property bool externalPointerCloseSuppressed: false
     property string activeModalLayer: ""
     property string inputCaptureOwner: ""
     readonly property bool hasActivePopup: activePopupOwner.length > 0
@@ -110,6 +112,25 @@ QtObject {
         closePopupsNonce += 1;
         if (popupMatchesScope(closePopupsScope))
             closeCurrentPopup();
+    }
+
+    function suppressNextExternalPointerClose() {
+        externalPointerCloseSuppressed = true;
+    }
+
+    function commitExternalPointerClose(owner) {
+        var normalized = String(owner || "").trim();
+        pendingExternalPointerCloseOwner = "";
+        if (normalized.length === 0)
+            return;
+
+        if (externalPointerCloseSuppressed) {
+            externalPointerCloseSuppressed = false;
+            return;
+        }
+
+        if (activePopupOwner === normalized)
+            requestClosePopups("all");
     }
 
     function modalLayerForCurrentState() {

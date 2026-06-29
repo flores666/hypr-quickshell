@@ -66,6 +66,15 @@ PopupWindow {
         layer.enabled: root.reveal > 0.001 && root.reveal < 0.999
         layer.smooth: true
 
+        TapHandler {
+            acceptedButtons: Qt.AllButtons
+            onPressedChanged: {
+                if (pressed)
+                    Services.ShellState.suppressNextExternalPointerClose();
+            }
+        }
+
+
         Components.GlassPanel {
             id: panel
             anchors.fill: parent

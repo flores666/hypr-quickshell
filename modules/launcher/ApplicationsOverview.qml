@@ -1243,6 +1243,14 @@ Scope {
                 border.width: 0
                 antialiasing: true
 
+                TapHandler {
+                    acceptedButtons: Qt.AllButtons
+                    onPressedChanged: {
+                        if (pressed)
+                            Services.ShellState.suppressNextExternalPointerClose();
+                    }
+                }
+
                 Column {
                     id: contextColumn
                     anchors {

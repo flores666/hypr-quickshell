@@ -762,6 +762,9 @@ void onMouseButton(const IPointer::SButtonEvent& event, SCallbackInfo& info) {
         return;
 
     const auto pressed = event.state == WL_POINTER_BUTTON_STATE_PRESSED;
+    if (pressed)
+        notifyQuickshellOverviewState("pointer-press");
+
     const auto pMonitor = g_pCompositor->getMonitorFromCursor();
     if (pMonitor) {
         const auto widget = getWidgetForMonitor(pMonitor);

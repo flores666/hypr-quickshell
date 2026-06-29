@@ -17,6 +17,17 @@ Item {
     property bool workspaceRefreshPendingAfterRun: false
     property bool compactWorkspaceQueued: false
 
+    property string pendingExternalPointerCloseOwner: ""
+
+    function queueExternalPointerClose() {
+        var owner = String(Services.ShellState.activePopupOwner || "").trim();
+        if (owner.length === 0)
+            return;
+
+        pendingExternalPointerCloseOwner = owner;
+        externalPointerCloseTimer.restart();
+    }
+
     function currentWorkspaceId() {
         if (Hyprland.focusedWorkspace && Hyprland.focusedWorkspace.id)
             return Hyprland.focusedWorkspace.id;
@@ -373,6 +384,11 @@ Item {
             return;
         }
 
+        if (overviewState === "pointer-press") {
+            service.queueExternalPointerClose();
+            return;
+        }
+
         if (overviewState.indexOf("applications-query:") === 0) {
             Services.ShellState.setApplicationsOverviewBufferedQuery(decodeOverviewEventText(overviewState.substring(19)));
             return;
@@ -432,6 +448,17 @@ Item {
         queueRefreshClients();
         queueRefreshMonitors();
         queueRefreshWorkspaces();
+    }
+
+    Timer {
+        id: externalPointerCloseTimer
+        interval: 18
+        repeat: false
+        onTriggered: {
+            var owner = service.pendingExternalPointerCloseOwner;
+            service.pendingExternalPointerCloseOwner = "";
+            Services.ShellState.commitExternalPointerClose(owner);
+        }
     }
 
     Timer {

@@ -2142,6 +2142,14 @@ Item {
             layer.enabled: popupState.reveal > 0.001 && popupState.reveal < 0.999
             layer.smooth: true
 
+            TapHandler {
+                acceptedButtons: Qt.AllButtons
+                onPressedChanged: {
+                    if (pressed)
+                        Services.ShellState.suppressNextExternalPointerClose();
+                }
+            }
+
             Components.GlassPanel {
                 anchors.fill: parent
                 radiusSize: 18
@@ -2249,6 +2257,14 @@ Item {
             anchors.fill: parent
             clip: true
             enabled: root.workspaceMenuOpen && root.contextOpen
+
+            TapHandler {
+                acceptedButtons: Qt.AllButtons
+                onPressedChanged: {
+                    if (pressed)
+                        Services.ShellState.suppressNextExternalPointerClose();
+                }
+            }
 
             Components.GlassPanel {
                 anchors.fill: parent
