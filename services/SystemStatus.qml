@@ -2,6 +2,7 @@ pragma Singleton
 
 import QtQuick
 import Quickshell.Io
+import "systemStatus" as SystemStatusParts
 
 Item {
     id: root
@@ -12,13 +13,14 @@ Item {
     property bool actionRunning: false
     property var pendingActionArgs: []
     property var runningActionArgs: []
+
     property bool distroRefreshQueued: false
     property bool networkRefreshQueued: false
     property bool bluetoothRefreshQueued: false
     property bool audioRefreshQueued: false
     property bool batteryRefreshQueued: false
     property bool notificationsRefreshQueued: false
-    property bool audioReady: false
+
     property double distroLastRefreshAt: 0
     property double networkLastRefreshAt: 0
     property double bluetoothLastRefreshAt: 0
@@ -30,156 +32,62 @@ Item {
     property string distroName: "Linux"
     property string distroInitial: "L"
 
-    property bool networkAvailable: false
-    property bool hasWifi: false
-    property bool wifiEnabled: false
-    property bool hasEthernet: false
-    property bool ethernetActive: false
-    property bool ethernetAvailable: false
-    property string ethernetConnection: ""
-    property string ethernetDevice: ""
-    property string ethernetIp: ""
-    property string networkType: "none"
-    property string networkState: "offline"
-    property string networkConnection: ""
-    property string networkDevice: ""
-    property string wifiSsid: ""
-    property int wifiSignal: 0
-    property var wifiNetworks: []
+    property alias networkAvailable: networkStatus.networkAvailable
+    property alias hasWifi: networkStatus.hasWifi
+    property alias wifiEnabled: networkStatus.wifiEnabled
+    property alias hasEthernet: networkStatus.hasEthernet
+    property alias ethernetActive: networkStatus.ethernetActive
+    property alias ethernetAvailable: networkStatus.ethernetAvailable
+    property alias ethernetConnection: networkStatus.ethernetConnection
+    property alias ethernetDevice: networkStatus.ethernetDevice
+    property alias ethernetIp: networkStatus.ethernetIp
+    property alias networkType: networkStatus.networkType
+    property alias networkState: networkStatus.networkState
+    property alias networkConnection: networkStatus.networkConnection
+    property alias networkDevice: networkStatus.networkDevice
+    property alias wifiSsid: networkStatus.wifiSsid
+    property alias wifiSignal: networkStatus.wifiSignal
+    property alias wifiNetworks: networkStatus.wifiNetworks
 
-    property bool hasBluetooth: false
-    property bool bluetoothEnabled: false
-    property var bluetoothDevices: []
+    property alias hasBluetooth: bluetoothStatus.hasBluetooth
+    property alias bluetoothEnabled: bluetoothStatus.bluetoothEnabled
+    property alias bluetoothDevices: bluetoothStatus.bluetoothDevices
 
-    property bool hasAudio: false
-    property int volume: 0
-    property bool muted: false
-    property string audioDevice: ""
-    property var audioDevices: []
-    property var sinkInputs: []
-    property string pendingSinkName: ""
-    property string pendingSinkLabel: ""
+    property alias audioReady: audioStatus.audioReady
+    property alias hasAudio: audioStatus.hasAudio
+    property alias volume: audioStatus.volume
+    property alias muted: audioStatus.muted
+    property alias audioDevice: audioStatus.audioDevice
+    property alias audioDevices: audioStatus.audioDevices
+    property alias sinkInputs: audioStatus.sinkInputs
+    property alias pendingSinkName: audioStatus.pendingSinkName
+    property alias pendingSinkLabel: audioStatus.pendingSinkLabel
 
-    property bool hasBattery: false
-    property int batteryPercent: 0
-    property string batteryStatus: "absent"
-    property bool batteryCharging: false
-    property bool acOnline: false
-    property string batteryTime: ""
+    property alias hasBattery: batteryDomain.hasBattery
+    property alias batteryPercent: batteryDomain.batteryPercent
+    property alias batteryStatus: batteryDomain.batteryStatus
+    property alias batteryCharging: batteryDomain.batteryCharging
+    property alias acOnline: batteryDomain.acOnline
+    property alias batteryTime: batteryDomain.batteryTime
 
-    property bool notificationsAvailable: false
-    property bool notificationsSilent: false
-    property int notificationsCount: 0
-    property var notifications: []
-    property var historyNotifications: []
-    property var liveNotifications: []
-    property var dismissedNotificationIds: ({})
-    property var dismissedNotificationKeys: ({})
-    readonly property int dismissedNotificationTtlMs: 900000
-
-    property bool notificationCaptureActive: false
-    property bool notificationCaptureDone: false
-    property var notificationStringValues: []
-    property int liveNotificationSerial: 0
-    property var pendingLiveNotifications: []
-    property var activeLiveNotification: null
-    property bool iconResolveReceived: false
-    property string iconResolveResult: ""
-    property var resolvedIconCache: ({})
-
-    function decodeNotificationEntities(text) {
-        return String(text || "")
-            .replace(/&amp;/g, "&")
-            .replace(/&quot;/g, "\"")
-            .replace(/&apos;/g, "'")
-            .replace(/&#39;/g, "'")
-            .replace(/&#x27;/gi, "'")
-            .replace(/&lt;/g, "<")
-            .replace(/&gt;/g, ">")
-            .replace(/&#(\d+);/g, function(match, code) {
-                var value = Number(code);
-                return value > 0 ? String.fromCharCode(value) : match;
-            })
-            .replace(/&#x([0-9a-f]+);/gi, function(match, code) {
-                var value = parseInt(code, 16);
-                return value > 0 ? String.fromCharCode(value) : match;
-            });
-    }
-
-    function stripNotificationMarkup(text) {
-        return decodeNotificationEntities(text)
-            .replace(/<[^>]+>/g, "")
-            .replace(/\s+/g, " ")
-            .trim();
-    }
-
-    function notificationKey(notification) {
-        if (!notification)
-            return "";
-
-        return [
-            String(notification.app || ""),
-            String(notification.title || ""),
-            String(notification.body || "")
-        ].join("|").toLowerCase();
-    }
-
-    function pruneDismissedNotifications() {
-        var now = Date.now();
-        var nextIds = {};
-        var nextKeys = {};
-
-        for (var id in dismissedNotificationIds) {
-            if (Number(dismissedNotificationIds[id] || 0) > now)
-                nextIds[id] = dismissedNotificationIds[id];
-        }
-
-        for (var key in dismissedNotificationKeys) {
-            if (Number(dismissedNotificationKeys[key] || 0) > now)
-                nextKeys[key] = dismissedNotificationKeys[key];
-        }
-
-        dismissedNotificationIds = nextIds;
-        dismissedNotificationKeys = nextKeys;
-    }
-
-    function rememberDismissedNotification(notification, fallbackId) {
-        var expiresAt = Date.now() + dismissedNotificationTtlMs;
-        var nextIds = {};
-        var nextKeys = {};
-
-        for (var oldId in (dismissedNotificationIds || {}))
-            nextIds[oldId] = dismissedNotificationIds[oldId];
-
-        for (var oldKey in (dismissedNotificationKeys || {}))
-            nextKeys[oldKey] = dismissedNotificationKeys[oldKey];
-        var id = String(fallbackId || (notification ? notification.id : "") || "");
-        var key = notificationKey(notification);
-
-        if (id.length > 0)
-            nextIds[id] = expiresAt;
-
-        if (key.length > 0)
-            nextKeys[key] = expiresAt;
-
-        dismissedNotificationIds = nextIds;
-        dismissedNotificationKeys = nextKeys;
-    }
-
-    function isNotificationDismissed(notification) {
-        if (!notification)
-            return false;
-
-        var now = Date.now();
-        var id = String(notification.id || "");
-        var key = notificationKey(notification);
-
-        if (id.length > 0 && Number((dismissedNotificationIds || {})[id] || 0) > now)
-            return true;
-
-        return key.length > 0 && Number((dismissedNotificationKeys || {})[key] || 0) > now;
-    }
-
+    property alias notificationsAvailable: notificationStatus.notificationsAvailable
+    property alias notificationsSilent: notificationStatus.notificationsSilent
+    property alias notificationsCount: notificationStatus.notificationsCount
+    property alias notifications: notificationStatus.notifications
+    property alias historyNotifications: notificationStatus.historyNotifications
+    property alias liveNotifications: notificationStatus.liveNotifications
+    property alias dismissedNotificationIds: notificationStatus.dismissedNotificationIds
+    property alias dismissedNotificationKeys: notificationStatus.dismissedNotificationKeys
+    readonly property int dismissedNotificationTtlMs: notificationStatus.dismissedNotificationTtlMs
+    property alias notificationCaptureActive: notificationStatus.notificationCaptureActive
+    property alias notificationCaptureDone: notificationStatus.notificationCaptureDone
+    property alias notificationStringValues: notificationStatus.notificationStringValues
+    property alias liveNotificationSerial: notificationStatus.liveNotificationSerial
+    property alias pendingLiveNotifications: notificationStatus.pendingLiveNotifications
+    property alias activeLiveNotification: notificationStatus.activeLiveNotification
+    property alias iconResolveReceived: notificationStatus.iconResolveReceived
+    property alias iconResolveResult: notificationStatus.iconResolveResult
+    property alias resolvedIconCache: notificationStatus.resolvedIconCache
 
     function sameList(left, right) {
         try {
@@ -189,224 +97,32 @@ Item {
         }
     }
 
-    function filterDismissedNotifications(list) {
-        pruneDismissedNotifications();
-
-        var source = list || [];
-        var result = [];
-        for (var i = 0; i < source.length; i++) {
-            if (!isNotificationDismissed(source[i]))
-                result.push(source[i]);
-        }
-
-        return result;
-    }
-
-    function findNotificationById(notificationId) {
-        var id = String(notificationId || "");
-        var lists = [notifications || [], liveNotifications || [], historyNotifications || []];
-
-        for (var l = 0; l < lists.length; l++) {
-            var list = lists[l];
-            for (var i = 0; i < list.length; i++) {
-                if (String((list[i] || {}).id || "") === id)
-                    return list[i];
-            }
-        }
-
-        return null;
-    }
-
-    function mergeNotifications(preferredCount) {
-        var merged = [];
-        var seen = {};
-
-        function appendList(list) {
-            for (var i = 0; i < list.length; i++) {
-                var item = list[i];
-                var key = notificationKey(item);
-                if (key.length === 0 || seen[key] || isNotificationDismissed(item))
-                    continue;
-
-                seen[key] = true;
-                merged.push(item);
-
-                if (merged.length >= 12)
-                    return;
-            }
-        }
-
-        appendList(liveNotifications || []);
-        appendList(historyNotifications || []);
-
-        notifications = merged;
-        notificationsCount = Math.max(Number(preferredCount || 0), merged.length);
-    }
-
-    function iconResolveCacheKey(item) {
-        if (!item)
-            return "";
-
-        return [
-            String(item.icon || ""),
-            String(item.app || "")
-        ].join("|").toLowerCase();
-    }
-
-    function directIconPath(icon) {
-        var value = String(icon || "").trim();
-        if (value.length === 0)
-            return null;
-        if (value.indexOf("file://") === 0 || value.indexOf("/") === 0)
-            return value;
-        return null;
-    }
-
-    function rememberResolvedIcon(key, value) {
-        if (!key)
-            return;
-
-        var next = {};
-        var current = resolvedIconCache || {};
-        for (var oldKey in current)
-            next[oldKey] = current[oldKey];
-
-        next[key] = String(value || "");
-        resolvedIconCache = next;
-    }
-
-    function enqueueLiveNotification(app, title, body, icon) {
-        var item = {
-            app: String(app || "Notification"),
-            title: String(title || "Notification"),
-            body: String(body || ""),
-            icon: String(icon || "")
-        };
-
-        var queue = pendingLiveNotifications.slice();
-        queue.push(item);
-        pendingLiveNotifications = queue;
-
-        processNextLiveNotification();
-    }
-
-    function processNextLiveNotification() {
-        if (iconResolveProcess.running)
-            return;
-
-        while (pendingLiveNotifications.length > 0) {
-            var queue = pendingLiveNotifications.slice();
-            var item = queue.shift();
-            pendingLiveNotifications = queue;
-
-            var key = iconResolveCacheKey(item);
-            var directPath = directIconPath(item.icon);
-            if (directPath !== null) {
-                addLiveNotification(item.app, item.title, item.body, directPath);
-                continue;
-            }
-
-            if ((resolvedIconCache || {}).hasOwnProperty(key)) {
-                addLiveNotification(item.app, item.title, item.body, resolvedIconCache[key]);
-                continue;
-            }
-
-            activeLiveNotification = item;
-            activeLiveNotification.cacheKey = key;
-            iconResolveReceived = false;
-            iconResolveResult = "";
-            iconResolveProcess.command = [
-                "python3",
-                scriptPath,
-                "resolve-icon",
-                String(activeLiveNotification.icon || ""),
-                String(activeLiveNotification.app || "")
-            ];
-            iconResolveProcess.running = true;
-            return;
+    function parsedStatusPayload(text, key, label) {
+        try {
+            var data = JSON.parse(text || "{}");
+            return data[key] || data || {};
+        } catch (e) {
+            return {};
         }
     }
 
-    function addLiveNotification(app, title, body, icon) {
-        var cleanApp = stripNotificationMarkup(app || "Notification");
-        var cleanTitle = stripNotificationMarkup(title || "Notification");
-        var cleanBody = stripNotificationMarkup(body || "");
-
-        if (cleanApp.length === 0 && cleanTitle.length === 0 && cleanBody.length === 0)
-            return;
-
-        var item = {
-            id: "live-" + Date.now() + "-" + liveNotificationSerial,
-            app: cleanApp.length > 0 ? cleanApp : "Notification",
-            title: cleanTitle.length > 0 ? cleanTitle : "Notification",
-            body: cleanBody,
-            time: Qt.formatDateTime(new Date(), "hh:mm"),
-            actions: [],
-            action: "",
-            url: "",
-            desktopEntry: "",
-            icon: String(icon || "")
-        };
-
-        if (isNotificationDismissed(item))
-            return;
-
-        liveNotificationSerial += 1;
-
-        var nextLive = [item];
-        var key = notificationKey(item);
-        for (var i = 0; i < liveNotifications.length; i++) {
-            if (notificationKey(liveNotifications[i]) !== key)
-                nextLive.push(liveNotifications[i]);
-            if (nextLive.length >= 12)
-                break;
-        }
-
-        liveNotifications = nextLive;
-        mergeNotifications(notificationsCount + 1);
-    }
-
-    function parseDbusStringLine(line) {
-        var match = String(line || "").match(/^\s*string\s+"(.*)"\s*$/);
-        if (!match)
-            return null;
-
-        return match[1]
-            .replace(/\\"/g, "\"")
-            .replace(/\\n/g, " ")
-            .replace(/\\t/g, " ")
-            .replace(/\\\\/g, "\\");
-    }
-
-    function handleNotificationBusLine(line) {
-        var text = String(line || "");
-
-        if (text.indexOf("member=Notify") !== -1 && text.indexOf("org.freedesktop.Notifications") !== -1) {
-            notificationCaptureActive = true;
-            notificationCaptureDone = false;
-            notificationStringValues = [];
-            return;
-        }
-
-        if (!notificationCaptureActive || notificationCaptureDone)
-            return;
-
-        var value = parseDbusStringLine(text);
-        if (value === null)
-            return;
-
-        var values = notificationStringValues;
-        values.push(value);
-        notificationStringValues = values;
-
-        // Notify signature: app_name, replaces_id, app_icon, summary, body, actions, hints, expire_timeout.
-        // The first four string arguments are app name, app icon, summary and body.
-        if (values.length >= 4) {
-            enqueueLiveNotification(values[0], values[2], values[3], values[1]);
-            notificationCaptureDone = true;
-            notificationCaptureActive = false;
-        }
-    }
+    function decodeNotificationEntities(text) { return notificationStatus.decodeNotificationEntities(text); }
+    function stripNotificationMarkup(text) { return notificationStatus.stripNotificationMarkup(text); }
+    function notificationKey(notification) { return notificationStatus.notificationKey(notification); }
+    function pruneDismissedNotifications() { notificationStatus.pruneDismissedNotifications(); }
+    function rememberDismissedNotification(notification, fallbackId) { notificationStatus.rememberDismissedNotification(notification, fallbackId); }
+    function isNotificationDismissed(notification) { return notificationStatus.isNotificationDismissed(notification); }
+    function filterDismissedNotifications(list) { return notificationStatus.filterDismissedNotifications(list); }
+    function findNotificationById(notificationId) { return notificationStatus.findNotificationById(notificationId); }
+    function mergeNotifications(preferredCount) { notificationStatus.mergeNotifications(preferredCount); }
+    function iconResolveCacheKey(item) { return notificationStatus.iconResolveCacheKey(item); }
+    function directIconPath(icon) { return notificationStatus.directIconPath(icon); }
+    function rememberResolvedIcon(key, value) { notificationStatus.rememberResolvedIcon(key, value); }
+    function enqueueLiveNotification(app, title, body, icon) { notificationStatus.enqueueLiveNotification(app, title, body, icon); }
+    function processNextLiveNotification() { notificationStatus.processNextLiveNotification(); }
+    function addLiveNotification(app, title, body, icon) { notificationStatus.addLiveNotification(app, title, body, icon); }
+    function parseDbusStringLine(line) { return notificationStatus.parseDbusStringLine(line); }
+    function handleNotificationBusLine(line) { notificationStatus.handleBusLine(line); }
 
     function requestRefresh() {
         requestDistroRefresh();
@@ -540,124 +256,20 @@ Item {
         notificationsEventDebounce.restart();
     }
 
-    function isAudioEventLine(line) {
-        var text = String(line || "").toLowerCase();
-        if (text.indexOf("event") === -1)
-            return false;
+    function isAudioEventLine(line) { return audioStatus.isAudioEventLine(line); }
+    function handleAudioWatchLine(line) { audioStatus.handleWatchLine(line); }
+    function handleNetworkWatchLine(line) { networkStatus.handleWatchLine(line); }
+    function handleBluetoothWatchLine(line) { bluetoothStatus.handleWatchLine(line); }
+    function handleBatteryWatchLine(line) { batteryDomain.handleWatchLine(line); }
 
-        return text.indexOf("sink-input") !== -1
-            || text.indexOf("sink #") !== -1
-            || text.indexOf("sink ") !== -1
-            || text.indexOf("server") !== -1
-            || text.indexOf("card") !== -1;
-    }
+    function isAudioAction(args) { return audioStatus.isAction(args); }
+    function isNetworkAction(args) { return networkStatus.isAction(args); }
+    function isBluetoothAction(args) { return bluetoothStatus.isAction(args); }
+    function isNotificationsAction(args) { return notificationStatus.isAction(args); }
 
-    function handleAudioWatchLine(line) {
-        if (isAudioEventLine(line))
-            scheduleAudioRefresh();
-    }
-
-    function handleNetworkWatchLine(line) {
-        if (String(line || "").trim().length > 0)
-            scheduleNetworkRefresh();
-    }
-
-    function handleBluetoothWatchLine(line) {
-        if (String(line || "").trim().length > 0)
-            scheduleBluetoothRefresh();
-    }
-
-    function handleBatteryWatchLine(line) {
-        var text = String(line || "").toLowerCase();
-        if (text.indexOf("power_supply") !== -1 || text.indexOf("battery") !== -1 || text.indexOf("mains") !== -1)
-            scheduleBatteryRefresh();
-    }
-
-    function isAudioAction(args) {
-        if (!args || args.length === 0)
-            return false;
-
-        var cmd = String(args[0] || "");
-        return cmd === "set-volume"
-            || cmd === "toggle-mute"
-            || cmd === "set-app-volume"
-            || cmd === "set-sink";
-    }
-
-    function isNetworkAction(args) {
-        if (!args || args.length === 0)
-            return false;
-
-        var cmd = String(args[0] || "");
-        return cmd === "toggle-wifi"
-            || cmd === "connect-wifi";
-    }
-
-    function isBluetoothAction(args) {
-        if (!args || args.length === 0)
-            return false;
-
-        var cmd = String(args[0] || "");
-        return cmd === "toggle-bluetooth"
-            || cmd === "connect-bluetooth"
-            || cmd === "disconnect-bluetooth";
-    }
-
-    function isNotificationsAction(args) {
-        if (!args || args.length === 0)
-            return false;
-
-        var cmd = String(args[0] || "");
-        return cmd === "notifications-clear"
-            || cmd === "notifications-toggle-silent"
-            || cmd === "notification-close"
-            || cmd === "notification-open";
-    }
-
-    function sinkLabelByName(name, devices) {
-        var list = devices || audioDevices || [];
-        var target = String(name || "");
-
-        for (var i = 0; i < list.length; i++) {
-            if (String(list[i].name || "") === target)
-                return String(list[i].label || list[i].name || "");
-        }
-
-        return "";
-    }
-
-    function devicesWithActiveSink(devices, name) {
-        var list = devices || [];
-        var target = String(name || "");
-        var next = [];
-
-        for (var i = 0; i < list.length; i++) {
-            var item = list[i] || {};
-            var copy = {};
-
-            for (var key in item)
-                copy[key] = item[key];
-
-            copy.active = String(item.name || "") === target;
-            next.push(copy);
-        }
-
-        return next;
-    }
-
-    function applyOptimisticSink(name, label) {
-        var target = String(name || "");
-        if (target.length === 0)
-            return;
-
-        var targetLabel = String(label || "");
-        if (targetLabel.length === 0)
-            targetLabel = sinkLabelByName(target, audioDevices);
-
-        audioDevices = devicesWithActiveSink(audioDevices, target);
-        if (targetLabel.length > 0)
-            audioDevice = targetLabel;
-    }
+    function sinkLabelByName(name, devices) { return audioStatus.sinkLabelByName(name, devices); }
+    function devicesWithActiveSink(devices, name) { return audioStatus.devicesWithActiveSink(devices, name); }
+    function applyOptimisticSink(name, label) { audioStatus.applyOptimisticSink(name, label); }
 
     function applyDistroStatus(distro) {
         distro = distro || {};
@@ -667,132 +279,36 @@ Item {
     }
 
     function applyNetworkStatus(n) {
-        n = n || {};
-        networkAvailable = !!n.available;
-        hasWifi = !!n.hasWifi;
-        wifiEnabled = !!n.wifiEnabled;
-        hasEthernet = !!n.hasEthernet;
-        ethernetActive = !!n.ethernetActive;
-        ethernetAvailable = !!n.ethernetAvailable;
-        ethernetConnection = n.ethernetConnection || "";
-        ethernetDevice = n.ethernetDevice || "";
-        ethernetIp = n.ethernetIp || "";
-        networkType = n.type || "none";
-        networkState = n.state || "offline";
-        networkConnection = n.connection || "";
-        networkDevice = n.device || "";
-        wifiSsid = n.ssid || "";
-        wifiSignal = Number(n.signal || 0);
-        var nextWifiNetworks = n.networks || [];
-        if (!sameList(wifiNetworks, nextWifiNetworks))
-            wifiNetworks = nextWifiNetworks;
+        networkStatus.applyStatus(n);
         ready = true;
     }
 
     function applyBluetoothStatus(bt) {
-        bt = bt || {};
-        hasBluetooth = !!bt.hasBluetooth;
-        bluetoothEnabled = !!bt.enabled;
-        var nextBluetoothDevices = bt.devices || [];
-        if (!sameList(bluetoothDevices, nextBluetoothDevices))
-            bluetoothDevices = nextBluetoothDevices;
+        bluetoothStatus.applyStatus(bt);
         ready = true;
     }
 
     function applyBatteryStatus(b) {
-        b = b || {};
-        hasBattery = !!b.hasBattery;
-        batteryPercent = Number(b.percent || 0);
-        batteryStatus = b.status || "absent";
-        batteryCharging = !!b.charging;
-        acOnline = !!b.acOnline;
-        batteryTime = b.time || "";
+        batteryDomain.applyStatus(b);
         ready = true;
     }
 
     function applyNotificationsStatus(notificationsData) {
-        notificationsData = notificationsData || {};
-        notificationsAvailable = !!notificationsData.available;
-        notificationsSilent = !!notificationsData.silent;
-        var nextHistoryNotifications = filterDismissedNotifications(notificationsData.items || []);
-        if (!sameList(historyNotifications, nextHistoryNotifications))
-            historyNotifications = nextHistoryNotifications;
-        mergeNotifications(historyNotifications.length);
+        notificationStatus.applyStatus(notificationsData);
         ready = true;
     }
 
     function applyAudioStatus(a) {
-        a = a || {};
-        audioReady = true;
-        hasAudio = !!a.hasAudio;
-        volume = Number(a.volume || 0);
-        muted = !!a.muted;
-
-        var nextAudioDevices = a.devices || [];
-        var realActiveSink = "";
-
-        for (var ai = 0; ai < nextAudioDevices.length; ai++) {
-            if (nextAudioDevices[ai].active) {
-                realActiveSink = String(nextAudioDevices[ai].name || "");
-                break;
-            }
-        }
-
-        if (pendingSinkName !== "" && realActiveSink === pendingSinkName) {
-            pendingSinkName = "";
-            pendingSinkLabel = "";
-            sinkFallbackTimer.stop();
-        }
-
-        if (pendingSinkName !== "") {
-            var pendingDevices = devicesWithActiveSink(nextAudioDevices, pendingSinkName);
-            if (!sameList(audioDevices, pendingDevices))
-                audioDevices = pendingDevices;
-            audioDevice = pendingSinkLabel !== "" ? pendingSinkLabel : (sinkLabelByName(pendingSinkName, nextAudioDevices) || a.device || "");
-        } else {
-            audioDevice = a.device || "";
-            if (!sameList(audioDevices, nextAudioDevices))
-                audioDevices = nextAudioDevices;
-        }
-
-        var nextSinkInputs = a.sinkInputs || [];
-        if (!sameList(sinkInputs, nextSinkInputs))
-            sinkInputs = nextSinkInputs;
+        audioStatus.applyStatus(a);
         ready = true;
     }
 
-    function parsedStatusPayload(text, key, label) {
-        try {
-            var data = JSON.parse(text || "{}");
-            return data[key] || data || {};
-        } catch (e) {
-            return {};
-        }
-    }
-
-    function updateDistroFromJson(text) {
-        applyDistroStatus(parsedStatusPayload(text, "distro", "distro"));
-    }
-
-    function updateNetworkFromJson(text) {
-        applyNetworkStatus(parsedStatusPayload(text, "network", "network"));
-    }
-
-    function updateBluetoothFromJson(text) {
-        applyBluetoothStatus(parsedStatusPayload(text, "bluetooth", "bluetooth"));
-    }
-
-    function updateAudioFromJson(text) {
-        applyAudioStatus(parsedStatusPayload(text, "audio", "audio"));
-    }
-
-    function updateBatteryFromJson(text) {
-        applyBatteryStatus(parsedStatusPayload(text, "battery", "battery"));
-    }
-
-    function updateNotificationsFromJson(text) {
-        applyNotificationsStatus(parsedStatusPayload(text, "notifications", "notifications"));
-    }
+    function updateDistroFromJson(text) { applyDistroStatus(parsedStatusPayload(text, "distro", "distro")); }
+    function updateNetworkFromJson(text) { applyNetworkStatus(parsedStatusPayload(text, "network", "network")); }
+    function updateBluetoothFromJson(text) { applyBluetoothStatus(parsedStatusPayload(text, "bluetooth", "bluetooth")); }
+    function updateAudioFromJson(text) { applyAudioStatus(parsedStatusPayload(text, "audio", "audio")); }
+    function updateBatteryFromJson(text) { applyBatteryStatus(parsedStatusPayload(text, "battery", "battery")); }
+    function updateNotificationsFromJson(text) { applyNotificationsStatus(parsedStatusPayload(text, "notifications", "notifications")); }
 
     function runAction(args) {
         if (actionProc.running) {
@@ -806,120 +322,52 @@ Item {
         actionProc.running = true;
     }
 
-    function setVolume(value) {
-        volume = Math.max(0, Math.min(150, Math.round(value)));
-        if (volume > 0)
-            muted = false;
-        runAction(["set-volume", String(volume)]);
+    function setVolume(value) { audioStatus.setVolume(value); }
+    function toggleMute() { audioStatus.toggleMute(); }
+    function setAppVolume(index, value) { audioStatus.setAppVolume(index, value); }
+    function setSink(name, label) { audioStatus.setSink(name, label); }
+    function toggleWifi() { networkStatus.toggleWifi(); }
+    function connectWifi(ssid) { networkStatus.connectWifi(ssid); }
+    function toggleBluetooth() { bluetoothStatus.toggleBluetooth(); }
+    function toggleBluetoothDevice(device) { bluetoothStatus.toggleBluetoothDevice(device); }
+    function systemAction(actionName) { powerStatus.systemAction(actionName); }
+    function clearNotifications() { notificationStatus.clearNotifications(); }
+    function toggleNotificationsSilent() { notificationStatus.toggleNotificationsSilent(); }
+    function closeNotification(notificationId) { notificationStatus.closeNotification(notificationId); }
+    function openNotification(notification) { notificationStatus.openNotification(notification); }
+
+    SystemStatusParts.SystemAudioStatus {
+        id: audioStatus
+        actionRunner: function(args) { root.runAction(args); }
+        refreshScheduler: function(baseDelay) { root.scheduleAudioRefresh(baseDelay); }
     }
 
-    function toggleMute() {
-        if (hasAudio)
-            muted = !muted;
-        runAction(["toggle-mute"]);
+    SystemStatusParts.SystemNetworkStatus {
+        id: networkStatus
+        actionRunner: function(args) { root.runAction(args); }
+        refreshScheduler: function(baseDelay) { root.scheduleNetworkRefresh(baseDelay); }
     }
 
-    function setAppVolume(index, value) {
-        if (index === undefined || index === null)
-            return;
-        runAction(["set-app-volume", String(index), String(Math.max(0, Math.min(150, Math.round(value))))]);
+    SystemStatusParts.SystemBluetoothStatus {
+        id: bluetoothStatus
+        actionRunner: function(args) { root.runAction(args); }
+        refreshScheduler: function(baseDelay) { root.scheduleBluetoothRefresh(baseDelay); }
     }
 
-    function setSink(name, label) {
-        if (!name)
-            return;
-
-        pendingSinkName = String(name);
-        pendingSinkLabel = String(label || "");
-        if (pendingSinkLabel.length === 0)
-            pendingSinkLabel = sinkLabelByName(pendingSinkName, audioDevices);
-
-        applyOptimisticSink(pendingSinkName, pendingSinkLabel);
-        sinkFallbackTimer.restart();
-        runAction(["set-sink", pendingSinkName]);
+    SystemStatusParts.SystemBatteryStatus {
+        id: batteryDomain
+        refreshScheduler: function(baseDelay) { root.scheduleBatteryRefresh(baseDelay); }
     }
 
-    function toggleWifi() {
-        runAction(["toggle-wifi"]);
+    SystemStatusParts.SystemNotificationStatus {
+        id: notificationStatus
+        scriptPath: root.scriptPath
+        actionRunner: function(args) { root.runAction(args); }
     }
 
-    function connectWifi(ssid) {
-        if (ssid)
-            runAction(["connect-wifi", String(ssid)]);
-    }
-
-    function toggleBluetooth() {
-        runAction(["toggle-bluetooth"]);
-    }
-
-    function toggleBluetoothDevice(device) {
-        if (!device || !device.mac)
-            return;
-        runAction([(device.connected ? "disconnect-bluetooth" : "connect-bluetooth"), String(device.mac)]);
-    }
-
-    function systemAction(actionName) {
-        if (actionName === "poweroff")
-            runAction(["system-poweroff"]);
-        else if (actionName === "reboot")
-            runAction(["system-reboot"]);
-        else if (actionName === "logout")
-            runAction(["system-logout"]);
-    }
-
-    function clearNotifications() {
-        liveNotifications = [];
-        historyNotifications = [];
-        notifications = [];
-        notificationsCount = 0;
-        dismissedNotificationIds = {};
-        dismissedNotificationKeys = {};
-        runAction(["notifications-clear"]);
-    }
-
-    function toggleNotificationsSilent() {
-        notificationsSilent = !notificationsSilent;
-        runAction(["notifications-toggle-silent"]);
-    }
-
-    function closeNotification(notificationId) {
-        var id = String(notificationId || "");
-        var target = findNotificationById(id);
-
-        rememberDismissedNotification(target, id);
-
-        liveNotifications = filterDismissedNotifications(liveNotifications);
-        historyNotifications = filterDismissedNotifications(historyNotifications);
-        notifications = filterDismissedNotifications(notifications);
-        notificationsCount = Math.max(0, notificationsCount - 1);
-        mergeNotifications(notificationsCount);
-
-        runAction(["notification-close", id]);
-    }
-
-    function openNotification(notification) {
-        if (!notification)
-            return;
-
-        runAction([
-            "notification-open",
-            String(notification.id || ""),
-            String(notification.action || ""),
-            String(notification.url || ""),
-            String(notification.desktopEntry || ""),
-            String(notification.app || "")
-        ]);
-    }
-
-    Timer {
-        id: sinkFallbackTimer
-        interval: 2600
-        repeat: false
-        onTriggered: {
-            pendingSinkName = "";
-            pendingSinkLabel = "";
-            scheduleAudioRefresh();
-        }
+    SystemStatusParts.SystemPowerStatus {
+        id: powerStatus
+        actionRunner: function(args) { root.runAction(args); }
     }
 
     Component.onCompleted: {
@@ -1083,38 +531,6 @@ Item {
     }
 
     Process {
-        id: iconResolveProcess
-        running: false
-
-        stdout: StdioCollector {
-            onStreamFinished: {
-                root.iconResolveReceived = true;
-                root.iconResolveResult = this.text.trim();
-            }
-        }
-
-        onExited: {
-            running = false;
-
-            if (root.activeLiveNotification) {
-                var resolvedIcon = root.iconResolveReceived ? root.iconResolveResult : "";
-                root.rememberResolvedIcon(root.activeLiveNotification.cacheKey || "", resolvedIcon);
-                root.addLiveNotification(
-                    root.activeLiveNotification.app,
-                    root.activeLiveNotification.title,
-                    root.activeLiveNotification.body,
-                    resolvedIcon
-                );
-            }
-
-            root.activeLiveNotification = null;
-            root.iconResolveReceived = false;
-            root.iconResolveResult = "";
-            root.processNextLiveNotification();
-        }
-    }
-
-    Process {
         id: distroRefreshProc
         command: ["python3", root.scriptPath, "status-distro"]
 
@@ -1252,5 +668,4 @@ Item {
                 root.scheduleNotificationsRefresh();
         }
     }
-
 }
