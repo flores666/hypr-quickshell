@@ -8,34 +8,34 @@ import "../../components" as Components
 Scope {
     id: root
 
-    readonly property bool applicationsOpen: Services.ShellState.applicationsOverviewOpen
-    readonly property bool applicationsClosing: Services.ShellState.applicationsOverviewClosing
-    readonly property bool applicationsVisualLayerHidden: Services.ShellState.applicationsOverviewVisualLayerHidden
-    readonly property bool applicationsVisualLayerSettled: Services.ShellState.applicationsOverviewVisualLayerSettled
-    readonly property bool applicationsClosingState: applicationsClosing || closingVisualActive
-    readonly property bool applicationsInteractiveState: applicationsOpen && applicationsVisualLayerSettled && !applicationsClosingState
-    readonly property bool applicationsOpeningState: applicationsOpen && !applicationsClosingState && !applicationsInteractiveState
-    readonly property bool applicationsRendering: applicationsOpen || closingVisualActive || animationProgress > 0.001
-    readonly property string applicationsState: applicationsClosingState ? "closing" : applicationsInteractiveState ? "interactive" : applicationsOpeningState ? "opening" : applicationsRendering ? "settling" : "hidden"
-    readonly property bool ownsApplicationsInput: Services.ShellState.inputCaptureOwner === "applicationsOverview"
-    readonly property bool applicationsInputInteractive: applicationsState === "interactive" && ownsApplicationsInput
-    readonly property int inputTopMargin: 56
-    readonly property int inputBottomMargin: 116
-    readonly property int visualContentYOffset: 38
-    readonly property int inputContentYOffset: 0
-    readonly property real desktopCardPhaseEnd: 0.48
-    readonly property int closeAnimationDuration: 300
-    readonly property int openAnimationDuration: 340
+    readonly property bool applicationsOpen: overviewController.applicationsOpen
+    readonly property bool applicationsClosing: overviewController.applicationsClosing
+    readonly property bool applicationsVisualLayerHidden: overviewController.applicationsVisualLayerHidden
+    readonly property bool applicationsVisualLayerSettled: overviewController.applicationsVisualLayerSettled
+    readonly property bool applicationsClosingState: overviewController.applicationsClosingState
+    readonly property bool applicationsInteractiveState: overviewController.applicationsInteractiveState
+    readonly property bool applicationsOpeningState: overviewController.applicationsOpeningState
+    readonly property bool applicationsRendering: overviewController.applicationsRendering
+    readonly property string applicationsState: overviewController.applicationsState
+    readonly property bool ownsApplicationsInput: overviewController.ownsApplicationsInput
+    readonly property bool applicationsInputInteractive: overviewController.applicationsInputInteractive
+    readonly property int inputTopMargin: overviewController.inputTopMargin
+    readonly property int inputBottomMargin: overviewController.inputBottomMargin
+    readonly property int visualContentYOffset: overviewController.visualContentYOffset
+    readonly property int inputContentYOffset: overviewController.inputContentYOffset
+    readonly property real desktopCardPhaseEnd: overviewController.desktopCardPhaseEnd
+    readonly property int closeAnimationDuration: overviewController.closeAnimationDuration
+    readonly property int openAnimationDuration: overviewController.openAnimationDuration
     readonly property real horizontalMargin: Math.max(52, Math.round(visualWindow.width * 0.08))
-    readonly property real applicationsRiseProgress: smoothStep(desktopCardPhaseEnd, 1.0, animationProgress)
-    readonly property bool panelVisuallySettled: applicationsRiseProgress >= 0.998
-    readonly property bool applicationsClosingHandoffVisible: applicationsState === "closing" && panelVisuallySettled && !applicationsVisualLayerHidden
-    readonly property bool applicationsInputCaptureRequired: applicationsState === "opening" || applicationsState === "interactive" || applicationsState === "closing"
-    readonly property int inputPanelMaskHeight: Math.max(0, inputWindow.height - inputBottomMargin)
-    readonly property bool applicationsVisualWindowVisible: applicationsRendering && !applicationsVisualLayerHidden
-    readonly property bool applicationsInputContentVisible: applicationsInputInteractive || applicationsClosingHandoffVisible
-    readonly property bool applicationsInputWindowVisible: applicationsInputCaptureRequired || applicationsInputContentVisible
-    readonly property bool searchActive: normalizedQuery().length > 0
+    readonly property real applicationsRiseProgress: overviewController.applicationsRiseProgress
+    readonly property bool panelVisuallySettled: overviewController.panelVisuallySettled
+    readonly property bool applicationsClosingHandoffVisible: overviewController.applicationsClosingHandoffVisible
+    readonly property bool applicationsInputCaptureRequired: overviewController.applicationsInputCaptureRequired
+    readonly property int inputPanelMaskHeight: overviewController.inputPanelMaskHeight
+    readonly property bool applicationsVisualWindowVisible: overviewController.applicationsVisualWindowVisible
+    readonly property bool applicationsInputContentVisible: overviewController.applicationsInputContentVisible
+    readonly property bool applicationsInputWindowVisible: overviewController.applicationsInputWindowVisible
+    readonly property bool searchActive: searchController.normalizedQuery().length > 0
     readonly property int contextMenuWidth: 226
     readonly property int contextMenuRowHeight: 38
     readonly property var categoryDefinitions: [
@@ -51,52 +51,45 @@ Scope {
         { "code": "other", "title": "Other", "categories": [] }
     ]
 
-    property real animationProgress: 0
-    property bool animationBehaviorEnabled: true
-    property bool closingVisualActive: false
-    property string query: ""
     property real gridContentY: 0
     property var sectionRows: []
     property int sectionRowsVersion: 0
     property var selectableApps: []
     property string selectedAppKey: ""
     property string selectionSource: "none"
-    property bool contextMenuOpen: false
-    property var contextApp: ({})
-    property var contextActions: []
-    property real contextMenuX: 0
-    property real contextMenuY: 0
     property bool preserveViewportOnNextRebuild: false
     property bool viewportMutationActive: false
     property real preservedViewportY: 0
     property bool suppressEnsureVisible: false
     property bool hiddenSectionExpanded: false
-    property bool pointerSuppressedByKeyboard: false
-    property bool pointerRefreshGuardActive: false
-    property bool inputReadyNotified: false
-    property int inputFocusAttemptsRemaining: 0
 
-
-    function clamp01(value) {
-        return Math.max(0, Math.min(1, Number(value || 0)));
+    ApplicationsOverviewController {
+        id: overviewController
+        overview: root
+        searchController: searchController
+        inputWindowHeight: inputWindow.height
     }
 
-    function smoothStep(edge0, edge1, value) {
-        var range = Math.max(0.0001, edge1 - edge0);
-        var t = clamp01((value - edge0) / range);
-        return t * t * (3 - 2 * t);
+    ApplicationsSearchController {
+        id: searchController
+        overview: root
+        inputContent: inputContent
+        interactive: root.applicationsInputInteractive
     }
+
+
+
 
     function normalizedQuery() {
-        return String(query || "").trim().toLowerCase();
+        return searchController.normalizedQuery();
     }
 
     function isSearchTextActive(text) {
-        return String(text || "").trim().length > 0;
+        return searchController.isSearchTextActive(text);
     }
 
     function currentSearchActive() {
-        return isSearchTextActive(query);
+        return searchController.currentSearchActive();
     }
 
     function appSearchText(app) {
@@ -395,7 +388,7 @@ Scope {
 
     function rebuildSections(resetSelectionToFirst) {
         var needle = normalizedQuery();
-        var rawNeedle = String(query || "").trim();
+        var rawNeedle = String(searchController.query || "").trim();
         var searchMode = needle.length > 0;
         var apps = sortedApps(Services.AppPanelService.apps || []);
         var seen = {};
@@ -532,276 +525,111 @@ Scope {
     }
 
     function requestSearchFocusAttempt() {
-        if (!applicationsInputInteractive || !inputContent || !inputContent.searchField)
-            return false;
-
-        inputContent.forceSearchFocus();
-        Services.ShellActions.refreshPointerFocus();
-        return inputContent.searchField.activeFocus;
+        return searchController.requestSearchFocusAttempt();
     }
 
     function focusSearchFieldWhenReady() {
-        if (!applicationsInputInteractive)
-            return;
-
-        inputFocusAttemptsRemaining = Math.max(inputFocusAttemptsRemaining, 10);
-        inputFocusRetryTimer.restart();
-        Qt.callLater(function () {
-            if (root.applicationsInputInteractive && !root.inputReadyNotified)
-                inputFocusRetryTimer.restart();
-        });
+        searchController.focusSearchFieldWhenReady();
     }
 
     function notifyApplicationsInputReadyWhenFocused() {
-        if (inputReadyNotified || !applicationsInputInteractive || !inputContent || !inputContent.searchField || !inputContent.searchField.activeFocus)
-            return;
-
-        inputReadyNotified = true;
-        Services.ShellActions.notifyApplicationsInputReady();
+        searchController.notifyApplicationsInputReadyWhenFocused();
     }
 
     function notifyApplicationsInputNotReady() {
-        if (!inputReadyNotified)
-            return;
-
-        inputReadyNotified = false;
-        Services.ShellActions.notifyApplicationsInputNotReady();
+        searchController.notifyApplicationsInputNotReady();
     }
 
     function resetInputReadiness(notifyNative) {
-        if (notifyNative)
-            notifyApplicationsInputNotReady();
-        else
-            inputReadyNotified = false;
-
-        inputFocusAttemptsRemaining = 0;
-        inputFocusRetryTimer.stop();
+        searchController.resetInputReadiness(notifyNative);
     }
 
     function activateApplicationsInput() {
-        Services.ShellActions.setApplicationsInputQuery(query);
-        focusSearchFieldWhenReady();
+        searchController.activateApplicationsInput();
     }
 
     function deactivateApplicationsInput() {
-        resetInputReadiness(true);
-        clearSearchFocus();
-        closeContextMenu();
+        searchController.deactivateApplicationsInput();
     }
 
     function keepSearchFocusWhileOwned() {
-        if (!applicationsInputInteractive || !inputContent || !inputContent.searchField)
-            return;
-
-        if (inputContent.searchField.activeFocus) {
-            notifyApplicationsInputReadyWhenFocused();
-            return;
-        }
-
-        inputFocusAttemptsRemaining = Math.max(inputFocusAttemptsRemaining, 8);
-        inputFocusRetryTimer.restart();
+        searchController.keepSearchFocusWhileOwned();
     }
 
     function clearSearchFocus() {
-        if (inputContent)
-            inputContent.clearSearchFocus();
+        searchController.clearSearchFocus();
     }
 
     function suppressPointerAfterKeyboardInput() {
-        if (!applicationsInputInteractive)
-            return;
-
-        var shouldRefreshPointerFocus = !pointerSuppressedByKeyboard;
-        pointerSuppressedByKeyboard = true;
-        pointerRefreshGuardActive = true;
-        pointerRefreshGuardTimer.restart();
-
-        if (shouldRefreshPointerFocus)
-            Services.ShellActions.refreshPointerFocus();
+        searchController.suppressPointerAfterKeyboardInput();
     }
 
     function clearPointerSuppression() {
-        pointerRefreshGuardTimer.stop();
-        pointerRefreshGuardActive = false;
-        pointerSuppressedByKeyboard = false;
+        searchController.clearPointerSuppression();
     }
 
     function revealPointerAfterMouseMove() {
-        if (pointerRefreshGuardActive)
-            return;
-
-        if (pointerSuppressedByKeyboard)
-            pointerSuppressedByKeyboard = false;
+        searchController.revealPointerAfterMouseMove();
     }
 
     function interactiveCursorShape(defaultShape) {
-        return pointerSuppressedByKeyboard ? Qt.BlankCursor : defaultShape;
+        return searchController.interactiveCursorShape(defaultShape);
     }
 
     function startOpenAnimation() {
-        closeAnimationKickTimer.stop();
-        closeCleanupTimer.stop();
-        closingVisualActive = false;
-        resetInputReadiness(false);
-        closeContextMenu();
-        animationBehaviorEnabled = false;
-        animationProgress = Services.ShellState.applicationsOverviewFromWorkspaceOverview ? desktopCardPhaseEnd + 0.04 : 0;
-        animationBehaviorEnabled = true;
-        animationKickTimer.restart();
+        overviewController.startOpenAnimation();
     }
 
     function startCloseAnimation() {
-        if (closingVisualActive)
-            return;
-
-        animationKickTimer.stop();
-        closeCleanupTimer.stop();
-        closeContextMenu();
-        clearSelection();
-        clearPointerSuppression();
-        captureContentYForClose();
-        closingVisualActive = true;
-        animationBehaviorEnabled = false;
-        animationProgress = clamp01(animationProgress);
-        animationBehaviorEnabled = true;
-        closeAnimationKickTimer.restart();
+        overviewController.startCloseAnimation();
     }
 
     function finishCloseAnimation() {
-        if (applicationsOpen)
-            return;
-
-        closingVisualActive = false;
-        animationBehaviorEnabled = false;
-        animationProgress = 0;
-        animationBehaviorEnabled = true;
-        Services.ShellState.setApplicationsOverviewClosing(false);
-        Services.ShellState.setApplicationsOverviewVisualLayerSettled(false);
-        query = "";
-        resetInputReadiness(false);
-        clearSearchFocus();
-        clearPointerSuppression();
-        closeContextMenu();
-        clearSelection();
-        rebuildSections(false);
-        resetGridContentY();
+        overviewController.finishCloseAnimation();
     }
 
     function beginApplicationsSession() {
-        hiddenSectionExpanded = false;
-        query = Services.ShellState.applicationsOverviewInitialQuery;
-        Services.ShellState.setApplicationsOverviewInitialQuery("");
-        Services.AppPanelService.requestRefresh(false);
-        resetGridContentY();
-        clearSelection();
-        rebuildSections(true);
-        startOpenAnimation();
+        overviewController.beginApplicationsSession();
     }
 
     function handleApplicationsSessionClosed() {
-        clearSearchFocus();
-        if (closingVisualActive) {
-            if (animationProgress <= 0.001)
-                finishCloseAnimation();
-            else
-                closeCleanupTimer.restart();
-        } else if (animationProgress > 0.001 || applicationsVisualLayerSettled) {
-            startCloseAnimation();
-        }
+        overviewController.handleApplicationsSessionClosed();
     }
 
     function setApplicationsInputCapture(active) {
-        Services.ShellState.setInputCaptureOwner("applicationsOverview", active);
-        if (!active) {
-            clearPointerSuppression();
-            closeContextMenu();
-            clearSelection();
-        }
+        overviewController.setApplicationsInputCapture(active);
     }
 
     function contextMenuHeight() {
-        return Math.max(1, contextActions.length) * contextMenuRowHeight + 12;
+        return applicationContextMenu.menuHeight();
     }
 
     function clampContextX(x) {
-        return Math.max(8, Math.min(Number(x || 0), Math.max(8, inputWindow.width - contextMenuWidth - 8)));
+        return applicationContextMenu.clampContextX(x);
     }
 
     function clampContextY(y) {
-        var minY = inputTopMargin + 4;
-        var maxY = Math.max(minY, inputWindow.height - inputBottomMargin - contextMenuHeight() - 4);
-        return Math.max(minY, Math.min(Number(y || 0), maxY));
+        return applicationContextMenu.clampContextY(y);
     }
 
     function appContextActions(app) {
-        var key = appKey(app);
-        var hidden = Services.AppPanelService.isHidden(key) || Boolean(app && app.hidden);
-        var favorite = Services.AppPanelService.isFavorite(key) || Boolean(app && app.favorite);
-        var pinned = Services.AppPanelService.isPinned(key);
-        var actions = [
-            { "label": "Launch", "action": "launch" },
-            { "label": favorite ? "Remove from favorites" : "Add to favorites", "action": favorite ? "unfavorite" : "favorite" },
-            { "label": pinned ? "Unpin from panel" : "Pin to panel", "action": pinned ? "unpin" : "pin" }
-        ];
-        if (hidden)
-            actions.push({ "label": "Show in applications", "action": "show" });
-        actions.push({ "label": "Uninstall from system...", "action": "uninstall" });
-        return actions;
+        return applicationContextMenu.appContextActions(app);
     }
 
     function openContextMenu(app, x, y) {
-        if (!app || !app.desktopId)
-            return;
-        Services.ShellState.requestClosePopups("all");
-        contextApp = app;
-        contextActions = appContextActions(app);
-        contextMenuX = clampContextX(x + 8);
-        contextMenuY = clampContextY(y + 8);
-        contextMenuOpen = true;
-        Services.ShellState.openPopup("launcherContextMenu", "applications");
+        applicationContextMenu.openMenu(app, x, y);
     }
 
     function closeContextMenu() {
-        contextMenuOpen = false;
-        contextActions = [];
-        contextApp = ({});
-        Services.ShellState.closePopup("launcherContextMenu");
+        applicationContextMenu.closeMenu();
     }
 
     function runContextAction(action) {
-        var app = contextApp || {};
-        var key = appKey(app);
-        closeContextMenu();
-        if (!key)
-            return;
-
-        if (action === "launch") {
-            launchApp(app);
-            return;
-        }
-
-        beginViewportPreservingMutation();
-
-        if (action === "pin") {
-            Services.AppPanelService.pin(key);
-        } else if (action === "unpin") {
-            Services.AppPanelService.unpin(key);
-        } else if (action === "favorite") {
-            Services.AppPanelService.addFavorite(key);
-        } else if (action === "unfavorite") {
-            Services.AppPanelService.removeFavorite(key);
-        } else if (action === "hide") {
-            Services.AppPanelService.hideFromApplications(key);
-        } else if (action === "show") {
-            Services.AppPanelService.showInApplications(key);
-        } else if (action === "uninstall") {
-            Services.ShellActions.closeWorkspaceOverview();
-            Services.AppPanelService.uninstallFromSystem(key);
-        }
+        applicationContextMenu.runAction(action);
     }
 
     function handleAppHovered(appKeyValue) {
-        if (pointerSuppressedByKeyboard)
+        if (searchController.pointerSuppressedByKeyboard)
             return;
 
         var key = String(appKeyValue || "");
@@ -811,7 +639,7 @@ Scope {
     }
 
     function handleAppUnhovered(appKeyValue) {
-        if (pointerSuppressedByKeyboard)
+        if (searchController.pointerSuppressedByKeyboard)
             return;
 
         var key = String(appKeyValue || "");
@@ -861,101 +689,36 @@ Scope {
             startCloseAnimation();
     }
 
-    onQueryChanged: {
-        if (applicationsOpen && !closingVisualActive) {
-            var active = currentSearchActive();
-            closeContextMenu();
-            resetGridContentY();
-            if (!active)
-                clearSelection();
-            rebuildSections(active);
-            Qt.callLater(root.keepSearchFocusWhileOwned);
-        }
-    }
 
-    Behavior on animationProgress {
-        enabled: root.animationBehaviorEnabled
-        NumberAnimation {
-            duration: root.closingVisualActive || root.applicationsClosing ? root.closeAnimationDuration : root.openAnimationDuration
-            easing.type: Easing.InOutCubic
-        }
-    }
 
-    Timer {
-        id: animationKickTimer
-        interval: 0
-        repeat: false
-        onTriggered: root.animationProgress = 1
-    }
+    Connections {
+        target: searchController
 
-    Timer {
-        id: closeAnimationKickTimer
-        interval: 0
-        repeat: false
-        onTriggered: {
-            root.animationProgress = 0;
-            closeCleanupTimer.restart();
-        }
-    }
-
-    Timer {
-        id: closeCleanupTimer
-        interval: root.closeAnimationDuration + 40
-        repeat: false
-        onTriggered: root.finishCloseAnimation()
-    }
-
-    Timer {
-        id: inputReleaseWatchdogTimer
-        interval: root.closeAnimationDuration + 260
-        repeat: false
-        running: root.closingVisualActive && !root.applicationsOpen
-        onTriggered: root.finishCloseAnimation()
-    }
-
-    Timer {
-        id: pointerRefreshGuardTimer
-        interval: 120
-        repeat: false
-        onTriggered: root.pointerRefreshGuardActive = false
-    }
-
-    Timer {
-        id: inputFocusRetryTimer
-        interval: 16
-        repeat: true
-        onTriggered: {
-            if (!root.applicationsInputInteractive || root.inputReadyNotified) {
-                inputFocusAttemptsRemaining = 0;
-                stop();
-                return;
+        function onQueryChanged() {
+            if (root.applicationsOpen && !overviewController.closingVisualActive) {
+                var active = root.currentSearchActive();
+                root.closeContextMenu();
+                root.resetGridContentY();
+                if (!active)
+                    root.clearSelection();
+                root.rebuildSections(active);
+                Qt.callLater(root.keepSearchFocusWhileOwned);
             }
-
-            var focused = root.requestSearchFocusAttempt();
-            inputFocusAttemptsRemaining -= 1;
-            if (focused) {
-                root.notifyApplicationsInputReadyWhenFocused();
-                stop();
-                return;
-            }
-
-            if (inputFocusAttemptsRemaining <= 0)
-                stop();
         }
     }
 
     Connections {
         target: Services.AppPanelService
         function onAppsChanged() {
-            if (root.applicationsOpen && !root.closingVisualActive)
+            if (root.applicationsOpen && !overviewController.closingVisualActive)
                 root.rebuildSections(false);
         }
         function onHiddenIdsChanged() {
-            if (root.applicationsOpen && !root.closingVisualActive)
+            if (root.applicationsOpen && !overviewController.closingVisualActive)
                 root.rebuildSections(false);
         }
         function onFavoriteIdsChanged() {
-            if (root.applicationsOpen && !root.closingVisualActive)
+            if (root.applicationsOpen && !overviewController.closingVisualActive)
                 root.rebuildSections(false);
         }
         function onActionRunningChanged() {
@@ -969,12 +732,12 @@ Scope {
     Connections {
         target: Services.ShellState
         function onApplicationsOverviewBufferedQueryNonceChanged() {
-            if (!root.applicationsOpen || root.closingVisualActive)
+            if (!root.applicationsOpen || overviewController.closingVisualActive)
                 return;
 
             var nextQuery = Services.ShellState.applicationsOverviewBufferedQuery;
-            if (root.query !== nextQuery)
-                root.query = nextQuery;
+            if (searchController.query !== nextQuery)
+                searchController.query = nextQuery;
             Qt.callLater(root.keepSearchFocusWhileOwned);
         }
 
@@ -1028,7 +791,7 @@ Scope {
             syncContentY: true
             horizontalMargin: root.horizontalMargin
             contentYOffset: root.visualContentYOffset
-            queryText: root.query
+            queryText: searchController.query
         }
     }
 
@@ -1179,16 +942,16 @@ Scope {
             horizontalMargin: root.horizontalMargin
             contentYOffset: root.inputContentYOffset
             externalContentY: root.gridContentY
-            syncContentY: !root.applicationsInputInteractive && !root.applicationsClosing && !root.closingVisualActive
-            queryText: root.query
+            syncContentY: !root.applicationsInputInteractive && !root.applicationsClosing && !overviewController.closingVisualActive
+            queryText: searchController.query
             selectedAppKey: root.selectedAppKey
-            hidePointerCursor: root.pointerSuppressedByKeyboard
+            hidePointerCursor: searchController.pointerSuppressedByKeyboard
             onContentYEdited: function (value) {
                 root.setGridContentY(value);
             }
             onQueryEdited: function (text) {
                 root.suppressPointerAfterKeyboardInput();
-                root.query = text;
+                searchController.query = text;
                 Services.ShellActions.setApplicationsInputQuery(text);
             }
             pointerMovedCallback: function() { root.revealPointerAfterMouseMove(); }
@@ -1227,95 +990,21 @@ Scope {
             }
         }
 
-        Item {
-            id: contextMenuLayer
-            anchors.fill: parent
-            visible: root.contextMenuOpen && root.applicationsInputInteractive
-            z: 10000
-
-            Components.PopupGlassSurface {
-                id: contextMenu
-                x: Math.round(root.contextMenuX)
-                y: Math.round(root.contextMenuY)
-                width: root.contextMenuWidth
-                height: contextColumn.implicitHeight + 12
-                radiusSize: 18
-                Column {
-                    id: contextColumn
-                    anchors {
-                        left: parent.left
-                        right: parent.right
-                        top: parent.top
-                        margins: 6
-                    }
-                    spacing: 2
-
-                    Repeater {
-                        model: root.contextActions.length
-
-                        delegate: Item {
-                            id: actionDelegate
-                            required property int index
-                            readonly property var actionData: root.contextActions[index] || ({})
-
-                            width: contextColumn.width
-                            height: root.contextMenuRowHeight
-
-                            Rectangle {
-                                anchors.fill: parent
-                                radius: 12
-                                color: actionMouse.containsMouse ? "#22ffffff" : "transparent"
-                                antialiasing: true
-
-                                Text {
-                                    anchors {
-                                        left: parent.left
-                                        right: parent.right
-                                        verticalCenter: parent.verticalCenter
-                                        leftMargin: 14
-                                        rightMargin: 14
-                                    }
-                                    text: String(actionDelegate.actionData.label || "")
-                                    color: "#f4f7fb"
-                                    font.family: "Nunito"
-                                    font.pixelSize: 12
-                                    font.weight: Font.DemiBold
-                                    elide: Text.ElideRight
-                                    renderType: Text.QtRendering
-                                    font.hintingPreference: Font.PreferNoHinting
-                                    font.kerning: true
-                                }
-
-                                MouseArea {
-                                    id: actionMouse
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    acceptedButtons: Qt.LeftButton
-                                    cursorShape: root.interactiveCursorShape(Qt.PointingHandCursor)
-                                    onPositionChanged: root.revealPointerAfterMouseMove()
-                                    onClicked: root.runContextAction(String(actionDelegate.actionData.action || ""))
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Components.PopupInteractionBoundary {
-                    owner: "launcherContextMenu"
-                    active: root.contextMenuOpen && root.applicationsInputInteractive
-                    screenX: root.contextMenuX
-                    screenY: root.contextMenuY
-                    screenWidth: root.contextMenuWidth
-                    screenHeight: contextColumn.implicitHeight + 12
-                }
-            }
+        ApplicationContextMenu {
+            id: applicationContextMenu
+            overview: root
+            applicationsInputInteractive: root.applicationsInputInteractive
+            menuWidth: root.contextMenuWidth
+            rowHeight: root.contextMenuRowHeight
+            inputTopMargin: root.inputTopMargin
+            inputBottomMargin: root.inputBottomMargin
         }
 
         MouseArea {
             id: pointerSuppressionCursorLayer
             anchors.fill: parent
             z: 20000
-            enabled: root.pointerSuppressedByKeyboard && root.applicationsInputInteractive
+            enabled: searchController.pointerSuppressedByKeyboard && root.applicationsInputInteractive
             visible: enabled
             hoverEnabled: enabled
             acceptedButtons: Qt.NoButton

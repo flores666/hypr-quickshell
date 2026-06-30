@@ -398,9 +398,11 @@ Item {
     }
 
     function beginApplicationsCloseFromPlugin() {
-        if (Services.ShellState.workspaceOverviewOpen && Services.ShellState.workspaceOverviewMode === "applications") {
+        var applicationsSessionActive = Services.ShellState.workspaceOverviewOpen
+                && Services.ShellState.workspaceOverviewMode === "applications";
+        var applicationsInputOwned = Services.ShellState.inputCaptureOwner === "applicationsOverview";
+        if (applicationsSessionActive || Services.ShellState.applicationsOverviewClosing || applicationsInputOwned)
             Services.ShellState.beginApplicationsOverviewClose();
-        }
     }
 
     function handleOverviewPluginEvent(overviewState) {
