@@ -8,9 +8,10 @@ Rectangle {
 
     required property var modelData
     required property var popupRoot
+    required property var popupController
     required property var motionTokens
 
-    readonly property bool closing: popupRoot.isNotificationClosing(modelData.id)
+    readonly property bool closing: popupController.isNotificationClosing(modelData.id)
     readonly property real normalHeight: Math.max(58, notificationTextColumn.implicitHeight + 18)
 
     width: parent ? parent.width : 1
@@ -27,14 +28,14 @@ Rectangle {
 
     Behavior on x {
         NumberAnimation {
-            duration: root.popupRoot.notificationCloseDuration
+            duration: root.popupController.notificationCloseDuration
             easing.type: Easing.InCubic
         }
     }
 
     Behavior on opacity {
         NumberAnimation {
-            duration: root.popupRoot.notificationCloseDuration
+            duration: root.popupController.notificationCloseDuration
             easing.type: Easing.OutCubic
         }
     }
@@ -185,7 +186,7 @@ Rectangle {
                 acceptedButtons: Qt.LeftButton
                 onClicked: function (mouse) {
                     mouse.accepted = true;
-                    root.popupRoot.closeNotificationAnimated(root.modelData.id);
+                    root.popupController.closeNotificationAnimated(root.modelData.id);
                 }
             }
         }

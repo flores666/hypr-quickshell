@@ -7,6 +7,7 @@ Rectangle {
     id: root
 
     required property var popupRoot
+    required property var popupController
     required property var motionTokens
                     width: parent.width
                     height: popupRoot.notificationsCardFixedHeight
@@ -91,6 +92,7 @@ Rectangle {
                                     model: Services.SystemStatus.notifications
                                     delegate: SystemNotificationCard {
                                         popupRoot: notificationColumn.popupRootRef
+                                        popupController: root.popupController
                                         motionTokens: root.motionTokens
                                     }
                                 }
@@ -118,7 +120,7 @@ Rectangle {
                                 activeIcon: popupRoot.rowIcon("trash")
                                 inactiveText: "Empty"
                                 activeText: "Clear"
-                                onClicked: popupRoot.clearNotificationsAnimated()
+                                onClicked: popupController.clearNotificationsAnimated()
                             }
                         }
                     }

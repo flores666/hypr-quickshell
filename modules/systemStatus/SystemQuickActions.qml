@@ -5,6 +5,7 @@ import "../../services" as Services
 
 RowLayout {
     required property var popupRoot
+    required property var popupController
     required property var motionTokens
                     width: parent.width
                     height: 44
@@ -60,7 +61,7 @@ RowLayout {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: popupRoot.confirmSystemAction(modelData.action, modelData.confirmLabel || modelData.label)
+                                onClicked: popupController.confirmSystemAction(modelData.action, modelData.confirmLabel || modelData.label)
                             }
                         }
                     }

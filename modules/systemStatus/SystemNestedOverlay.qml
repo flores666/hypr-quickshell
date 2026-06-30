@@ -5,11 +5,12 @@ import "../../services" as Services
 
 Rectangle {
     required property var popupRoot
+    required property var popupController
     required property var motionTokens
             id: nestedOverlay
             anchors.fill: parent
             radius: 18
-            visible: popupRoot.nestedOverlayVisible
+            visible: popupController.nestedOverlayVisible
             enabled: visible
             opacity: visible ? 1.0 : 0.0
             color: "#a0060a0f"
@@ -49,17 +50,17 @@ Rectangle {
                     if (mouse.button !== Qt.LeftButton)
                         return;
 
-                    if (popupRoot.confirmActionName.length > 0)
-                        popupRoot.cancelSystemActionConfirm();
+                    if (popupController.confirmActionName.length > 0)
+                        popupController.cancelSystemActionConfirm();
                     else
-                        popupRoot.closeDetailPopup();
+                        popupController.closeDetailPopup();
                 }
             }
 
             Rectangle {
                 id: nestedCard
                 width: Math.min(parent.width - 38, 322)
-                height: popupRoot.confirmActionName.length > 0 ? confirmColumn.implicitHeight + 28 : detailColumn.implicitHeight + 28
+                height: popupController.confirmActionName.length > 0 ? confirmColumn.implicitHeight + 28 : detailColumn.implicitHeight + 28
                 anchors.centerIn: parent
                 radius: 18
                 color: "#f00a0a0d"
@@ -67,7 +68,7 @@ Rectangle {
                 border.color: "#2a000000"
                 antialiasing: true
                 clip: true
-                scale: popupRoot.nestedOverlayVisible ? 1.0 : 0.96
+                scale: popupController.nestedOverlayVisible ? 1.0 : 0.96
 
                 Behavior on scale {
                     NumberAnimation {
@@ -113,11 +114,11 @@ Rectangle {
                     anchors.leftMargin: 16
                     anchors.rightMargin: 16
                     spacing: 12
-                    visible: popupRoot.confirmActionName.length > 0
+                    visible: popupController.confirmActionName.length > 0
 
                     Components.StyledText {
                         width: parent.width
-                        text: popupRoot.confirmationText()
+                        text: popupController.confirmationText()
                         color: "#f4f7fb"
                         font.pixelSize: 14
                         font.weight: Font.DemiBold
@@ -159,7 +160,7 @@ Rectangle {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: popupRoot.runConfirmedSystemAction()
+                                onClicked: popupController.runConfirmedSystemAction()
                             }
                         }
 
@@ -191,7 +192,7 @@ Rectangle {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: popupRoot.cancelSystemActionConfirm()
+                                onClicked: popupController.cancelSystemActionConfirm()
                             }
                         }
                     }
@@ -205,7 +206,7 @@ Rectangle {
                     anchors.leftMargin: 14
                     anchors.rightMargin: 14
                     spacing: 10
-                    visible: popupRoot.confirmActionName.length === 0 && popupRoot.detailMode.length > 0
+                    visible: popupController.confirmActionName.length === 0 && popupController.detailMode.length > 0
 
                     RowLayout {
                         width: parent.width
@@ -213,13 +214,13 @@ Rectangle {
                         spacing: 8
 
                         SystemIcon {
-                            source: popupRoot.detailMode === "wifi" ? popupRoot.wifiIcon() : (popupRoot.detailMode === "bluetooth" ? popupRoot.rowIcon("bluetooth") : popupRoot.rowIcon("ethernet"))
+                            source: popupController.detailMode === "wifi" ? popupRoot.wifiIcon() : (popupController.detailMode === "bluetooth" ? popupRoot.rowIcon("bluetooth") : popupRoot.rowIcon("ethernet"))
                             iconOpacity: 0.9
                         }
 
                         Components.StyledText {
                             Layout.fillWidth: true
-                            text: popupRoot.detailTitle()
+                            text: popupController.detailTitle()
                             color: "#f4f7fb"
                             font.pixelSize: 13
                             font.weight: Font.DemiBold
@@ -252,7 +253,7 @@ Rectangle {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: popupRoot.closeDetailPopup()
+                                onClicked: popupController.closeDetailPopup()
                             }
                         }
                     }
@@ -260,7 +261,7 @@ Rectangle {
                     Column {
                         width: parent.width
                         spacing: 8
-                        visible: popupRoot.detailMode === "ethernet"
+                        visible: popupController.detailMode === "ethernet"
 
                         Components.StyledText {
                             width: parent.width
@@ -282,8 +283,8 @@ Rectangle {
 
                     Flickable {
                         width: parent.width
-                        height: popupRoot.detailMode === "wifi" ? Math.min(190, Math.max(38, wifiDetailColumn.implicitHeight)) : 0
-                        visible: popupRoot.detailMode === "wifi"
+                        height: popupController.detailMode === "wifi" ? Math.min(190, Math.max(38, wifiDetailColumn.implicitHeight)) : 0
+                        visible: popupController.detailMode === "wifi"
                         clip: true
                         contentWidth: width
                         contentHeight: wifiDetailColumn.implicitHeight
@@ -297,9 +298,9 @@ Rectangle {
 
                             Components.StyledText {
                                 width: parent.width
-                                height: popupRoot.detailMode === "wifi" && Services.SystemStatus.wifiNetworks.length === 0 ? 36 : 0
-                                visible: popupRoot.detailMode === "wifi" && Services.SystemStatus.wifiNetworks.length === 0
-                                text: popupRoot.detailEmptyText()
+                                height: popupController.detailMode === "wifi" && Services.SystemStatus.wifiNetworks.length === 0 ? 36 : 0
+                                visible: popupController.detailMode === "wifi" && Services.SystemStatus.wifiNetworks.length === 0
+                                text: popupController.detailEmptyText()
                                 color: "#aeb8c6"
                                 font.pixelSize: 12
                                 horizontalAlignment: Text.AlignHCenter
@@ -307,10 +308,11 @@ Rectangle {
                             }
 
                             Repeater {
-                                model: popupRoot.detailMode === "wifi" ? Services.SystemStatus.wifiNetworks : []
+                                model: popupController.detailMode === "wifi" ? Services.SystemStatus.wifiNetworks : []
 
                                 delegate: SystemWifiNetworkRow {
                                     popupRoot: nestedOverlay.popupRoot
+                                    popupController: nestedOverlay.popupController
                                     motionTokens: nestedOverlay.motionTokens
                                 }
                             }
@@ -319,8 +321,8 @@ Rectangle {
 
                     Flickable {
                         width: parent.width
-                        height: popupRoot.detailMode === "bluetooth" ? Math.min(178, Math.max(38, bluetoothDetailColumn.implicitHeight)) : 0
-                        visible: popupRoot.detailMode === "bluetooth"
+                        height: popupController.detailMode === "bluetooth" ? Math.min(178, Math.max(38, bluetoothDetailColumn.implicitHeight)) : 0
+                        visible: popupController.detailMode === "bluetooth"
                         clip: true
                         contentWidth: width
                         contentHeight: bluetoothDetailColumn.implicitHeight
@@ -334,9 +336,9 @@ Rectangle {
 
                             Components.StyledText {
                                 width: parent.width
-                                height: popupRoot.detailMode === "bluetooth" && Services.SystemStatus.bluetoothDevices.length === 0 ? 36 : 0
-                                visible: popupRoot.detailMode === "bluetooth" && Services.SystemStatus.bluetoothDevices.length === 0
-                                text: popupRoot.detailEmptyText()
+                                height: popupController.detailMode === "bluetooth" && Services.SystemStatus.bluetoothDevices.length === 0 ? 36 : 0
+                                visible: popupController.detailMode === "bluetooth" && Services.SystemStatus.bluetoothDevices.length === 0
+                                text: popupController.detailEmptyText()
                                 color: "#aeb8c6"
                                 font.pixelSize: 12
                                 horizontalAlignment: Text.AlignHCenter
@@ -344,7 +346,7 @@ Rectangle {
                             }
 
                             Repeater {
-                                model: popupRoot.detailMode === "bluetooth" ? Services.SystemStatus.bluetoothDevices : []
+                                model: popupController.detailMode === "bluetooth" ? Services.SystemStatus.bluetoothDevices : []
 
                                 delegate: SystemBluetoothDeviceRow {
                                     popupRoot: nestedOverlay.popupRoot

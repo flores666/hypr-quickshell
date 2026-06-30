@@ -5,6 +5,7 @@ import "../../services" as Services
 
 Rectangle {
     required property var popupRoot
+    required property var popupController
     required property var motionTokens
                     width: parent.width
                     height: popupRoot.wirelessCardHeight
@@ -36,7 +37,7 @@ Rectangle {
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: 42
                                 radius: 14
-                                color: wifiMouse.pressed && popupRoot.wifiAvailable() ? "#34000000" : (wifiMouse.containsMouse && popupRoot.wifiAvailable() || popupRoot.detailMode === "wifi" ? "#26000000" : (Services.SystemStatus.wifiEnabled ? "#22000000" : "#16000000"))
+                                color: wifiMouse.pressed && popupRoot.wifiAvailable() ? "#34000000" : (wifiMouse.containsMouse && popupRoot.wifiAvailable() || popupController.detailMode === "wifi" ? "#26000000" : (Services.SystemStatus.wifiEnabled ? "#22000000" : "#16000000"))
                                 opacity: popupRoot.wifiAvailable() ? (Services.SystemStatus.wifiEnabled ? 1.0 : 0.58) : 0.32
                                 border.width: 0
                                 antialiasing: true
@@ -84,11 +85,10 @@ Rectangle {
                                         }
 
                                         if (mouse.button === Qt.RightButton) {
-                                            popupRoot.detailMode = popupRoot.detailMode === "wifi" ? "" : "wifi";
-                                            if (popupRoot.detailMode === "wifi")
+                                            if (popupController.toggleDetailPopup("wifi"))
                                                 Services.SystemStatus.requestNetworkRefresh();
                                         } else {
-                                            popupRoot.detailMode = "";
+                                            popupController.closeDetailPopup();
                                             Services.SystemStatus.toggleWifi();
                                         }
                                         mouse.accepted = true;
@@ -101,7 +101,7 @@ Rectangle {
                                 Layout.fillWidth: visible
                                 Layout.preferredHeight: 42
                                 radius: 14
-                                color: ethernetMouse.pressed ? "#34000000" : (ethernetMouse.containsMouse || popupRoot.detailMode === "ethernet" ? "#26000000" : (Services.SystemStatus.ethernetActive ? "#22000000" : "#16000000"))
+                                color: ethernetMouse.pressed ? "#34000000" : (ethernetMouse.containsMouse || popupController.detailMode === "ethernet" ? "#26000000" : (Services.SystemStatus.ethernetActive ? "#22000000" : "#16000000"))
                                 opacity: Services.SystemStatus.ethernetActive ? 1.0 : 0.55
                                 border.width: 0
                                 antialiasing: true
@@ -142,8 +142,7 @@ Rectangle {
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
-                                        popupRoot.detailMode = popupRoot.detailMode === "ethernet" ? "" : "ethernet";
-                                        if (popupRoot.detailMode === "ethernet")
+                                        if (popupController.toggleDetailPopup("ethernet"))
                                             Services.SystemStatus.requestNetworkRefresh();
                                     }
                                 }
@@ -154,7 +153,7 @@ Rectangle {
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: 42
                                 radius: 14
-                                color: bluetoothMouse.pressed && popupRoot.bluetoothAvailable() ? "#34000000" : (bluetoothMouse.containsMouse && popupRoot.bluetoothAvailable() || popupRoot.detailMode === "bluetooth" ? "#26000000" : (Services.SystemStatus.bluetoothEnabled ? "#22000000" : "#16000000"))
+                                color: bluetoothMouse.pressed && popupRoot.bluetoothAvailable() ? "#34000000" : (bluetoothMouse.containsMouse && popupRoot.bluetoothAvailable() || popupController.detailMode === "bluetooth" ? "#26000000" : (Services.SystemStatus.bluetoothEnabled ? "#22000000" : "#16000000"))
                                 opacity: popupRoot.bluetoothAvailable() ? (Services.SystemStatus.bluetoothEnabled ? 1.0 : 0.58) : 0.32
                                 border.width: 0
                                 antialiasing: true
@@ -202,11 +201,10 @@ Rectangle {
                                         }
 
                                         if (mouse.button === Qt.RightButton) {
-                                            popupRoot.detailMode = popupRoot.detailMode === "bluetooth" ? "" : "bluetooth";
-                                            if (popupRoot.detailMode === "bluetooth")
+                                            if (popupController.toggleDetailPopup("bluetooth"))
                                                 Services.SystemStatus.requestBluetoothRefresh();
                                         } else {
-                                            popupRoot.detailMode = "";
+                                            popupController.closeDetailPopup();
                                             Services.SystemStatus.toggleBluetooth();
                                         }
                                         mouse.accepted = true;

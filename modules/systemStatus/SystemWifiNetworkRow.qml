@@ -8,6 +8,7 @@ Rectangle {
 
     required property var modelData
     required property var popupRoot
+    required property var popupController
     required property var motionTokens
 
     width: parent ? parent.width : 1
@@ -59,7 +60,7 @@ Rectangle {
         onClicked: {
             if (!root.modelData.active)
                 Services.SystemStatus.connectWifi(root.modelData.ssid);
-            root.popupRoot.closeDetailPopup();
+            root.popupController.closeDetailPopup();
         }
     }
 }
