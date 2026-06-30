@@ -19,7 +19,7 @@ Item {
     readonly property int contextMenuWidth: 206
     readonly property int workspaceSubmenuWidth: 154
     readonly property bool popupOpen: contextOpen || workspaceMenuOpen || contextSwitchPending || contextRenderVisible
-    readonly property bool dockPopupSurfaceOpen: popupOpen || tooltipOpen
+    readonly property bool dockPopupSurfaceOpen: popupOpen || tooltipController.open
     property bool contextOpen: false
     property bool contextRenderVisible: false
     property bool contextSwitchPending: false
@@ -45,13 +45,6 @@ Item {
     property int dragSourceIndex: -1
     property int dragTargetIndex: -1
     property bool rebuildQueued: false
-    property bool tooltipOpen: false
-    property string tooltipDisplayText: ""
-    property string tooltipPendingText: ""
-    property real tooltipPendingAnchorX: 0
-    property string tooltipPendingTargetId: ""
-    property string tooltipTargetId: ""
-    property real tooltipAnchorX: 0
     property var panelItems: []
     property int desktopEntryRetryCount: 0
     property int maxVisibleItems: 11
@@ -83,9 +76,19 @@ Item {
         onUnknownAppRefreshRequested: unknownAppRefreshTimer.restart()
     }
 
+    AppDockTooltipController {
+        id: tooltipController
+        modelController: dockModel
+        identity: dockIdentity
+        items: root.panelItems
+        revealDelay: root.tooltipRevealDelay
+    }
+
     AppDockDragController {
         id: dockDrag
         panel: root
+        modelController: dockModel
+        tooltipController: tooltipController
     }
 
     Connections {
@@ -116,162 +119,6 @@ Item {
         return Math.min(itemLimit, screenLimit);
     }
 
-
-    // AppDock domain logic is kept in dedicated controllers.
-    function normalizeToken() { return dockIdentity.normalizeToken.apply(dockIdentity, arguments); }
-    function addUniqueToken() { return dockIdentity.addUniqueToken.apply(dockIdentity, arguments); }
-    function addIdentityVariants() { return dockIdentity.addIdentityVariants.apply(dockIdentity, arguments); }
-    function canonicalAppToken() { return dockIdentity.canonicalAppToken.apply(dockIdentity, arguments); }
-    function addCanonicalAppToken() { return dockIdentity.addCanonicalAppToken.apply(dockIdentity, arguments); }
-    function appCanonicalKeys() { return dockIdentity.appCanonicalKeys.apply(dockIdentity, arguments); }
-    function appIdentityKeys() { return dockIdentity.appIdentityKeys.apply(dockIdentity, arguments); }
-    function listsShareIdentity() { return dockIdentity.listsShareIdentity.apply(dockIdentity, arguments); }
-    function appsCompatible() { return dockIdentity.appsCompatible.apply(dockIdentity, arguments); }
-    function appMatchesKeys() { return dockIdentity.appMatchesKeys.apply(dockIdentity, arguments); }
-    function addRuntimeIdentity() { return dockIdentity.addRuntimeIdentity.apply(dockIdentity, arguments); }
-    function runtimeAppKeysForWindow() { return dockIdentity.runtimeAppKeysForWindow.apply(dockIdentity, arguments); }
-    function runtimeAppKeyForWindow() { return dockIdentity.runtimeAppKeyForWindow.apply(dockIdentity, arguments); }
-    function appMatchesRuntimeKey() { return dockIdentity.appMatchesRuntimeKey.apply(dockIdentity, arguments); }
-    function pinnedAppForRuntimeKey() { return dockIdentity.pinnedAppForRuntimeKey.apply(dockIdentity, arguments); }
-    function appPinnedBonus() { return dockIdentity.appPinnedBonus.apply(dockIdentity, arguments); }
-    function appOrderBonus() { return dockIdentity.appOrderBonus.apply(dockIdentity, arguments); }
-    function appLaunchBonus() { return dockIdentity.appLaunchBonus.apply(dockIdentity, arguments); }
-    function appPreferenceBonus() { return dockIdentity.appPreferenceBonus.apply(dockIdentity, arguments); }
-    function appFirstLetter() { return dockIdentity.appFirstLetter.apply(dockIdentity, arguments); }
-    function isBrowserItem() { return dockIdentity.isBrowserItem.apply(dockIdentity, arguments); }
-    function iconExists() { return dockIdentity.iconExists.apply(dockIdentity, arguments); }
-    function appSubstitution() { return dockIdentity.appSubstitution.apply(dockIdentity, arguments); }
-    function reverseDomainNameAppName() { return dockIdentity.reverseDomainNameAppName.apply(dockIdentity, arguments); }
-    function kebabNormalizedAppName() { return dockIdentity.kebabNormalizedAppName.apply(dockIdentity, arguments); }
-    function desktopEntryByIdLike() { return dockIdentity.desktopEntryByIdLike.apply(dockIdentity, arguments); }
-    function guessIconName() { return dockIdentity.guessIconName.apply(dockIdentity, arguments); }
-    function guessIconForWindow() { return dockIdentity.guessIconForWindow.apply(dockIdentity, arguments); }
-    function desktopEntryForWindow() { return dockIdentity.desktopEntryForWindow.apply(dockIdentity, arguments); }
-    function appByDesktopEntry() { return dockIdentity.appByDesktopEntry.apply(dockIdentity, arguments); }
-    function fallbackAppFromDesktopEntry() { return dockIdentity.fallbackAppFromDesktopEntry.apply(dockIdentity, arguments); }
-    function stringContainsAppKey() { return dockIdentity.stringContainsAppKey.apply(dockIdentity, arguments); }
-    function windowTokens() { return dockIdentity.windowTokens.apply(dockIdentity, arguments); }
-    function addWindowToken() { return dockIdentity.addWindowToken.apply(dockIdentity, arguments); }
-    function appMatchScore() { return dockIdentity.appMatchScore.apply(dockIdentity, arguments); }
-    function findAppForWindow() { return dockIdentity.findAppForWindow.apply(dockIdentity, arguments); }
-    function windowAddressKey() { return dockIdentity.windowAddressKey.apply(dockIdentity, arguments); }
-
-    function cloneAppItem() { return dockModel.cloneAppItem.apply(dockModel, arguments); }
-    function placeholderForWindow() { return dockModel.placeholderForWindow.apply(dockModel, arguments); }
-    function normalizedWindowAddress() { return dockModel.normalizedWindowAddress.apply(dockModel, arguments); }
-    function rememberWindowInstance() { return dockModel.rememberWindowInstance.apply(dockModel, arguments); }
-    function syncWindowInstanceOrder() { return dockModel.syncWindowInstanceOrder.apply(dockModel, arguments); }
-    function windowOrderValue() { return dockModel.windowOrderValue.apply(dockModel, arguments); }
-    function sortWindows() { return dockModel.sortWindows.apply(dockModel, arguments); }
-    function updateWindowState() { return dockModel.updateWindowState.apply(dockModel, arguments); }
-    function itemIsActive() { return dockModel.itemIsActive.apply(dockModel, arguments); }
-    function itemIsOtherWorkspace() { return dockModel.itemIsOtherWorkspace.apply(dockModel, arguments); }
-    function modelSignature() { return dockModel.modelSignature.apply(dockModel, arguments); }
-    function orderedItems() { return dockModel.orderedItems.apply(dockModel, arguments); }
-    function compatibleWindowGroupForPinned() { return dockModel.compatibleWindowGroupForPinned.apply(dockModel, arguments); }
-    function pinnedAppForOpenApp() { return dockModel.pinnedAppForOpenApp.apply(dockModel, arguments); }
-    function rememberOpenDesktopId() { return dockModel.rememberOpenDesktopId.apply(dockModel, arguments); }
-    function rebuildModel() { return dockModel.rebuildModel.apply(dockModel, arguments); }
-    function topWindow() { return dockModel.topWindow.apply(dockModel, arguments); }
-
-    function canDragItem() { return dockDrag.canDragItem.apply(dockDrag, arguments); }
-    function visualIndexForItemKey() { return dockDrag.visualIndexForItemKey.apply(dockDrag, arguments); }
-    function pinnedInsertionIndexFor() { return dockDrag.pinnedInsertionIndexFor.apply(dockDrag, arguments); }
-    function visualIndexAtContentX() { return dockDrag.visualIndexAtContentX.apply(dockDrag, arguments); }
-    function draggedPreviewOrder() { return dockDrag.draggedPreviewOrder.apply(dockDrag, arguments); }
-    function dockOrderFromPreview() { return dockDrag.dockOrderFromPreview.apply(dockDrag, arguments); }
-    function currentDockOrder() { return dockDrag.currentDockOrder.apply(dockDrag, arguments); }
-    function dragShiftFor() { return dockDrag.dragShiftFor.apply(dockDrag, arguments); }
-    function beginItemDrag() { return dockDrag.beginItemDrag.apply(dockDrag, arguments); }
-    function updateItemDragTarget() { return dockDrag.updateItemDragTarget.apply(dockDrag, arguments); }
-    function finishItemDrag() { return dockDrag.finishItemDrag.apply(dockDrag, arguments); }
-    function cancelItemDrag() { return dockDrag.cancelItemDrag.apply(dockDrag, arguments); }
-
-    function tooltipFor(item) {
-        if (!item)
-            return "";
-        var appName = String(item.displayName || item.name || item.desktopId || "Application").trim();
-        var win = topWindow(item);
-        var title = String(win && win.title || "").trim();
-        if (title.length > 0 && isBrowserItem(item))
-            return title;
-        return appName.length > 0 ? appName : title;
-    }
-
-    function itemKey(item) {
-        if (!item)
-            return "";
-        return String(item.itemId || item.orderKey || item.desktopId || item.name || item.displayName || "");
-    }
-
-    function orderKeyFor(item) {
-        if (!item)
-            return "";
-        return String(item.orderKey || item.itemId || item.desktopId || "");
-    }
-
-    function showTooltipFor(item, localCenterX) {
-        var text = tooltipFor(item);
-        var key = itemKey(item);
-        if (!text || !key)
-            return;
-
-        tooltipPendingTargetId = key;
-        tooltipPendingText = text;
-        tooltipPendingAnchorX = localCenterX;
-        tooltipSwitchTimer.stop();
-        tooltipTimer.restart();
-    }
-
-    function hideTooltipFor(item) {
-        var key = itemKey(item);
-        if (key !== tooltipTargetId && key !== tooltipPendingTargetId)
-            return;
-        tooltipTimer.stop();
-        tooltipSwitchTimer.stop();
-        tooltipPendingTargetId = "";
-        tooltipTargetId = "";
-        tooltipOpen = false;
-    }
-
-    function hideTooltip() {
-        tooltipTimer.stop();
-        tooltipSwitchTimer.stop();
-        tooltipPendingTargetId = "";
-        tooltipTargetId = "";
-        tooltipOpen = false;
-    }
-
-    function setTooltipVisualText(text, anchorX) {
-        var next = String(text || "").trim();
-        if (!next)
-            return;
-
-        tooltipAnchorX = anchorX;
-        tooltipDisplayText = next;
-    }
-
-    function itemByKey(key) {
-        for (var i = 0; i < panelItems.length; i++) {
-            var item = panelItems[i];
-            if (itemKey(item) === key)
-                return item;
-        }
-        return null;
-    }
-
-    function refreshTooltipForTarget() {
-        if (!tooltipOpen || !tooltipTargetId)
-            return;
-        var item = itemByKey(tooltipTargetId);
-        if (!item)
-            return;
-        var text = tooltipFor(item);
-        if (text) {
-            tooltipPendingText = text;
-            tooltipSwitchTimer.restart();
-        }
-    }
 
     function iconUrl(value, fallback) {
         return Services.AppPanelService.iconUrl(value, fallback);
@@ -306,12 +153,12 @@ Item {
     }
 
     function contextTargetWindow(item) {
-        return findWindowByAddress(contextWindowAddress) || topWindow(item);
+        return findWindowByAddress(contextWindowAddress) || dockModel.topWindow(item);
     }
 
     function activateItemWindow(item, window) {
         Services.ShellActions.closeWorkspaceOverview();
-        hideTooltip();
+        tooltipController.hide();
         if (!item)
             return;
         if (window) {
@@ -323,10 +170,10 @@ Item {
 
     function activateItem(item) {
         Services.ShellActions.closeWorkspaceOverview();
-        hideTooltip();
+        tooltipController.hide();
         if (!item)
             return;
-        var win = topWindow(item);
+        var win = dockModel.topWindow(item);
         if (win) {
             Services.ShellActions.focusWindow(win);
             return;
@@ -349,11 +196,11 @@ Item {
         if (direct && direct.indexOf("__window__") !== 0 && direct.indexOf("__app__") !== 0)
             return direct;
 
-        var win = topWindow(item);
-        var entry = desktopEntryForWindow(win)
-                || desktopEntryByIdLike(item.appKey || "")
-                || desktopEntryByIdLike(item.displayName || "")
-                || desktopEntryByIdLike(item.name || "");
+        var win = dockModel.topWindow(item);
+        var entry = dockIdentity.desktopEntryForWindow(win)
+                || dockIdentity.desktopEntryByIdLike(item.appKey || "")
+                || dockIdentity.desktopEntryByIdLike(item.displayName || "")
+                || dockIdentity.desktopEntryByIdLike(item.name || "");
         return entry && entry.id ? String(entry.id || "") : "";
     }
 
@@ -363,16 +210,16 @@ Item {
             return false;
 
         var targetKeys = [];
-        addCanonicalAppToken(targetKeys, target);
+        dockIdentity.addCanonicalAppToken(targetKeys, target);
         var pins = Services.AppPanelService.pinnedIds || [];
         for (var i = 0; i < pins.length; i++) {
             var pinId = String(pins[i] || "");
             if (pinId === target)
                 return true;
-            if (targetKeys.indexOf(canonicalAppToken(pinId)) >= 0)
+            if (targetKeys.indexOf(dockIdentity.canonicalAppToken(pinId)) >= 0)
                 return true;
             var pinApp = Services.AppPanelService.appById(pinId);
-            if (pinApp && listsShareIdentity(targetKeys, appCanonicalKeys(pinApp, "")))
+            if (pinApp && dockIdentity.listsShareIdentity(targetKeys, dockIdentity.appCanonicalKeys(pinApp, "")))
                 return true;
         }
         return false;
@@ -560,11 +407,11 @@ Item {
 
     function openContextMenu(item, localCenterX) {
         Services.ShellState.requestClosePopups("applications");
-        hideTooltip();
+        tooltipController.hide();
         workspaceMenuOpen = false;
         workspaceMenuHovered = false;
         workspaceMenuCloseTimer.stop();
-        var win = topWindow(item);
+        var win = dockModel.topWindow(item);
         pendingContextItem = item;
         pendingContextActions = menuActionsFor(item);
         pendingContextAnchorX = localCenterX;
@@ -591,29 +438,7 @@ Item {
         workspaceMenuHovered = false;
         contextOpenDelay.stop();
         workspaceMenuCloseTimer.stop();
-        hideTooltip();
-    }
-
-    Timer {
-        id: tooltipTimer
-        interval: root.tooltipRevealDelay
-        repeat: false
-        onTriggered: {
-            if (root.tooltipPendingTargetId) {
-                root.tooltipTargetId = root.tooltipPendingTargetId;
-                root.setTooltipVisualText(root.tooltipPendingText, root.tooltipPendingAnchorX);
-                root.tooltipOpen = root.tooltipDisplayText.length > 0 && root.tooltipTargetId.length > 0;
-            }
-        }
-    }
-
-    Timer {
-        id: tooltipSwitchTimer
-        interval: 55
-        repeat: false
-        onTriggered: {
-            root.setTooltipVisualText(root.tooltipPendingText, root.tooltipPendingAnchorX);
-        }
+        tooltipController.hide();
     }
 
     Timer {
@@ -702,10 +527,10 @@ Item {
             launchNew(item);
             break;
         case "pin":
-            Services.AppPanelService.pinWithOrder(pinDesktopIdFor(item), currentDockOrder());
+            Services.AppPanelService.pinWithOrder(pinDesktopIdFor(item), dockDrag.currentDockOrder());
             break;
         case "unpin":
-            Services.AppPanelService.unpinWithOrder(pinDesktopIdFor(item), currentDockOrder());
+            Services.AppPanelService.unpinWithOrder(pinDesktopIdFor(item), dockDrag.currentDockOrder());
             break;
         case "close-window":
             Services.ShellActions.closeWindow(targetWindow);
@@ -743,28 +568,28 @@ Item {
         running: desktopEntryRetryCount < 5
         onTriggered: {
             desktopEntryRetryCount += 1;
-            rebuildModel();
+            dockModel.rebuildModel();
         }
     }
 
     Component.onCompleted: {
         desktopEntryRetryCount = 0;
-        rebuildModel();
+        dockModel.rebuildModel();
         desktopEntryRetryTimer.restart();
     }
 
     Connections {
         target: Services.AppPanelService
-        function onAppsChanged() { root.rebuildModel(); }
-        function onPinnedIdsChanged() { root.rebuildModel(); }
-        function onOrderIdsChanged() { root.rebuildModel(); }
-        function onLaunchingIdsChanged() { root.rebuildModel(); }
+        function onAppsChanged() { dockModel.rebuildModel(); }
+        function onPinnedIdsChanged() { dockModel.rebuildModel(); }
+        function onOrderIdsChanged() { dockModel.rebuildModel(); }
+        function onLaunchingIdsChanged() { dockModel.rebuildModel(); }
     }
 
     Connections {
         target: Services.ShellState
-        function onWindowsChanged() { root.rebuildModel(); root.refreshTooltipForTarget(); }
-        function onFocusedAddressChanged() { root.refreshTooltipForTarget(); }
+        function onWindowsChanged() { dockModel.rebuildModel(); tooltipController.refreshForTarget(); }
+        function onFocusedAddressChanged() { tooltipController.refreshForTarget(); }
     }
 
     Item {
@@ -820,7 +645,7 @@ Item {
                 hoverEnabled: true
                 acceptedButtons: Qt.LeftButton
                 cursorShape: Qt.PointingHandCursor
-                onEntered: root.hideTooltip()
+                onEntered: tooltipController.hide()
                 onClicked: function(mouse) {
                     root.closePopup();
                     Services.ShellState.requestClosePopups("topbar");
@@ -881,18 +706,18 @@ Item {
             panelHeight: root.implicitHeight
             hoverRevealDelay: root.hoverRevealDelay
             externalDragging: root.draggingItem
-            canDrag: root.canDragItem(modelData)
-            itemActive: root.itemIsActive(modelData)
-            itemOtherWorkspace: root.itemIsOtherWorkspace(modelData)
-            dragShift: root.dragShiftFor(modelData)
+            canDrag: dockDrag.canDragItem(modelData)
+            itemActive: dockModel.itemIsActive(modelData)
+            itemOtherWorkspace: dockModel.itemIsOtherWorkspace(modelData)
+            dragShift: dockDrag.dragShiftFor(modelData)
             iconSource: root.iconUrl(modelData.icon, modelData.iconFallback)
-            firstLetter: root.appFirstLetter(modelData)
+            firstLetter: dockIdentity.appFirstLetter(modelData)
 
             onShowTooltipRequested: function(item, centerX) {
-                root.showTooltipFor(item, centerX);
+                tooltipController.showFor(item, centerX);
             }
             onHideTooltipRequested: function(item) {
-                root.hideTooltipFor(item);
+                tooltipController.hideFor(item);
             }
             onOpenContextRequested: function(item, centerX) {
                 root.openContextMenu(item, centerX);
@@ -902,15 +727,15 @@ Item {
                 root.activateItem(item);
             }
             onDragBeginRequested: function(item, panelX) {
-                root.beginItemDrag(item, root.contentXFromRootX(panelX));
+                dockDrag.beginItemDrag(item, root.contentXFromRootX(panelX));
             }
             onDragUpdateRequested: function(panelX) {
-                root.updateItemDragTarget(root.contentXFromRootX(panelX));
+                dockDrag.updateItemDragTarget(root.contentXFromRootX(panelX));
             }
-            onDragFinishRequested: root.finishItemDrag()
+            onDragFinishRequested: dockDrag.finishItemDrag()
             onDragCancelRequested: {
-                root.hideTooltip();
-                root.cancelItemDrag();
+                tooltipController.hide();
+                dockDrag.cancelItemDrag();
             }
         }
     }
@@ -983,11 +808,11 @@ Item {
     AppDockTooltip {
         id: dockTooltip
         hostWindow: root.hostWindow
-        tooltipOpen: root.tooltipOpen
+        tooltipOpen: tooltipController.open
         contextOpen: root.contextOpen
-        tooltipText: root.tooltipDisplayText
+        tooltipText: tooltipController.displayText
         popupBaseX: root.popupBaseX
-        anchorX: root.tooltipAnchorX
+        anchorX: tooltipController.anchorX
         hostWidth: root.hostWidth
         popupTopY: root.popupTopY
         panelHeight: root.panelHeight

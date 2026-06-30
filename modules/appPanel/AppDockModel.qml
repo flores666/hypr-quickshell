@@ -12,8 +12,17 @@ QtObject {
     property var windowInstanceOrder: ({})
     property int nextWindowInstanceOrder: 0
 
-    function itemKey(item) { return panel ? panel.itemKey(item) : ""; }
-    function orderKeyFor(item) { return panel ? panel.orderKeyFor(item) : ""; }
+    function itemKey(item) {
+        if (!item)
+            return "";
+        return String(item.itemId || item.orderKey || item.desktopId || item.name || item.displayName || "");
+    }
+
+    function orderKeyFor(item) {
+        if (!item)
+            return "";
+        return String(item.orderKey || item.itemId || item.desktopId || "");
+    }
     function runtimeAppKeyForWindow(window) { return identity ? identity.runtimeAppKeyForWindow(window) : ""; }
     function appCanonicalKeys(app, extraValue) { return identity ? identity.appCanonicalKeys(app, extraValue) : []; }
     function canonicalAppToken(value) { return identity ? identity.canonicalAppToken(value) : ""; }

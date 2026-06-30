@@ -5,9 +5,11 @@ QtObject {
     id: root
 
     property var panel: null
+    property var modelController: null
+    property var tooltipController: null
 
-    function itemKey(item) { return panel ? panel.itemKey(item) : ""; }
-    function orderKeyFor(item) { return panel ? panel.orderKeyFor(item) : ""; }
+    function itemKey(item) { return modelController ? modelController.itemKey(item) : ""; }
+    function orderKeyFor(item) { return modelController ? modelController.orderKeyFor(item) : ""; }
 
     function canDragItem(item) {
         return item && orderKeyFor(item).length > 0;
@@ -115,7 +117,8 @@ QtObject {
         panel.draggingItemId = itemKey(item);
         panel.dragSourceIndex = visualIndexForItemKey(panel.draggingItemId);
         panel.dragTargetIndex = visualIndexAtContentX(contentX);
-        panel.hideTooltip();
+        if (tooltipController)
+            tooltipController.hide();
     }
 
     function updateItemDragTarget(contentX) {
@@ -140,7 +143,8 @@ QtObject {
             Services.AppPanelService.setOrder(nextOrder);
         if (panel.rebuildQueued) {
             panel.rebuildQueued = false;
-            panel.rebuildModel();
+            if (modelController)
+                modelController.rebuildModel();
         }
     }
 
@@ -151,7 +155,8 @@ QtObject {
         panel.dragTargetIndex = -1;
         if (panel.rebuildQueued) {
             panel.rebuildQueued = false;
-            panel.rebuildModel();
+            if (modelController)
+                modelController.rebuildModel();
         }
     }
 
