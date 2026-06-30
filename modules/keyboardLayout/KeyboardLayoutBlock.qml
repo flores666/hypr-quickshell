@@ -48,10 +48,15 @@ Item {
 
     function togglePopup() {
         Services.ShellState.requestClosePopups("appDock");
-        if (popupOpen)
+        if (popupOpen) {
             closePopup();
-        else
-            openPopup();
+            return;
+        }
+
+        if (Services.ShellState.consumeRecentlyClosedPopup("keyboardLayoutPopup"))
+            return;
+
+        openPopup();
     }
 
     Timer {

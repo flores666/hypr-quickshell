@@ -13,7 +13,7 @@ Rectangle {
             visible: popupController.nestedOverlayVisible
             enabled: visible
             opacity: visible ? 1.0 : 0.0
-            color: "#a0060a0f"
+            color: "#a0000000"
             border.width: 0
             antialiasing: true
             z: 50
@@ -63,7 +63,7 @@ Rectangle {
                 height: popupController.confirmActionName.length > 0 ? confirmColumn.implicitHeight + 28 : detailColumn.implicitHeight + 28
                 anchors.centerIn: parent
                 radius: 18
-                color: "#f00a0a0d"
+                color: "#f0000000"
                 border.width: 1
                 border.color: "#2a000000"
                 antialiasing: true

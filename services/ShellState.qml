@@ -46,6 +46,8 @@ QtObject {
     property string activePopupGroup: ""
     property string pendingExternalPointerCloseOwner: ""
     property int externalPointerCloseSerial: 0
+    property string recentlyClosedPopupOwner: ""
+    property double recentlyClosedPopupAt: 0
     property var popupInteractionBounds: ({})
     property string activeModalLayer: ""
     property string inputCaptureOwner: ""
@@ -89,11 +91,36 @@ QtObject {
         syncActiveModalLayer();
     }
 
+    function rememberRecentlyClosedPopup(owner) {
+        var normalized = String(owner || "").trim();
+        if (normalized.length === 0)
+            return;
+
+        recentlyClosedPopupOwner = normalized;
+        recentlyClosedPopupAt = Date.now();
+    }
+
+    function consumeRecentlyClosedPopup(owner, maxAgeMs) {
+        var normalized = String(owner || "").trim();
+        if (normalized.length === 0 || recentlyClosedPopupOwner !== normalized)
+            return false;
+
+        var age = Date.now() - Number(recentlyClosedPopupAt || 0);
+        var allowedAge = Number(maxAgeMs || 180);
+        if (age < 0 || age > allowedAge)
+            return false;
+
+        recentlyClosedPopupOwner = "";
+        recentlyClosedPopupAt = 0;
+        return true;
+    }
+
     function closePopup(owner) {
         var normalized = String(owner || "").trim();
         if (normalized.length === 0 || normalized !== activePopupOwner)
             return;
 
+        rememberRecentlyClosedPopup(activePopupOwner);
         activePopupOwner = "";
         activePopupGroup = "";
         syncActiveModalLayer();
@@ -103,6 +130,7 @@ QtObject {
         if (activePopupOwner.length === 0)
             return;
 
+        rememberRecentlyClosedPopup(activePopupOwner);
         activePopupOwner = "";
         activePopupGroup = "";
         syncActiveModalLayer();
