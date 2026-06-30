@@ -4,6 +4,8 @@ import "../../components" as Components
 import "../../services" as Services
 
 Rectangle {
+    id: root
+
     required property var popupRoot
     required property var motionTokens
                     width: parent.width
@@ -95,66 +97,8 @@ Rectangle {
 
                                 Repeater {
                                     model: Services.SystemStatus.sinkInputs
-                                    delegate: RowLayout {
-                                        required property var modelData
-
-                                        width: parent.width
-                                        height: 31
-                                        spacing: 8
-
-                                        Rectangle {
-                                            id: appIconBox
-                                            width: 22
-                                            height: 22
-                                            radius: 11
-                                            color: appIconImage.status === Image.Ready ? "#1b000000" : "#26000000"
-                                            border.width: appIconImage.status === Image.Ready ? 0 : 1
-                                            border.color: "#28000000"
-                                            antialiasing: true
-                                            clip: true
-
-                                            readonly property string iconSource: popupRoot.fileIconSource(modelData.icon || "")
-
-                                            Image {
-                                                id: appIconImage
-                                                anchors.fill: parent
-                                                anchors.margins: 3
-                                                source: appIconBox.iconSource
-                                                visible: status === Image.Ready
-                                                fillMode: Image.PreserveAspectFit
-                                                asynchronous: true
-                                                cache: true
-                                                smooth: true
-                                                mipmap: true
-                                            }
-
-                                            Components.StyledText {
-                                                anchors.centerIn: parent
-                                                visible: appIconImage.status !== Image.Ready
-                                                text: popupRoot.firstLetter(modelData.app, modelData.name || "A")
-                                                color: "#eef3f8"
-                                                font.pixelSize: 12
-                                                font.weight: Font.DemiBold
-                                            }
-                                        }
-
-                                        Components.StyledText {
-                                            Layout.preferredWidth: 92
-                                            text: modelData.name || modelData.app || "App"
-                                            color: "#c4ceda"
-                                            font.pixelSize: 12
-                                            elide: Text.ElideRight
-                                        }
-
-                                        SystemSlider {
-                                            Layout.fillWidth: true
-                                            value: modelData.volume || 0
-                                            minValue: 0
-                                            maxValue: 100
-                                            onValueCommitted: function (value) {
-                                                Services.SystemStatus.setAppVolume(modelData.index, value);
-                                            }
-                                        }
+                                    delegate: SystemAudioAppRow {
+                                        popupRoot: root.popupRoot
                                     }
                                 }
                             }
@@ -178,54 +122,9 @@ Rectangle {
 
                                 Repeater {
                                     model: Services.SystemStatus.audioDevices
-                                    delegate: Rectangle {
-                                        required property var modelData
-
-                                        width: parent.width
-                                        height: popupRoot.audioDeviceRowHeight
-                                        radius: 12
-                                        color: deviceMouse.pressed ? "#2a000000" : (deviceMouse.containsMouse ? "#20000000" : (modelData.active ? "#1cffffff" : "transparent"))
-                                        border.width: 0
-                                        antialiasing: true
-
-                                        Behavior on color {
-                                            ColorAnimation {
-                                                duration: motionTokens.hoverDuration
-                                                easing.type: Easing.OutCubic
-                                            }
-                                        }
-
-                                        RowLayout {
-                                            anchors.fill: parent
-                                            anchors.leftMargin: 8
-                                            anchors.rightMargin: 8
-                                            spacing: 8
-
-                                            Components.StyledText {
-                                                Layout.fillWidth: true
-                                                text: modelData.label || modelData.name || "Audio device"
-                                                color: modelData.active ? "#f4f7fb" : "#c4ceda"
-                                                font.pixelSize: 12
-                                                font.weight: modelData.active ? Font.DemiBold : Font.Medium
-                                                elide: Text.ElideRight
-                                            }
-
-                                            Components.StyledText {
-                                                text: modelData.active ? "active" : ""
-                                                color: "#8f9aa8"
-                                                font.pixelSize: 12
-                                            }
-                                        }
-
-                                        MouseArea {
-                                            id: deviceMouse
-                                            anchors.fill: parent
-                                            hoverEnabled: true
-                                            cursorShape: Qt.PointingHandCursor
-                                            onClicked: {
-                                                Services.SystemStatus.setSink(modelData.name, modelData.label || modelData.name || "");
-                                            }
-                                        }
+                                    delegate: SystemAudioDeviceRow {
+                                        popupRoot: root.popupRoot
+                                        motionTokens: root.motionTokens
                                     }
                                 }
                             }

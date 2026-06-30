@@ -309,61 +309,9 @@ Rectangle {
                             Repeater {
                                 model: popupRoot.detailMode === "wifi" ? Services.SystemStatus.wifiNetworks : []
 
-                                delegate: Rectangle {
-                                    required property var modelData
-
-                                    width: parent.width
-                                    height: 30
-                                    radius: 12
-                                    color: wifiDetailMouse.pressed ? "#2a000000" : (wifiDetailMouse.containsMouse ? "#20000000" : (modelData.active ? "#1cffffff" : "transparent"))
-                                    border.width: 0
-                                    antialiasing: true
-
-                                    Behavior on color {
-                                        ColorAnimation {
-                                            duration: motionTokens.hoverDuration
-                                            easing.type: Easing.OutCubic
-                                        }
-                                    }
-
-                                    RowLayout {
-                                        anchors.fill: parent
-                                        anchors.leftMargin: 8
-                                        anchors.rightMargin: 8
-                                        spacing: 8
-
-                                        SystemIcon {
-                                            source: modelData.signal <= 25 ? popupRoot.rowIcon("wifi-0") : (modelData.signal <= 45 ? popupRoot.rowIcon("wifi-1") : (modelData.signal <= 70 ? popupRoot.rowIcon("wifi-2") : popupRoot.rowIcon("wifi-3")))
-                                            iconOpacity: modelData.active ? 1.0 : 0.72
-                                        }
-
-                                        Components.StyledText {
-                                            Layout.fillWidth: true
-                                            text: modelData.ssid || "Wi-Fi"
-                                            color: modelData.active ? "#f4f7fb" : "#c4ceda"
-                                            font.pixelSize: 12
-                                            font.weight: modelData.active ? Font.DemiBold : Font.Medium
-                                            elide: Text.ElideRight
-                                        }
-
-                                        Components.StyledText {
-                                            text: modelData.active ? "active" : (modelData.signal + "%")
-                                            color: "#8f9aa8"
-                                            font.pixelSize: 12
-                                        }
-                                    }
-
-                                    MouseArea {
-                                        id: wifiDetailMouse
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: {
-                                            if (!parent.modelData.active)
-                                                Services.SystemStatus.connectWifi(parent.modelData.ssid);
-                                            popupRoot.closeDetailPopup();
-                                        }
-                                    }
+                                delegate: SystemWifiNetworkRow {
+                                    popupRoot: nestedOverlay.popupRoot
+                                    motionTokens: nestedOverlay.motionTokens
                                 }
                             }
                         }
@@ -398,57 +346,9 @@ Rectangle {
                             Repeater {
                                 model: popupRoot.detailMode === "bluetooth" ? Services.SystemStatus.bluetoothDevices : []
 
-                                delegate: Rectangle {
-                                    required property var modelData
-
-                                    width: parent.width
-                                    height: 30
-                                    radius: 12
-                                    color: bluetoothDetailMouse.pressed ? "#2a000000" : (bluetoothDetailMouse.containsMouse ? "#20000000" : (modelData.connected ? "#1cffffff" : "transparent"))
-                                    border.width: 0
-                                    antialiasing: true
-
-                                    Behavior on color {
-                                        ColorAnimation {
-                                            duration: motionTokens.hoverDuration
-                                            easing.type: Easing.OutCubic
-                                        }
-                                    }
-
-                                    RowLayout {
-                                        anchors.fill: parent
-                                        anchors.leftMargin: 8
-                                        anchors.rightMargin: 8
-                                        spacing: 8
-
-                                        SystemIcon {
-                                            source: popupRoot.rowIcon("bluetooth")
-                                            iconOpacity: modelData.connected ? 1.0 : 0.62
-                                        }
-
-                                        Components.StyledText {
-                                            Layout.fillWidth: true
-                                            text: modelData.name || "Bluetooth"
-                                            color: modelData.connected ? "#f4f7fb" : "#c4ceda"
-                                            font.pixelSize: 12
-                                            font.weight: modelData.connected ? Font.DemiBold : Font.Medium
-                                            elide: Text.ElideRight
-                                        }
-
-                                        Components.StyledText {
-                                            text: modelData.connected ? "connected" : ""
-                                            color: "#8f9aa8"
-                                            font.pixelSize: 12
-                                        }
-                                    }
-
-                                    MouseArea {
-                                        id: bluetoothDetailMouse
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: Services.SystemStatus.toggleBluetoothDevice(parent.modelData)
-                                    }
+                                delegate: SystemBluetoothDeviceRow {
+                                    popupRoot: nestedOverlay.popupRoot
+                                    motionTokens: nestedOverlay.motionTokens
                                 }
                             }
                         }
