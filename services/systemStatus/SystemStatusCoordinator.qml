@@ -11,6 +11,8 @@ Item {
     property var bluetoothStatus: null
     property var batteryStatus: null
     property var notificationStatus: null
+    property var payloads: null
+    property var diagnostics: null
 
     property bool distroRefreshQueued: false
     property bool networkRefreshQueued: false
@@ -29,11 +31,17 @@ Item {
     property bool popupOpening: false
 
     function parsedStatusPayload(text, key, label) {
+        if (payloads && payloads.normalizedPayloadFromText)
+            return payloads.normalizedPayloadFromText(text, key, label, diagnostics);
+
         try {
             var payload = JSON.parse(text || "{}");
             return payload && payload[key] ? payload[key] : (payload || {});
         } catch (e) {
-            console.warn("Failed to parse " + label + " status:", e);
+            if (diagnostics && diagnostics.warnParseError)
+                diagnostics.warnParseError(label, e);
+            else
+                console.warn("Failed to parse " + label + " status:", e);
             return {};
         }
     }

@@ -97,7 +97,7 @@ Item {
         }
     }
 
-    function parsedStatusPayload(text, key, label) { return coordinator.parsedStatusPayload(text, key, label); }
+    function parsedStatusPayload(text, key, label) { return payloads.normalizedPayloadFromText(text, key, label, diagnostics); }
 
     function decodeNotificationEntities(text) { return notificationStatus.decodeNotificationEntities(text); }
     function stripNotificationMarkup(text) { return notificationStatus.stripNotificationMarkup(text); }
@@ -208,6 +208,14 @@ Item {
     function closeNotification(notificationId) { notificationStatus.closeNotification(notificationId); }
     function openNotification(notification) { notificationStatus.openNotification(notification); }
 
+    SystemStatusParts.SystemStatusDiagnostics {
+        id: diagnostics
+    }
+
+    SystemStatusParts.SystemStatusPayloads {
+        id: payloads
+    }
+
     SystemStatusParts.SystemCommandRunner {
         id: commandRunner
         scriptPath: root.scriptPath
@@ -257,5 +265,7 @@ Item {
         bluetoothStatus: bluetoothStatus
         batteryStatus: batteryDomain
         notificationStatus: notificationStatus
+        payloads: payloads
+        diagnostics: diagnostics
     }
 }
