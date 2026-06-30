@@ -1,4 +1,5 @@
 import Quickshell
+import Quickshell.Wayland
 import QtQuick
 import QtQuick.Layouts
 import "../../components" as Components
@@ -17,6 +18,10 @@ PopupWindow {
     property real surfaceY: 0
     property real surfaceWidth: 1
     property real surfaceHeight: 1
+    property real interactionX: surfaceX
+    property real interactionY: surfaceY
+    property real interactionWidth: surfaceWidth
+    property real interactionHeight: surfaceHeight
     property real contextX: 0
     property real contextY: 0
     property real contextWidth: 206
@@ -59,6 +64,13 @@ PopupWindow {
     visible: popupState.renderVisible
     color: "transparent"
     surfaceFormat.opaque: false
+
+    mask: Region {
+        x: Math.round(Math.max(0, root.interactionX - root.surfaceX))
+        y: Math.round(Math.max(0, root.interactionY - root.surfaceY))
+        width: Math.round(Math.max(1, root.interactionWidth))
+        height: Math.round(Math.max(1, root.interactionHeight))
+    }
 
     Components.PopupEscapeShortcut { }
 
@@ -210,10 +222,10 @@ PopupWindow {
         Components.PopupInteractionBoundary {
             owner: "appDock"
             active: root.contextOpen && popupState.renderVisible
-            screenX: root.surfaceX
-            screenY: root.bottomDock ? (Screen.height - root.panelHeight + root.surfaceY) : root.surfaceY
-            screenWidth: root.surfaceWidth
-            screenHeight: root.surfaceHeight
+            screenX: root.interactionX
+            screenY: root.bottomDock ? (Screen.height - root.panelHeight + root.interactionY) : root.interactionY
+            screenWidth: root.interactionWidth
+            screenHeight: root.interactionHeight
         }
     }
 }

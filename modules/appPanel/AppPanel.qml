@@ -1531,52 +1531,102 @@ Item {
         return targetWorkspace > 0 && targetWorkspace === Number(workspace || 0);
     }
 
-    function protectedPopupX() {
-        if (!workspaceMenuOpen)
+    function contextActionsIncludeWorkspaceSubmenu() {
+        var actions = contextActions || [];
+        for (var i = 0; i < actions.length; i++) {
+            if (String(actions[i] && actions[i].submenu || "") === "workspaces")
+                return true;
+        }
+        return false;
+    }
+
+    function popupSurfaceIncludesWorkspaceMenu() {
+        // Keep the top-level PopupWindow geometry stable for the whole lifetime
+        // of a context menu that can open the workspace submenu. Otherwise the
+        // parent surface moves/resizes for one frame when the child submenu is
+        // activated, which looks like the parent popup briefly starts near the
+        // dock and then teleports to its final position.
+        return contextActionsIncludeWorkspaceSubmenu();
+    }
+
+    function popupUnionX(includeWorkspaceMenu) {
+        if (!includeWorkspaceMenu)
             return popupXFor(contextMenuWidth);
         return Math.min(popupXFor(contextMenuWidth), workspaceMenuXFor(workspaceSubmenuWidth));
     }
 
-    function protectedPopupY() {
-        if (!workspaceMenuOpen)
+    function popupUnionY(includeWorkspaceMenu) {
+        if (!includeWorkspaceMenu)
             return popupYFor(contextMenuHeight());
         return Math.min(popupYFor(contextMenuHeight()), workspaceMenuYFor(workspaceMenuHeight()));
     }
 
-    function protectedPopupWidth() {
+    function popupUnionWidth(includeWorkspaceMenu) {
         var mainX = popupXFor(contextMenuWidth);
         var mainRight = mainX + contextMenuWidth;
-        if (!workspaceMenuOpen)
+        if (!includeWorkspaceMenu)
             return contextMenuWidth;
         var subX = workspaceMenuXFor(workspaceSubmenuWidth);
         var subRight = subX + workspaceSubmenuWidth;
         return Math.max(mainRight, subRight) - Math.min(mainX, subX);
     }
 
-    function protectedPopupHeight() {
+    function popupUnionHeight(includeWorkspaceMenu) {
         var mainY = popupYFor(contextMenuHeight());
         var mainBottom = mainY + contextMenuHeight();
-        if (!workspaceMenuOpen)
+        if (!includeWorkspaceMenu)
             return contextMenuHeight();
         var subY = workspaceMenuYFor(workspaceMenuHeight());
         var subBottom = subY + workspaceMenuHeight();
         return Math.max(mainBottom, subBottom) - Math.min(mainY, subY);
     }
 
+    function protectedPopupX() {
+        return popupUnionX(workspaceMenuOpen);
+    }
+
+    function protectedPopupY() {
+        return popupUnionY(workspaceMenuOpen);
+    }
+
+    function protectedPopupWidth() {
+        return popupUnionWidth(workspaceMenuOpen);
+    }
+
+    function protectedPopupHeight() {
+        return popupUnionHeight(workspaceMenuOpen);
+    }
+
+    function stablePopupSurfaceX() {
+        return popupUnionX(popupSurfaceIncludesWorkspaceMenu());
+    }
+
+    function stablePopupSurfaceY() {
+        return popupUnionY(popupSurfaceIncludesWorkspaceMenu());
+    }
+
+    function stablePopupSurfaceWidth() {
+        return popupUnionWidth(popupSurfaceIncludesWorkspaceMenu());
+    }
+
+    function stablePopupSurfaceHeight() {
+        return popupUnionHeight(popupSurfaceIncludesWorkspaceMenu());
+    }
+
     function contextMenuXInSurface() {
-        return popupXFor(contextMenuWidth) - protectedPopupX();
+        return popupXFor(contextMenuWidth) - stablePopupSurfaceX();
     }
 
     function contextMenuYInSurface() {
-        return popupYFor(contextMenuHeight()) - protectedPopupY();
+        return popupYFor(contextMenuHeight()) - stablePopupSurfaceY();
     }
 
     function workspaceMenuXInSurface() {
-        return workspaceMenuXFor(workspaceSubmenuWidth) - protectedPopupX();
+        return workspaceMenuXFor(workspaceSubmenuWidth) - stablePopupSurfaceX();
     }
 
     function workspaceMenuYInSurface() {
-        return workspaceMenuYFor(workspaceMenuHeight()) - protectedPopupY();
+        return workspaceMenuYFor(workspaceMenuHeight()) - stablePopupSurfaceY();
     }
 
     function applyPendingContext() {
@@ -1967,10 +2017,14 @@ Item {
         workspaceMenuOpen: root.workspaceMenuOpen
         bottomDock: root.bottomDock
         panelHeight: root.panelHeight
-        surfaceX: root.protectedPopupX()
-        surfaceY: root.protectedPopupY()
-        surfaceWidth: root.protectedPopupWidth()
-        surfaceHeight: root.protectedPopupHeight()
+        surfaceX: root.stablePopupSurfaceX()
+        surfaceY: root.stablePopupSurfaceY()
+        surfaceWidth: root.stablePopupSurfaceWidth()
+        surfaceHeight: root.stablePopupSurfaceHeight()
+        interactionX: root.protectedPopupX()
+        interactionY: root.protectedPopupY()
+        interactionWidth: root.protectedPopupWidth()
+        interactionHeight: root.protectedPopupHeight()
         contextX: root.contextMenuXInSurface()
         contextY: root.contextMenuYInSurface()
         contextWidth: root.contextMenuWidth
