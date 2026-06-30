@@ -46,6 +46,42 @@ Item {
         }
     }
 
+
+    function applyDomainPayloadFromText(text, key, label, target) {
+        var payload = parsedStatusPayload(text, key, label);
+        if (target && target.applyPayload)
+            target.applyPayload(payload);
+        else if (target && target.applyStatus)
+            target.applyStatus(payload);
+        if (facade)
+            facade.ready = true;
+    }
+
+    function applyDistroPayloadFromText(text) {
+        if (facade && facade.applyDistroStatus)
+            facade.applyDistroStatus(parsedStatusPayload(text, "distro", "distro"));
+    }
+
+    function applyNetworkPayloadFromText(text) {
+        applyDomainPayloadFromText(text, "network", "network", networkStatus);
+    }
+
+    function applyBluetoothPayloadFromText(text) {
+        applyDomainPayloadFromText(text, "bluetooth", "bluetooth", bluetoothStatus);
+    }
+
+    function applyAudioPayloadFromText(text) {
+        applyDomainPayloadFromText(text, "audio", "audio", audioStatus);
+    }
+
+    function applyBatteryPayloadFromText(text) {
+        applyDomainPayloadFromText(text, "battery", "battery", batteryStatus);
+    }
+
+    function applyNotificationsPayloadFromText(text) {
+        applyDomainPayloadFromText(text, "notifications", "notifications", notificationStatus);
+    }
+
     function isRefreshStale(lastRefreshAt, ttlMs) {
         return lastRefreshAt <= 0 || Date.now() - lastRefreshAt > ttlMs;
     }
@@ -363,7 +399,7 @@ Item {
         stdout: StdioCollector {
             onStreamFinished: {
                 if (root.facade)
-                    root.facade.updateDistroFromJson(this.text);
+                    root.applyDistroPayloadFromText(this.text);
             }
         }
 
@@ -384,7 +420,7 @@ Item {
         stdout: StdioCollector {
             onStreamFinished: {
                 if (root.facade)
-                    root.facade.updateNetworkFromJson(this.text);
+                    root.applyNetworkPayloadFromText(this.text);
             }
         }
 
@@ -405,7 +441,7 @@ Item {
         stdout: StdioCollector {
             onStreamFinished: {
                 if (root.facade)
-                    root.facade.updateBluetoothFromJson(this.text);
+                    root.applyBluetoothPayloadFromText(this.text);
             }
         }
 
@@ -426,7 +462,7 @@ Item {
         stdout: StdioCollector {
             onStreamFinished: {
                 if (root.facade)
-                    root.facade.updateAudioFromJson(this.text);
+                    root.applyAudioPayloadFromText(this.text);
             }
         }
 
@@ -447,7 +483,7 @@ Item {
         stdout: StdioCollector {
             onStreamFinished: {
                 if (root.facade)
-                    root.facade.updateBatteryFromJson(this.text);
+                    root.applyBatteryPayloadFromText(this.text);
             }
         }
 
@@ -468,7 +504,7 @@ Item {
         stdout: StdioCollector {
             onStreamFinished: {
                 if (root.facade)
-                    root.facade.updateNotificationsFromJson(this.text);
+                    root.applyNotificationsPayloadFromText(this.text);
             }
         }
 

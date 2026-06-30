@@ -216,6 +216,15 @@ Item {
         id: payloads
     }
 
+    SystemStatusParts.SystemStatusDomainUtils {
+        id: domainUtils
+    }
+
+    SystemStatusParts.SystemNotificationIconResolver {
+        id: notificationIconResolver
+        scriptPath: root.scriptPath
+    }
+
     SystemStatusParts.SystemCommandRunner {
         id: commandRunner
         scriptPath: root.scriptPath
@@ -226,34 +235,41 @@ Item {
         id: audioStatus
         actionRunner: function(args) { commandRunner.run(args); }
         refreshScheduler: function(baseDelay) { coordinator.scheduleAudioRefresh(baseDelay); }
+        utils: domainUtils
     }
 
     SystemStatusParts.SystemNetworkStatus {
         id: networkStatus
         actionRunner: function(args) { commandRunner.run(args); }
         refreshScheduler: function(baseDelay) { coordinator.scheduleNetworkRefresh(baseDelay); }
+        utils: domainUtils
     }
 
     SystemStatusParts.SystemBluetoothStatus {
         id: bluetoothStatus
         actionRunner: function(args) { commandRunner.run(args); }
         refreshScheduler: function(baseDelay) { coordinator.scheduleBluetoothRefresh(baseDelay); }
+        utils: domainUtils
     }
 
     SystemStatusParts.SystemBatteryStatus {
         id: batteryDomain
         refreshScheduler: function(baseDelay) { coordinator.scheduleBatteryRefresh(baseDelay); }
+        utils: domainUtils
     }
 
     SystemStatusParts.SystemNotificationStatus {
         id: notificationStatus
         scriptPath: root.scriptPath
         actionRunner: function(args) { commandRunner.run(args); }
+        iconResolver: notificationIconResolver
+        utils: domainUtils
     }
 
     SystemStatusParts.SystemPowerStatus {
         id: powerStatus
         actionRunner: function(args) { commandRunner.run(args); }
+        utils: domainUtils
     }
 
     SystemStatusParts.SystemStatusCoordinator {

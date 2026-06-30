@@ -11,6 +11,7 @@ Item {
     property string batteryTime: ""
 
     property var refreshScheduler: null
+    property var utils: null
 
     function handleWatchLine(line) {
         var text = String(line || "").toLowerCase();
@@ -21,10 +22,15 @@ Item {
     function applyStatus(status) {
         var b = status || {};
         hasBattery = !!b.hasBattery;
-        batteryPercent = Number(b.percent || 0);
+        batteryPercent = utils ? utils.clampInt(b.percent || 0, 0, 100) : Math.max(0, Math.min(100, Math.round(Number(b.percent || 0))));
         batteryStatus = b.status || "absent";
         batteryCharging = !!b.charging;
         acOnline = !!b.acOnline;
         batteryTime = b.time || "";
     }
+
+    function applyPayload(payload) {
+        applyStatus(payload);
+    }
+
 }

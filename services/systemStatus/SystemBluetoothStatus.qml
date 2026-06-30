@@ -9,28 +9,21 @@ Item {
 
     property var actionRunner: null
     property var refreshScheduler: null
+    property var utils: null
+
+    readonly property var actionCommands: ["toggle-bluetooth", "connect-bluetooth", "disconnect-bluetooth"]
 
     function sameList(left, right) {
-        try {
-            return JSON.stringify(left || []) === JSON.stringify(right || []);
-        } catch (e) {
-            return false;
-        }
+        return utils ? utils.sameList(left, right) : JSON.stringify(left || []) === JSON.stringify(right || []);
     }
 
     function handleWatchLine(line) {
-        if (String(line || "").trim().length > 0 && refreshScheduler)
+        if ((utils ? utils.nonEmptyLine(line) : String(line || "").trim().length > 0) && refreshScheduler)
             refreshScheduler();
     }
 
     function isAction(args) {
-        if (!args || args.length === 0)
-            return false;
-
-        var cmd = String(args[0] || "");
-        return cmd === "toggle-bluetooth"
-            || cmd === "connect-bluetooth"
-            || cmd === "disconnect-bluetooth";
+        return utils ? utils.commandIn(args, actionCommands) : actionCommands.indexOf(args && args.length > 0 ? String(args[0] || "") : "") !== -1;
     }
 
     function applyStatus(status) {
@@ -42,14 +35,25 @@ Item {
             bluetoothDevices = nextBluetoothDevices;
     }
 
+
+    function applyPayload(payload) {
+        applyStatus(payload);
+    }
+
     function toggleBluetooth() {
-        if (actionRunner)
+        if (utils)
+            utils.runAction(actionRunner, ["toggle-bluetooth"]);
+        else if (actionRunner)
             actionRunner(["toggle-bluetooth"]);
     }
 
     function toggleBluetoothDevice(device) {
-        if (!device || !device.mac || !actionRunner)
+        if (!device || !device.mac)
             return;
-        actionRunner([(device.connected ? "disconnect-bluetooth" : "connect-bluetooth"), String(device.mac)]);
+        var command = device.connected ? "disconnect-bluetooth" : "connect-bluetooth";
+        if (utils)
+            utils.runAction(actionRunner, [command, String(device.mac)]);
+        else if (actionRunner)
+            actionRunner([command, String(device.mac)]);
     }
 }

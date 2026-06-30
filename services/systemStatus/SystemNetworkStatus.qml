@@ -22,27 +22,21 @@ Item {
 
     property var actionRunner: null
     property var refreshScheduler: null
+    property var utils: null
+
+    readonly property var actionCommands: ["toggle-wifi", "connect-wifi"]
 
     function sameList(left, right) {
-        try {
-            return JSON.stringify(left || []) === JSON.stringify(right || []);
-        } catch (e) {
-            return false;
-        }
+        return utils ? utils.sameList(left, right) : JSON.stringify(left || []) === JSON.stringify(right || []);
     }
 
     function handleWatchLine(line) {
-        if (String(line || "").trim().length > 0 && refreshScheduler)
+        if ((utils ? utils.nonEmptyLine(line) : String(line || "").trim().length > 0) && refreshScheduler)
             refreshScheduler();
     }
 
     function isAction(args) {
-        if (!args || args.length === 0)
-            return false;
-
-        var cmd = String(args[0] || "");
-        return cmd === "toggle-wifi"
-            || cmd === "connect-wifi";
+        return utils ? utils.commandIn(args, actionCommands) : actionCommands.indexOf(args && args.length > 0 ? String(args[0] || "") : "") !== -1;
     }
 
     function applyStatus(status) {
@@ -67,13 +61,24 @@ Item {
             wifiNetworks = nextWifiNetworks;
     }
 
+
+    function applyPayload(payload) {
+        applyStatus(payload);
+    }
+
     function toggleWifi() {
-        if (actionRunner)
+        if (utils)
+            utils.runAction(actionRunner, ["toggle-wifi"]);
+        else if (actionRunner)
             actionRunner(["toggle-wifi"]);
     }
 
     function connectWifi(ssid) {
-        if (ssid && actionRunner)
+        if (!ssid)
+            return;
+        if (utils)
+            utils.runAction(actionRunner, ["connect-wifi", String(ssid)]);
+        else if (actionRunner)
             actionRunner(["connect-wifi", String(ssid)]);
     }
 }

@@ -15,13 +15,16 @@ Item {
 
     property var actionRunner: null
     property var refreshScheduler: null
+    property var utils: null
+
+    readonly property var actionCommands: ["set-volume", "toggle-mute", "set-app-volume", "set-sink"]
 
     function sameList(left, right) {
-        try {
-            return JSON.stringify(left || []) === JSON.stringify(right || []);
-        } catch (e) {
-            return false;
-        }
+        return utils ? utils.sameList(left, right) : JSON.stringify(left || []) === JSON.stringify(right || []);
+    }
+
+    function clampVolume(value) {
+        return utils ? utils.clampInt(value, 0, 150) : Math.max(0, Math.min(150, Math.round(Number(value || 0))));
     }
 
     function isAudioEventLine(line) {
@@ -42,14 +45,7 @@ Item {
     }
 
     function isAction(args) {
-        if (!args || args.length === 0)
-            return false;
-
-        var cmd = String(args[0] || "");
-        return cmd === "set-volume"
-            || cmd === "toggle-mute"
-            || cmd === "set-app-volume"
-            || cmd === "set-sink";
+        return utils ? utils.commandIn(args, actionCommands) : actionCommands.indexOf(args && args.length > 0 ? String(args[0] || "") : "") !== -1;
     }
 
     function sinkLabelByName(name, devices) {
@@ -71,10 +67,11 @@ Item {
 
         for (var i = 0; i < list.length; i++) {
             var item = list[i] || {};
-            var copy = {};
-
-            for (var key in item)
-                copy[key] = item[key];
+            var copy = utils ? utils.copyObject(item) : {};
+            if (!utils) {
+                for (var key in item)
+                    copy[key] = item[key];
+            }
 
             copy.active = String(item.name || "") === target;
             next.push(copy);
@@ -101,7 +98,7 @@ Item {
         var a = status || {};
         audioReady = true;
         hasAudio = !!a.hasAudio;
-        volume = Number(a.volume || 0);
+        volume = clampVolume(a.volume || 0);
         muted = !!a.muted;
 
         var nextAudioDevices = a.devices || [];
@@ -136,26 +133,38 @@ Item {
             sinkInputs = nextSinkInputs;
     }
 
+
+    function applyPayload(payload) {
+        applyStatus(payload);
+    }
+
     function setVolume(value) {
-        volume = Math.max(0, Math.min(150, Math.round(value)));
+        volume = clampVolume(value);
         if (volume > 0)
             muted = false;
-        if (actionRunner)
+        if (utils)
+            utils.runAction(actionRunner, ["set-volume", String(volume)]);
+        else if (actionRunner)
             actionRunner(["set-volume", String(volume)]);
     }
 
     function toggleMute() {
         if (hasAudio)
             muted = !muted;
-        if (actionRunner)
+        if (utils)
+            utils.runAction(actionRunner, ["toggle-mute"]);
+        else if (actionRunner)
             actionRunner(["toggle-mute"]);
     }
 
     function setAppVolume(index, value) {
         if (index === undefined || index === null)
             return;
-        if (actionRunner)
-            actionRunner(["set-app-volume", String(index), String(Math.max(0, Math.min(150, Math.round(value))))]);
+        var targetVolume = clampVolume(value);
+        if (utils)
+            utils.runAction(actionRunner, ["set-app-volume", String(index), String(targetVolume)]);
+        else if (actionRunner)
+            actionRunner(["set-app-volume", String(index), String(targetVolume)]);
     }
 
     function setSink(name, label) {
@@ -169,7 +178,9 @@ Item {
 
         applyOptimisticSink(pendingSinkName, pendingSinkLabel);
         sinkFallbackTimer.restart();
-        if (actionRunner)
+        if (utils)
+            utils.runAction(actionRunner, ["set-sink", pendingSinkName]);
+        else if (actionRunner)
             actionRunner(["set-sink", pendingSinkName]);
     }
 

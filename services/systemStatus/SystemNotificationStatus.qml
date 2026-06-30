@@ -1,5 +1,4 @@
 import QtQuick
-import Quickshell.Io
 
 Item {
     id: root
@@ -26,13 +25,13 @@ Item {
 
     property string scriptPath: ""
     property var actionRunner: null
+    property var utils: null
+    property var iconResolver: null
+
+    readonly property var actionCommands: ["notifications-clear", "notifications-toggle-silent", "notification-close", "notification-open"]
 
     function sameList(left, right) {
-        try {
-            return JSON.stringify(left || []) === JSON.stringify(right || []);
-        } catch (e) {
-            return false;
-        }
+        return utils ? utils.sameList(left, right) : JSON.stringify(left || []) === JSON.stringify(right || []);
     }
 
     function decodeNotificationEntities(text) {
@@ -230,7 +229,7 @@ Item {
     }
 
     function processNextLiveNotification() {
-        if (iconResolveProcess.running)
+        if (iconResolver && iconResolver.busy)
             return;
 
         while (pendingLiveNotifications.length > 0) {
@@ -250,6 +249,9 @@ Item {
                 continue;
             }
 
+            if (!iconResolver)
+                continue;
+
             activeLiveNotification = {
                 app: item.app,
                 title: item.title,
@@ -259,9 +261,8 @@ Item {
             };
             iconResolveReceived = false;
             iconResolveResult = "";
-            iconResolveProcess.command = ["python3", scriptPath, "resolve-icon", item.icon, item.app];
-            iconResolveProcess.running = true;
-            return;
+            if (iconResolver.resolve(activeLiveNotification))
+                return;
         }
     }
 
@@ -336,15 +337,13 @@ Item {
         mergeNotifications(historyNotifications.length);
     }
 
-    function isAction(args) {
-        if (!args || args.length === 0)
-            return false;
 
-        var cmd = String(args[0] || "");
-        return cmd === "notifications-clear"
-            || cmd === "notifications-toggle-silent"
-            || cmd === "notification-close"
-            || cmd === "notification-open";
+    function applyPayload(payload) {
+        applyStatus(payload);
+    }
+
+    function isAction(args) {
+        return utils ? utils.commandIn(args, actionCommands) : actionCommands.indexOf(args && args.length > 0 ? String(args[0] || "") : "") !== -1;
     }
 
     function clearNotifications() {
@@ -354,13 +353,17 @@ Item {
         notificationsCount = 0;
         dismissedNotificationIds = {};
         dismissedNotificationKeys = {};
-        if (actionRunner)
+        if (utils)
+            utils.runAction(actionRunner, ["notifications-clear"]);
+        else if (actionRunner)
             actionRunner(["notifications-clear"]);
     }
 
     function toggleNotificationsSilent() {
         notificationsSilent = !notificationsSilent;
-        if (actionRunner)
+        if (utils)
+            utils.runAction(actionRunner, ["notifications-toggle-silent"]);
+        else if (actionRunner)
             actionRunner(["notifications-toggle-silent"]);
     }
 
@@ -376,7 +379,9 @@ Item {
         notificationsCount = Math.max(0, notificationsCount - 1);
         mergeNotifications(notificationsCount);
 
-        if (actionRunner)
+        if (utils)
+            utils.runAction(actionRunner, ["notification-close", id]);
+        else if (actionRunner)
             actionRunner(["notification-close", id]);
     }
 
@@ -384,39 +389,31 @@ Item {
         if (!notification || !actionRunner)
             return;
 
-        actionRunner([
+        var args = [
             "notification-open",
             String(notification.id || ""),
             String(notification.action || ""),
             String(notification.url || ""),
             String(notification.desktopEntry || ""),
             String(notification.app || "")
-        ]);
+        ];
+        if (utils)
+            utils.runAction(actionRunner, args);
+        else
+            actionRunner(args);
     }
 
-    Process {
-        id: iconResolveProcess
-        running: false
+    Connections {
+        target: root.iconResolver
 
-        stdout: StdioCollector {
-            onStreamFinished: {
-                root.iconResolveReceived = true;
-                root.iconResolveResult = this.text.trim();
-            }
-        }
+        function onResolved(item, icon) {
+            var resolvedIcon = String(icon || "");
+            root.iconResolveReceived = true;
+            root.iconResolveResult = resolvedIcon;
 
-        onExited: {
-            running = false;
-
-            if (root.activeLiveNotification) {
-                var resolvedIcon = root.iconResolveReceived ? root.iconResolveResult : "";
-                root.rememberResolvedIcon(root.activeLiveNotification.cacheKey || "", resolvedIcon);
-                root.addLiveNotification(
-                    root.activeLiveNotification.app,
-                    root.activeLiveNotification.title,
-                    root.activeLiveNotification.body,
-                    resolvedIcon
-                );
+            if (item) {
+                root.rememberResolvedIcon(String(item.cacheKey || ""), resolvedIcon);
+                root.addLiveNotification(item.app, item.title, item.body, resolvedIcon);
             }
 
             root.activeLiveNotification = null;
