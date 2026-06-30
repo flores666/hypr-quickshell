@@ -23,6 +23,7 @@ Scope {
     readonly property int inputBottomMargin: overviewController.inputBottomMargin
     readonly property int visualContentYOffset: overviewController.visualContentYOffset
     readonly property int inputContentYOffset: overviewController.inputContentYOffset
+    readonly property int activeVisualContentYOffset: overviewController.activeVisualContentYOffset
     readonly property real desktopCardPhaseEnd: overviewController.desktopCardPhaseEnd
     readonly property int closeAnimationDuration: overviewController.closeAnimationDuration
     readonly property int openAnimationDuration: overviewController.openAnimationDuration
@@ -790,7 +791,7 @@ Scope {
             externalContentY: root.gridContentY
             syncContentY: true
             horizontalMargin: root.horizontalMargin
-            contentYOffset: root.visualContentYOffset
+            contentYOffset: root.activeVisualContentYOffset
             queryText: searchController.query
         }
     }

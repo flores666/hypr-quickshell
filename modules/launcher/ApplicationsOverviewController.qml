@@ -29,6 +29,11 @@ Item {
     readonly property int inputBottomMargin: 116
     readonly property int visualContentYOffset: 38
     readonly property int inputContentYOffset: 0
+    // During reverse handoff the plugin renders the bottom applications layer
+    // while the interactive top layer is being removed. Keep the rendered
+    // content at the same internal offset as the input layer, otherwise the
+    // icon grid jumps by one frame when switching surfaces.
+    readonly property int activeVisualContentYOffset: applicationsClosingState ? inputContentYOffset : visualContentYOffset
     readonly property real desktopCardPhaseEnd: 0.48
     readonly property int closeAnimationDuration: 300
     readonly property int openAnimationDuration: 340
@@ -74,7 +79,9 @@ Item {
         animationKickTimer.stop();
         closeCleanupTimer.stop();
         overview.closeContextMenu();
-        overview.clearSelection();
+        // Do not clear selection before the reverse handoff. Changing tile
+        // state while the plugin switches from input to visual layer produces
+        // a one-frame icon flash. Cleanup happens in finishCloseAnimation().
         overview.clearPointerSuppression();
         overview.captureContentYForClose();
         closingInputContentActive = applicationsInputInteractive || panelVisuallySettled || applicationsRiseProgress > 0.001;
