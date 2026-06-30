@@ -1798,6 +1798,13 @@ PopupWindow {
             }
         }
 
-        Components.PopupInteractionBoundary { }
+        Components.PopupInteractionBoundary {
+            owner: "systemStatusPopup"
+            active: root.visible
+            screenX: root.popupX
+            screenY: root.popupY
+            screenWidth: root.implicitWidth
+            screenHeight: root.implicitHeight
+        }
     }
 }

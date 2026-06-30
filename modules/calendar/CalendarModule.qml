@@ -433,7 +433,14 @@ Item {
                 }
             }
 
-            Components.PopupInteractionBoundary { }
+            Components.PopupInteractionBoundary {
+                owner: "calendarPopup"
+                active: root.popupOpen && popupState.renderVisible
+                screenX: root.popupXFor(calendarPopup.implicitWidth)
+                screenY: root.popupTopY
+                screenWidth: calendarPopup.implicitWidth
+                screenHeight: calendarPopup.implicitHeight
+            }
         }
     }
 }

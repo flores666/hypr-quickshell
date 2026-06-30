@@ -46,7 +46,7 @@ QtObject {
     property string activePopupGroup: ""
     property string pendingExternalPointerCloseOwner: ""
     property int externalPointerCloseSerial: 0
-    property int suppressedExternalPointerCloseSerial: 0
+    property var popupInteractionBounds: ({})
     property string activeModalLayer: ""
     property string inputCaptureOwner: ""
     readonly property bool hasActivePopup: activePopupOwner.length > 0
@@ -122,22 +122,69 @@ QtObject {
         return externalPointerCloseSerial;
     }
 
-    function suppressCurrentExternalPointerClose() {
-        if (externalPointerCloseSerial > 0)
-            suppressedExternalPointerCloseSerial = externalPointerCloseSerial;
+    function setPopupInteractionBounds(owner, x, y, width, height, active) {
+        var normalized = String(owner || "").trim();
+        if (normalized.length === 0)
+            return;
+
+        var next = {};
+        var current = popupInteractionBounds || {};
+        for (var key in current) {
+            if (key !== normalized)
+                next[key] = current[key];
+        }
+
+        if (active && width > 0 && height > 0) {
+            next[normalized] = {
+                x: Number(x || 0),
+                y: Number(y || 0),
+                width: Number(width || 0),
+                height: Number(height || 0)
+            };
+        }
+
+        popupInteractionBounds = next;
     }
 
-    function commitExternalPointerClose(owner, serial) {
+    function clearPopupInteractionBounds(owner) {
+        var normalized = String(owner || "").trim();
+        if (normalized.length === 0)
+            return;
+
+        var next = {};
+        var current = popupInteractionBounds || {};
+        for (var key in current) {
+            if (key !== normalized)
+                next[key] = current[key];
+        }
+        popupInteractionBounds = next;
+    }
+
+    function popupInteractionBoundsContain(x, y) {
+        var px = Number(x || 0);
+        var py = Number(y || 0);
+        var bounds = popupInteractionBounds || {};
+        for (var key in bounds) {
+            var rect = bounds[key] || {};
+            var left = Number(rect.x || 0);
+            var top = Number(rect.y || 0);
+            var right = left + Number(rect.width || 0);
+            var bottom = top + Number(rect.height || 0);
+            if (px >= left && px <= right && py >= top && py <= bottom)
+                return true;
+        }
+        return false;
+    }
+
+    function commitExternalPointerClose(owner, serial, x, y) {
         var normalized = String(owner || "").trim();
         var closeSerial = Number(serial || 0);
         pendingExternalPointerCloseOwner = "";
         if (normalized.length === 0 || closeSerial <= 0)
             return;
 
-        if (suppressedExternalPointerCloseSerial === closeSerial) {
-            suppressedExternalPointerCloseSerial = 0;
+        if (popupInteractionBoundsContain(x, y))
             return;
-        }
 
         if (activePopupOwner === normalized)
             requestClosePopups("all");

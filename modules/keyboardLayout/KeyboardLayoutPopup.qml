@@ -182,6 +182,13 @@ PopupWindow {
             }
         }
 
-        Components.PopupInteractionBoundary { }
+        Components.PopupInteractionBoundary {
+            owner: "keyboardLayoutPopup"
+            active: root.visible
+            screenX: root.popupX
+            screenY: root.popupY
+            screenWidth: root.implicitWidth
+            screenHeight: root.implicitHeight
+        }
     }
 }

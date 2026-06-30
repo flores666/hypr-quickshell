@@ -1300,7 +1300,14 @@ Scope {
                     }
                 }
 
-                Components.PopupInteractionBoundary { }
+                Components.PopupInteractionBoundary {
+                    owner: "launcherContextMenu"
+                    active: root.contextMenuOpen && root.applicationsInputInteractive
+                    screenX: root.contextMenuX
+                    screenY: root.contextMenuY
+                    screenWidth: root.contextMenuWidth
+                    screenHeight: contextColumn.implicitHeight + 12
+                }
             }
         }
 

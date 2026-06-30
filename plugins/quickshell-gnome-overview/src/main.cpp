@@ -762,10 +762,15 @@ void onMouseButton(const IPointer::SButtonEvent& event, SCallbackInfo& info) {
         return;
 
     const auto pressed = event.state == WL_POINTER_BUTTON_STATE_PRESSED;
-    if (pressed)
-        notifyQuickshellOverviewState("pointer-press");
-
     const auto pMonitor = g_pCompositor->getMonitorFromCursor();
+    if (pressed) {
+        Vector2D pointerCoords = g_pInputManager->getMouseCoordsInternal();
+        if (pMonitor)
+            pointerCoords = pointerCoords - pMonitor->m_position;
+
+        notifyQuickshellOverviewState("pointer-press:" + std::to_string(static_cast<int>(std::lround(pointerCoords.x))) + "," + std::to_string(static_cast<int>(std::lround(pointerCoords.y))));
+    }
+
     if (pMonitor) {
         const auto widget = getWidgetForMonitor(pMonitor);
         if (widget && widget->isActive()) {
@@ -904,6 +909,9 @@ void onKeyPress(const IKeyboard::SKeyEvent& event, SCallbackInfo& info) {
     const xkb_keysym_t keysym = xkb_state_key_get_one_sym(keyboard->m_xkbSymState, keycode);
     const bool pressed = event.state == WL_KEYBOARD_KEY_STATE_PRESSED;
     const bool released = event.state == WL_KEYBOARD_KEY_STATE_RELEASED;
+
+    if (pressed)
+        notifyQuickshellOverviewState("keyboard-press");
 
     if (isAnyOverviewActive() && isScreenshotSelectorKeysym(keysym)) {
         if (pressed && g_mainModDown)

@@ -19,15 +19,38 @@ Item {
 
     property string pendingExternalPointerCloseOwner: ""
     property int pendingExternalPointerCloseSerial: 0
+    property real pendingExternalPointerCloseX: 0
+    property real pendingExternalPointerCloseY: 0
 
-    function queueExternalPointerClose() {
+    function parsePointerPressPayload(payload) {
+        var text = String(payload || "").trim();
+        if (text.indexOf("pointer-press:") !== 0)
+            return { valid: false, x: 0, y: 0 };
+
+        var parts = text.substring(14).split(",");
+        if (parts.length < 2)
+            return { valid: false, x: 0, y: 0 };
+
+        var x = Number(parts[0]);
+        var y = Number(parts[1]);
+        return { valid: isFinite(x) && isFinite(y), x: x, y: y };
+    }
+
+    function queueExternalPointerClose(x, y) {
         var owner = String(Services.ShellState.activePopupOwner || "").trim();
         if (owner.length === 0)
             return;
 
         pendingExternalPointerCloseOwner = owner;
         pendingExternalPointerCloseSerial = Services.ShellState.beginExternalPointerClose(owner);
+        pendingExternalPointerCloseX = Number(x || 0);
+        pendingExternalPointerCloseY = Number(y || 0);
         externalPointerCloseTimer.restart();
+    }
+
+    function closePopupFromKeyboardPress() {
+        if (Services.ShellState.hasActivePopup)
+            Services.ShellState.requestClosePopups("all");
     }
 
     function currentWorkspaceId() {
@@ -386,8 +409,15 @@ Item {
             return;
         }
 
-        if (overviewState === "pointer-press") {
-            service.queueExternalPointerClose();
+        if (overviewState.indexOf("pointer-press:") === 0) {
+            var pointerPayload = parsePointerPressPayload(overviewState);
+            if (pointerPayload.valid)
+                service.queueExternalPointerClose(pointerPayload.x, pointerPayload.y);
+            return;
+        }
+
+        if (overviewState === "keyboard-press") {
+            service.closePopupFromKeyboardPress();
             return;
         }
 
@@ -459,9 +489,13 @@ Item {
         onTriggered: {
             var owner = service.pendingExternalPointerCloseOwner;
             var serial = service.pendingExternalPointerCloseSerial;
+            var x = service.pendingExternalPointerCloseX;
+            var y = service.pendingExternalPointerCloseY;
             service.pendingExternalPointerCloseOwner = "";
             service.pendingExternalPointerCloseSerial = 0;
-            Services.ShellState.commitExternalPointerClose(owner, serial);
+            service.pendingExternalPointerCloseX = 0;
+            service.pendingExternalPointerCloseY = 0;
+            Services.ShellState.commitExternalPointerClose(owner, serial, x, y);
         }
     }
 

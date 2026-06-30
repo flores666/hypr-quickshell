@@ -5,29 +5,50 @@ Item {
     id: root
 
     anchors.fill: parent
-    visible: true
-    enabled: true
+    visible: active
+    enabled: false
     z: 1000000
 
-    // This boundary must not participate in hover. A HoverHandler overlay steals
-    // hover from real menu rows and sliders. We only need to mark the current
-    // mouse press as an inside-popup press, then immediately let the event
-    // propagate to the actual control below.
-    MouseArea {
-        anchors.fill: parent
-        acceptedButtons: Qt.AllButtons
-        hoverEnabled: false
-        propagateComposedEvents: true
-        preventStealing: false
+    property string owner: ""
+    property bool active: true
+    property real screenX: 0
+    property real screenY: 0
+    property real screenWidth: width
+    property real screenHeight: height
 
-        onPressed: function(mouse) {
-            Services.ShellState.suppressCurrentExternalPointerClose();
-            mouse.accepted = false;
-        }
+    function normalizedOwner() {
+        return String(owner || "").trim();
+    }
 
-        onReleased: function(mouse) { mouse.accepted = false; }
-        onClicked: function(mouse) { mouse.accepted = false; }
-        onDoubleClicked: function(mouse) { mouse.accepted = false; }
-        onPressAndHold: function(mouse) { mouse.accepted = false; }
+    function syncBounds() {
+        var popupOwner = normalizedOwner();
+        if (popupOwner.length === 0)
+            return;
+
+        Services.ShellState.setPopupInteractionBounds(
+            popupOwner,
+            Number(screenX || 0),
+            Number(screenY || 0),
+            Math.max(0, Number(screenWidth || width || 0)),
+            Math.max(0, Number(screenHeight || height || 0)),
+            active && visible
+        );
+    }
+
+    onOwnerChanged: syncBounds()
+    onActiveChanged: syncBounds()
+    onVisibleChanged: syncBounds()
+    onScreenXChanged: syncBounds()
+    onScreenYChanged: syncBounds()
+    onScreenWidthChanged: syncBounds()
+    onScreenHeightChanged: syncBounds()
+    onWidthChanged: syncBounds()
+    onHeightChanged: syncBounds()
+
+    Component.onCompleted: syncBounds()
+    Component.onDestruction: {
+        var popupOwner = normalizedOwner();
+        if (popupOwner.length > 0)
+            Services.ShellState.clearPopupInteractionBounds(popupOwner);
     }
 }
