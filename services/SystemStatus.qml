@@ -1,7 +1,6 @@
 pragma Singleton
 
 import QtQuick
-import Quickshell.Io
 import "systemStatus" as SystemStatusParts
 
 Item {
@@ -10,24 +9,25 @@ Item {
     readonly property string scriptPath: decodeURIComponent(Qt.resolvedUrl("../scripts/system-status.py").toString().replace(/^file:\/\//, ""))
 
     property bool ready: false
-    property bool actionRunning: false
-    property var pendingActionArgs: []
-    property var runningActionArgs: []
 
-    property bool distroRefreshQueued: false
-    property bool networkRefreshQueued: false
-    property bool bluetoothRefreshQueued: false
-    property bool audioRefreshQueued: false
-    property bool batteryRefreshQueued: false
-    property bool notificationsRefreshQueued: false
+    property alias actionRunning: commandRunner.actionRunning
+    property alias pendingActionArgs: commandRunner.pendingActionArgs
+    property alias runningActionArgs: commandRunner.runningActionArgs
 
-    property double distroLastRefreshAt: 0
-    property double networkLastRefreshAt: 0
-    property double bluetoothLastRefreshAt: 0
-    property double audioLastRefreshAt: 0
-    property double batteryLastRefreshAt: 0
-    property double notificationsLastRefreshAt: 0
-    property bool popupOpening: false
+    property alias distroRefreshQueued: coordinator.distroRefreshQueued
+    property alias networkRefreshQueued: coordinator.networkRefreshQueued
+    property alias bluetoothRefreshQueued: coordinator.bluetoothRefreshQueued
+    property alias audioRefreshQueued: coordinator.audioRefreshQueued
+    property alias batteryRefreshQueued: coordinator.batteryRefreshQueued
+    property alias notificationsRefreshQueued: coordinator.notificationsRefreshQueued
+
+    property alias distroLastRefreshAt: coordinator.distroLastRefreshAt
+    property alias networkLastRefreshAt: coordinator.networkLastRefreshAt
+    property alias bluetoothLastRefreshAt: coordinator.bluetoothLastRefreshAt
+    property alias audioLastRefreshAt: coordinator.audioLastRefreshAt
+    property alias batteryLastRefreshAt: coordinator.batteryLastRefreshAt
+    property alias notificationsLastRefreshAt: coordinator.notificationsLastRefreshAt
+    property alias popupOpening: coordinator.popupOpening
 
     property string distroName: "Linux"
     property string distroInitial: "L"
@@ -97,14 +97,7 @@ Item {
         }
     }
 
-    function parsedStatusPayload(text, key, label) {
-        try {
-            var data = JSON.parse(text || "{}");
-            return data[key] || data || {};
-        } catch (e) {
-            return {};
-        }
-    }
+    function parsedStatusPayload(text, key, label) { return coordinator.parsedStatusPayload(text, key, label); }
 
     function decodeNotificationEntities(text) { return notificationStatus.decodeNotificationEntities(text); }
     function stripNotificationMarkup(text) { return notificationStatus.stripNotificationMarkup(text); }
@@ -124,137 +117,26 @@ Item {
     function parseDbusStringLine(line) { return notificationStatus.parseDbusStringLine(line); }
     function handleNotificationBusLine(line) { notificationStatus.handleBusLine(line); }
 
-    function requestRefresh() {
-        requestDistroRefresh();
-        requestNetworkRefresh();
-        requestAudioRefresh();
-        requestBatteryRefresh();
-        requestBluetoothRefresh();
-        requestNotificationsRefresh();
-    }
+    function requestRefresh() { coordinator.requestRefresh(); }
+    function isRefreshStale(lastRefreshAt, ttlMs) { return coordinator.isRefreshStale(lastRefreshAt, ttlMs); }
+    function preparePopupOpen() { coordinator.preparePopupOpen(); }
+    function requestInteractiveRefresh() { coordinator.requestInteractiveRefresh(); }
+    function requestInteractiveRefreshDeferred() { coordinator.requestInteractiveRefreshDeferred(); }
+    function requestWarmRefresh() { coordinator.requestWarmRefresh(); }
 
-    function isRefreshStale(lastRefreshAt, ttlMs) {
-        return lastRefreshAt <= 0 || (Date.now() - lastRefreshAt) > ttlMs;
-    }
+    function requestDistroRefresh() { coordinator.requestDistroRefresh(); }
+    function requestNetworkRefresh() { coordinator.requestNetworkRefresh(); }
+    function requestBluetoothRefresh() { coordinator.requestBluetoothRefresh(); }
+    function requestAudioRefresh() { coordinator.requestAudioRefresh(); }
+    function requestBatteryRefresh() { coordinator.requestBatteryRefresh(); }
+    function requestNotificationsRefresh() { coordinator.requestNotificationsRefresh(); }
 
-    function preparePopupOpen() {
-        popupOpening = true;
-        popupOpeningReset.restart();
-    }
-
-    function requestInteractiveRefresh() {
-        requestInteractiveRefreshDeferred();
-    }
-
-    function requestInteractiveRefreshDeferred() {
-        if (isRefreshStale(distroLastRefreshAt, 3600000))
-            requestDistroRefresh();
-
-        if (isRefreshStale(audioLastRefreshAt, 900))
-            scheduleAudioRefresh(30);
-        if (isRefreshStale(networkLastRefreshAt, 2200))
-            scheduleNetworkRefresh(160);
-        if (isRefreshStale(bluetoothLastRefreshAt, 3600))
-            scheduleBluetoothRefresh(320);
-        if (isRefreshStale(batteryLastRefreshAt, 35000))
-            scheduleBatteryRefresh(520);
-        if (isRefreshStale(notificationsLastRefreshAt, 8000))
-            scheduleNotificationsRefresh(760);
-    }
-
-    function requestWarmRefresh() {
-        if (isRefreshStale(audioLastRefreshAt, 12000))
-            scheduleAudioRefresh(0);
-        if (isRefreshStale(networkLastRefreshAt, 20000))
-            scheduleNetworkRefresh(220);
-        if (isRefreshStale(bluetoothLastRefreshAt, 45000))
-            scheduleBluetoothRefresh(460);
-        if (isRefreshStale(notificationsLastRefreshAt, 60000))
-            scheduleNotificationsRefresh(760);
-        if (isRefreshStale(batteryLastRefreshAt, 90000))
-            scheduleBatteryRefresh(1060);
-    }
-
-    function requestDistroRefresh() {
-        if (distroRefreshProc.running) {
-            distroRefreshQueued = true;
-            return;
-        }
-        distroRefreshProc.running = true;
-    }
-
-    function requestNetworkRefresh() {
-        if (networkRefreshProc.running) {
-            networkRefreshQueued = true;
-            return;
-        }
-        networkRefreshProc.running = true;
-    }
-
-    function requestBluetoothRefresh() {
-        if (bluetoothRefreshProc.running) {
-            bluetoothRefreshQueued = true;
-            return;
-        }
-        bluetoothRefreshProc.running = true;
-    }
-
-    function requestAudioRefresh() {
-        if (audioRefreshProc.running) {
-            audioRefreshQueued = true;
-            return;
-        }
-        audioRefreshProc.running = true;
-    }
-
-    function requestBatteryRefresh() {
-        if (batteryRefreshProc.running) {
-            batteryRefreshQueued = true;
-            return;
-        }
-        batteryRefreshProc.running = true;
-    }
-
-    function requestNotificationsRefresh() {
-        if (notificationsRefreshProc.running) {
-            notificationsRefreshQueued = true;
-            return;
-        }
-        notificationsRefreshProc.running = true;
-    }
-
-    function cooldownDelay(lastRefreshAt, baseDelay, minGap) {
-        if (lastRefreshAt <= 0)
-            return baseDelay;
-
-        var elapsed = Date.now() - lastRefreshAt;
-        return Math.max(baseDelay, minGap - elapsed);
-    }
-
-    function scheduleNetworkRefresh(baseDelay) {
-        networkEventDebounce.interval = cooldownDelay(networkLastRefreshAt, baseDelay === undefined ? 140 : baseDelay, 650);
-        networkEventDebounce.restart();
-    }
-
-    function scheduleBluetoothRefresh(baseDelay) {
-        bluetoothEventDebounce.interval = cooldownDelay(bluetoothLastRefreshAt, baseDelay === undefined ? 160 : baseDelay, 750);
-        bluetoothEventDebounce.restart();
-    }
-
-    function scheduleAudioRefresh(baseDelay) {
-        audioEventDebounce.interval = cooldownDelay(audioLastRefreshAt, baseDelay === undefined ? 90 : baseDelay, 180);
-        audioEventDebounce.restart();
-    }
-
-    function scheduleBatteryRefresh(baseDelay) {
-        batteryEventDebounce.interval = cooldownDelay(batteryLastRefreshAt, baseDelay === undefined ? 450 : baseDelay, 1600);
-        batteryEventDebounce.restart();
-    }
-
-    function scheduleNotificationsRefresh(baseDelay) {
-        notificationsEventDebounce.interval = cooldownDelay(notificationsLastRefreshAt, baseDelay === undefined ? 300 : baseDelay, 2200);
-        notificationsEventDebounce.restart();
-    }
+    function cooldownDelay(lastRefreshAt, baseDelay, minGap) { return coordinator.cooldownDelay(lastRefreshAt, baseDelay, minGap); }
+    function scheduleNetworkRefresh(baseDelay) { coordinator.scheduleNetworkRefresh(baseDelay); }
+    function scheduleBluetoothRefresh(baseDelay) { coordinator.scheduleBluetoothRefresh(baseDelay); }
+    function scheduleAudioRefresh(baseDelay) { coordinator.scheduleAudioRefresh(baseDelay); }
+    function scheduleBatteryRefresh(baseDelay) { coordinator.scheduleBatteryRefresh(baseDelay); }
+    function scheduleNotificationsRefresh(baseDelay) { coordinator.scheduleNotificationsRefresh(baseDelay); }
 
     function isAudioEventLine(line) { return audioStatus.isAudioEventLine(line); }
     function handleAudioWatchLine(line) { audioStatus.handleWatchLine(line); }
@@ -310,17 +192,7 @@ Item {
     function updateBatteryFromJson(text) { applyBatteryStatus(parsedStatusPayload(text, "battery", "battery")); }
     function updateNotificationsFromJson(text) { applyNotificationsStatus(parsedStatusPayload(text, "notifications", "notifications")); }
 
-    function runAction(args) {
-        if (actionProc.running) {
-            pendingActionArgs = args || [];
-            return;
-        }
-        pendingActionArgs = [];
-        runningActionArgs = args || [];
-        actionRunning = true;
-        actionProc.command = ["python3", scriptPath].concat(runningActionArgs);
-        actionProc.running = true;
-    }
+    function runAction(args) { commandRunner.run(args); }
 
     function setVolume(value) { audioStatus.setVolume(value); }
     function toggleMute() { audioStatus.toggleMute(); }
@@ -336,336 +208,54 @@ Item {
     function closeNotification(notificationId) { notificationStatus.closeNotification(notificationId); }
     function openNotification(notification) { notificationStatus.openNotification(notification); }
 
+    SystemStatusParts.SystemCommandRunner {
+        id: commandRunner
+        scriptPath: root.scriptPath
+        onActionCompleted: function(args) { coordinator.handleActionCompleted(args); }
+    }
+
     SystemStatusParts.SystemAudioStatus {
         id: audioStatus
-        actionRunner: function(args) { root.runAction(args); }
-        refreshScheduler: function(baseDelay) { root.scheduleAudioRefresh(baseDelay); }
+        actionRunner: function(args) { commandRunner.run(args); }
+        refreshScheduler: function(baseDelay) { coordinator.scheduleAudioRefresh(baseDelay); }
     }
 
     SystemStatusParts.SystemNetworkStatus {
         id: networkStatus
-        actionRunner: function(args) { root.runAction(args); }
-        refreshScheduler: function(baseDelay) { root.scheduleNetworkRefresh(baseDelay); }
+        actionRunner: function(args) { commandRunner.run(args); }
+        refreshScheduler: function(baseDelay) { coordinator.scheduleNetworkRefresh(baseDelay); }
     }
 
     SystemStatusParts.SystemBluetoothStatus {
         id: bluetoothStatus
-        actionRunner: function(args) { root.runAction(args); }
-        refreshScheduler: function(baseDelay) { root.scheduleBluetoothRefresh(baseDelay); }
+        actionRunner: function(args) { commandRunner.run(args); }
+        refreshScheduler: function(baseDelay) { coordinator.scheduleBluetoothRefresh(baseDelay); }
     }
 
     SystemStatusParts.SystemBatteryStatus {
         id: batteryDomain
-        refreshScheduler: function(baseDelay) { root.scheduleBatteryRefresh(baseDelay); }
+        refreshScheduler: function(baseDelay) { coordinator.scheduleBatteryRefresh(baseDelay); }
     }
 
     SystemStatusParts.SystemNotificationStatus {
         id: notificationStatus
         scriptPath: root.scriptPath
-        actionRunner: function(args) { root.runAction(args); }
+        actionRunner: function(args) { commandRunner.run(args); }
     }
 
     SystemStatusParts.SystemPowerStatus {
         id: powerStatus
-        actionRunner: function(args) { root.runAction(args); }
+        actionRunner: function(args) { commandRunner.run(args); }
     }
 
-    Component.onCompleted: {
-        requestRefresh();
-        networkWatchProcess.running = true;
-        bluetoothWatchProcess.running = true;
-        audioWatchProcess.running = true;
-        batteryWatchProcess.running = true;
-        notificationWatchProcess.running = true;
-        batterySlowRefresh.start();
-        warmRefreshTimer.start();
-    }
-
-    Timer {
-        id: networkEventDebounce
-        interval: 140
-        repeat: false
-        onTriggered: root.requestNetworkRefresh()
-    }
-
-    Timer {
-        id: bluetoothEventDebounce
-        interval: 160
-        repeat: false
-        onTriggered: root.requestBluetoothRefresh()
-    }
-
-    Timer {
-        id: audioEventDebounce
-        interval: 80
-        repeat: false
-        onTriggered: root.requestAudioRefresh()
-    }
-
-    Timer {
-        id: batteryEventDebounce
-        interval: 450
-        repeat: false
-        onTriggered: root.requestBatteryRefresh()
-    }
-
-    Timer {
-        id: notificationsEventDebounce
-        interval: 160
-        repeat: false
-        onTriggered: root.requestNotificationsRefresh()
-    }
-
-    Timer {
-        id: batterySlowRefresh
-        interval: 60000
-        repeat: true
-        running: false
-        onTriggered: root.requestBatteryRefresh()
-    }
-
-    Timer {
-        id: warmRefreshTimer
-        interval: 15000
-        repeat: true
-        running: false
-        triggeredOnStart: false
-        onTriggered: root.requestWarmRefresh()
-    }
-
-    Timer {
-        id: popupOpeningReset
-        interval: 900
-        repeat: false
-        onTriggered: root.popupOpening = false
-    }
-
-    Process {
-        id: networkWatchProcess
-        running: false
-        command: [
-            "sh",
-            "-c",
-            "command -v nmcli >/dev/null 2>&1 && exec nmcli monitor"
-        ]
-
-        stdout: SplitParser {
-            onRead: function(line) {
-                root.handleNetworkWatchLine(line);
-            }
-        }
-
-        onExited: running = false
-    }
-
-    Process {
-        id: bluetoothWatchProcess
-        running: false
-        command: [
-            "sh",
-            "-c",
-            "command -v bluetoothctl >/dev/null 2>&1 && exec bluetoothctl monitor"
-        ]
-
-        stdout: SplitParser {
-            onRead: function(line) {
-                root.handleBluetoothWatchLine(line);
-            }
-        }
-
-        onExited: running = false
-    }
-
-    Process {
-        id: audioWatchProcess
-        running: false
-        command: [
-            "sh",
-            "-c",
-            "command -v pactl >/dev/null 2>&1 && exec pactl subscribe"
-        ]
-
-        stdout: SplitParser {
-            onRead: function(line) {
-                root.handleAudioWatchLine(line);
-            }
-        }
-
-        onExited: running = false
-    }
-
-    Process {
-        id: batteryWatchProcess
-        running: false
-        command: [
-            "sh",
-            "-c",
-            "command -v udevadm >/dev/null 2>&1 && exec udevadm monitor --udev --subsystem-match=power_supply"
-        ]
-
-        stdout: SplitParser {
-            onRead: function(line) {
-                root.handleBatteryWatchLine(line);
-            }
-        }
-
-        onExited: running = false
-    }
-
-    Process {
-        id: notificationWatchProcess
-        running: false
-        command: [
-            "dbus-monitor",
-            "--session",
-            "type='method_call',interface='org.freedesktop.Notifications',member='Notify'"
-        ]
-
-        stdout: SplitParser {
-            onRead: function(line) {
-                root.handleNotificationBusLine(line);
-            }
-        }
-
-        onExited: running = false
-    }
-
-    Process {
-        id: distroRefreshProc
-        command: ["python3", root.scriptPath, "status-distro"]
-
-        stdout: StdioCollector {
-            onStreamFinished: root.updateDistroFromJson(this.text)
-        }
-
-        onExited: {
-            running = false;
-            root.distroLastRefreshAt = Date.now();
-            if (root.distroRefreshQueued) {
-                root.distroRefreshQueued = false;
-                root.requestDistroRefresh();
-            }
-        }
-    }
-
-    Process {
-        id: networkRefreshProc
-        command: ["python3", root.scriptPath, "status-network"]
-
-        stdout: StdioCollector {
-            onStreamFinished: root.updateNetworkFromJson(this.text)
-        }
-
-        onExited: {
-            running = false;
-            root.networkLastRefreshAt = Date.now();
-            if (root.networkRefreshQueued) {
-                root.networkRefreshQueued = false;
-                root.scheduleNetworkRefresh();
-            }
-        }
-    }
-
-    Process {
-        id: bluetoothRefreshProc
-        command: ["python3", root.scriptPath, "status-bluetooth"]
-
-        stdout: StdioCollector {
-            onStreamFinished: root.updateBluetoothFromJson(this.text)
-        }
-
-        onExited: {
-            running = false;
-            root.bluetoothLastRefreshAt = Date.now();
-            if (root.bluetoothRefreshQueued) {
-                root.bluetoothRefreshQueued = false;
-                root.scheduleBluetoothRefresh();
-            }
-        }
-    }
-
-    Process {
-        id: audioRefreshProc
-        command: ["python3", root.scriptPath, "status-audio"]
-
-        stdout: StdioCollector {
-            onStreamFinished: root.updateAudioFromJson(this.text)
-        }
-
-        onExited: {
-            running = false;
-            root.audioLastRefreshAt = Date.now();
-            if (root.audioRefreshQueued) {
-                root.audioRefreshQueued = false;
-                root.scheduleAudioRefresh();
-            }
-        }
-    }
-
-    Process {
-        id: batteryRefreshProc
-        command: ["python3", root.scriptPath, "status-battery"]
-
-        stdout: StdioCollector {
-            onStreamFinished: root.updateBatteryFromJson(this.text)
-        }
-
-        onExited: {
-            running = false;
-            root.batteryLastRefreshAt = Date.now();
-            if (root.batteryRefreshQueued) {
-                root.batteryRefreshQueued = false;
-                root.scheduleBatteryRefresh();
-            }
-        }
-    }
-
-    Process {
-        id: notificationsRefreshProc
-        command: ["python3", root.scriptPath, "status-notifications"]
-
-        stdout: StdioCollector {
-            onStreamFinished: root.updateNotificationsFromJson(this.text)
-        }
-
-        onExited: {
-            running = false;
-            root.notificationsLastRefreshAt = Date.now();
-            if (root.notificationsRefreshQueued) {
-                root.notificationsRefreshQueued = false;
-                root.scheduleNotificationsRefresh();
-            }
-        }
-    }
-
-    Process {
-        id: actionProc
-
-        onExited: {
-            running = false;
-            if (root.pendingActionArgs.length > 0) {
-                var nextArgs = root.pendingActionArgs;
-                root.pendingActionArgs = [];
-                root.runAction(nextArgs);
-                return;
-            }
-
-            var finishedArgs = root.runningActionArgs;
-            var wasAudioAction = root.isAudioAction(finishedArgs);
-            var wasNetworkAction = root.isNetworkAction(finishedArgs);
-            var wasBluetoothAction = root.isBluetoothAction(finishedArgs);
-            var wasNotificationsAction = root.isNotificationsAction(finishedArgs);
-            root.runningActionArgs = [];
-            root.actionRunning = false;
-
-            if (wasAudioAction)
-                root.scheduleAudioRefresh();
-            else if (wasNetworkAction)
-                root.scheduleNetworkRefresh();
-            else if (wasBluetoothAction)
-                root.scheduleBluetoothRefresh();
-            else if (wasNotificationsAction)
-                root.scheduleNotificationsRefresh();
-        }
+    SystemStatusParts.SystemStatusCoordinator {
+        id: coordinator
+        scriptPath: root.scriptPath
+        facade: root
+        audioStatus: audioStatus
+        networkStatus: networkStatus
+        bluetoothStatus: bluetoothStatus
+        batteryStatus: batteryDomain
+        notificationStatus: notificationStatus
     }
 }
