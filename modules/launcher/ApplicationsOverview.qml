@@ -23,7 +23,6 @@ Scope {
     readonly property int inputBottomMargin: overviewController.inputBottomMargin
     readonly property int visualContentYOffset: overviewController.visualContentYOffset
     readonly property int inputContentYOffset: overviewController.inputContentYOffset
-    readonly property int activeVisualContentYOffset: overviewController.activeVisualContentYOffset
     readonly property real desktopCardPhaseEnd: overviewController.desktopCardPhaseEnd
     readonly property int closeAnimationDuration: overviewController.closeAnimationDuration
     readonly property int openAnimationDuration: overviewController.openAnimationDuration
@@ -36,6 +35,7 @@ Scope {
     readonly property bool applicationsVisualWindowVisible: overviewController.applicationsVisualWindowVisible
     readonly property bool applicationsInputContentVisible: overviewController.applicationsInputContentVisible
     readonly property bool applicationsInputWindowVisible: overviewController.applicationsInputWindowVisible
+    readonly property bool applicationsContentVisualInteractive: applicationsInputInteractive
     readonly property bool searchActive: searchController.normalizedQuery().length > 0
     readonly property int contextMenuWidth: 226
     readonly property int contextMenuRowHeight: 38
@@ -486,12 +486,20 @@ Scope {
 
     function setGridContentY(value) {
         var next = Math.max(0, Number(value || 0));
-        if (Math.abs(gridContentY - next) > 0.5)
+        if (isNaN(next))
+            next = 0;
+        // Keep both application content trees on the same exact ListView origin.
+        // A tolerance here can leave the hidden visual tree up to half a logical
+        // pixel behind the interactive tree; on fractional-scale outputs that is
+        // enough to round into a visible one-pixel handoff jump during close.
+        if (Math.abs(gridContentY - next) > 0.001)
             gridContentY = next;
     }
 
     function applyGridContentY(value) {
         var next = Math.max(0, Number(value || 0));
+        if (isNaN(next))
+            next = 0;
         var applied = next;
 
         if (inputContent)
@@ -499,7 +507,7 @@ Scope {
         if (visualContent)
             visualContent.forceContentY(applied);
 
-        if (Math.abs(gridContentY - applied) > 0.5)
+        if (Math.abs(gridContentY - applied) > 0.001)
             gridContentY = applied;
     }
 
@@ -782,7 +790,7 @@ Scope {
             id: visualContent
             anchors.fill: parent
             visible: root.applicationsVisualWindowVisible
-            opacity: root.applicationsInputContentVisible ? 0 : 1
+            opacity: root.applicationsVisualLayerHidden ? 0 : 1
             interactive: false
             showVisuals: true
             sectionRows: root.sectionRows
@@ -791,7 +799,7 @@ Scope {
             externalContentY: root.gridContentY
             syncContentY: true
             horizontalMargin: root.horizontalMargin
-            contentYOffset: root.activeVisualContentYOffset
+            contentYOffset: root.visualContentYOffset
             queryText: searchController.query
         }
     }
@@ -935,8 +943,13 @@ Scope {
             id: inputContent
             anchors.fill: parent
             visible: root.applicationsInputContentVisible
-            opacity: root.applicationsInputContentVisible ? 1 : 0
+            // This top tree exists for hit testing, focus and keyboard input only.
+            // The bottom quickshell:applications tree is the single visible panel
+            // both before and during close, so closing no longer swaps between two
+            // independently rendered copies of the icon grid.
+            opacity: (root.applicationsVisualWindowVisible && !root.applicationsVisualLayerHidden) ? 0 : (root.applicationsInputContentVisible ? 1 : 0)
             interactive: root.applicationsInputInteractive
+            visualInteractive: root.applicationsContentVisualInteractive
             showVisuals: true
             sectionRows: root.sectionRows
             sectionRowsVersion: root.sectionRowsVersion
@@ -971,7 +984,10 @@ Scope {
                 root.handleAppPressed(app, button);
             }
             onAppContextRequested: function(app, x, y) {
-                root.openContextMenu(app, x, y);
+                // x/y are local to the transparent input ApplicationsContent.
+                // That tree is intentionally raised for hit-testing, so translate
+                // context-menu coordinates back into the input window's space.
+                root.openContextMenu(app, x, y + root.inputContentYOffset);
             }
             onAppLaunched: function (app) {
                 root.launchApp(app);
@@ -997,7 +1013,7 @@ Scope {
             applicationsInputInteractive: root.applicationsInputInteractive
             menuWidth: root.contextMenuWidth
             rowHeight: root.contextMenuRowHeight
-            inputTopMargin: root.inputTopMargin
+            inputTopMargin: Math.max(4, root.inputTopMargin + root.inputContentYOffset)
             inputBottomMargin: root.inputBottomMargin
         }
 

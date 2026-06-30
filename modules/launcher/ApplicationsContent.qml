@@ -7,6 +7,7 @@ Item {
 
     required property bool interactive
     required property bool showVisuals
+    property bool visualInteractive: interactive
     required property real horizontalMargin
     property real contentYOffset: 0
     property string queryText: ""
@@ -425,6 +426,7 @@ Item {
                 Layout.preferredWidth: Math.min(420, parent.width)
                 Layout.preferredHeight: 40
                 interactive: root.interactive
+                visualInteractive: root.visualInteractive
                 showVisuals: root.showVisuals
                 queryText: root.queryText
                 hidePointerCursor: root.hidePointerCursor

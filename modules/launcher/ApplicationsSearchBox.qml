@@ -7,6 +7,7 @@ Item {
 
     required property bool interactive
     required property bool showVisuals
+    property bool visualInteractive: interactive
     property string queryText: ""
     property bool hidePointerCursor: false
     property var pointerMovedCallback: null
@@ -88,7 +89,7 @@ Item {
             leftMargin: root.textLeftInset
             rightMargin: root.textRightInset
         }
-        visible: root.showVisuals && !root.interactive
+        visible: root.showVisuals && !root.visualInteractive
         text: root.queryText.length > 0 ? root.queryText : "Search applications"
         color: root.queryText.length > 0 ? "#f5f8fb" : "#7f8b96"
         font.family: "Nunito"
@@ -110,7 +111,7 @@ Item {
             leftMargin: root.textLeftInset
             rightMargin: root.textRightInset
         }
-        visible: root.interactive
+        visible: root.visualInteractive
         opacity: root.showVisuals ? 1 : 0
         enabled: root.interactive
         text: root.queryText

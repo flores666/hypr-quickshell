@@ -12,7 +12,6 @@ Item {
     property real animationProgress: 0
     property bool animationBehaviorEnabled: true
     property bool closingVisualActive: false
-    property bool closingInputContentActive: false
 
     readonly property bool applicationsOpen: Services.ShellState.applicationsOverviewOpen
     readonly property bool applicationsClosing: Services.ShellState.applicationsOverviewClosing
@@ -27,23 +26,36 @@ Item {
     readonly property bool applicationsInputInteractive: applicationsState === "interactive" && ownsApplicationsInput
     readonly property int inputTopMargin: 56
     readonly property int inputBottomMargin: 116
-    readonly property int visualContentYOffset: 38
-    readonly property int inputContentYOffset: 0
-    // During reverse handoff the plugin renders the bottom applications layer
-    // while the interactive top layer is being removed. Keep the rendered
-    // content at the same internal offset as the input layer, otherwise the
-    // icon grid jumps by one frame when switching surfaces.
-    readonly property int activeVisualContentYOffset: applicationsClosingState ? inputContentYOffset : visualContentYOffset
+    readonly property int applicationsInputHitOffset: 38
+    // The bottom layer is now the only visible applications panel. The top layer
+    // is a transparent hit-test/focus proxy, and on the settled frame its input
+    // geometry must be raised to match the panel that the native overview render
+    // path exposes visually. This keeps input alignment out of the visible close
+    // handoff, so it cannot reintroduce the old one-pixel icon hop.
+    readonly property int inputContentYOffset: -applicationsInputHitOffset
+    readonly property int visualContentYOffset: 0
     readonly property real desktopCardPhaseEnd: 0.48
     readonly property int closeAnimationDuration: 300
     readonly property int openAnimationDuration: 340
     readonly property real applicationsRiseProgress: smoothStep(desktopCardPhaseEnd, 1.0, animationProgress)
     readonly property bool panelVisuallySettled: applicationsRiseProgress >= 0.998
-    readonly property bool applicationsClosingHandoffVisible: applicationsState === "closing" && closingInputContentActive && panelVisuallySettled && !applicationsVisualLayerHidden
-    readonly property bool applicationsInputCaptureRequired: applicationsState === "opening" || applicationsState === "interactive" || applicationsState === "closing"
+    // The interactive top layer must disappear as soon as closing starts. Keeping
+    // it mapped for a handoff leaves one untransformed copy of the application
+    // icons above the native reverse animation; this is visible as a flash when
+    // returning with mainMod. The bottom visual layer is already warm and is the
+    // only surface the native plugin should sample during close.
+    readonly property bool applicationsClosingHandoffVisible: false
+    readonly property bool applicationsInputCaptureRequired: applicationsState === "opening"
+            || applicationsState === "interactive"
+            || (applicationsState === "closing" && !applicationsVisualLayerHidden)
     readonly property int inputPanelMaskHeight: Math.max(0, Math.round(inputWindowHeight) - inputBottomMargin)
-    readonly property bool applicationsVisualWindowVisible: applicationsRendering && !applicationsVisualLayerHidden
-    readonly property bool applicationsInputContentVisible: applicationsInputInteractive || applicationsClosingHandoffVisible
+    // Keep the bottom visual layer mapped while the native plugin still needs its
+    // texture. Once the plugin emits applications-layer-hidden during close, the
+    // layer must be unmapped immediately; otherwise it remains on WlrLayer.Bottom
+    // and is visible through transparent workspaces/windows after the desktop is
+    // already active again.
+    readonly property bool applicationsVisualWindowVisible: applicationsRendering && !(applicationsClosingState && applicationsVisualLayerHidden)
+    readonly property bool applicationsInputContentVisible: applicationsInputInteractive
     readonly property bool applicationsInputWindowVisible: applicationsInputCaptureRequired || applicationsInputContentVisible
 
     function clamp01(value) {
@@ -63,7 +75,6 @@ Item {
         closeAnimationKickTimer.stop();
         closeCleanupTimer.stop();
         closingVisualActive = false;
-        closingInputContentActive = false;
         overview.resetInputReadiness(false);
         overview.closeContextMenu();
         animationBehaviorEnabled = false;
@@ -79,15 +90,11 @@ Item {
         animationKickTimer.stop();
         closeCleanupTimer.stop();
         overview.closeContextMenu();
-        // Do not clear selection before the reverse handoff. Changing tile
-        // state while the plugin switches from input to visual layer produces
-        // a one-frame icon flash. Cleanup happens in finishCloseAnimation().
-        overview.clearPointerSuppression();
         overview.captureContentYForClose();
-        closingInputContentActive = applicationsInputInteractive || panelVisuallySettled || applicationsRiseProgress > 0.001;
+        var startProgress = (applicationsInputInteractive || applicationsVisualLayerSettled || panelVisuallySettled) ? 1 : clamp01(animationProgress);
         closingVisualActive = true;
         animationBehaviorEnabled = false;
-        animationProgress = clamp01(animationProgress);
+        animationProgress = startProgress;
         animationBehaviorEnabled = true;
         closeAnimationKickTimer.restart();
     }
@@ -97,7 +104,6 @@ Item {
             return;
 
         closingVisualActive = false;
-        closingInputContentActive = false;
         animationBehaviorEnabled = false;
         animationProgress = 0;
         animationBehaviorEnabled = true;

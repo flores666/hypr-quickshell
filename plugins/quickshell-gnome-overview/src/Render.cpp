@@ -203,59 +203,53 @@ static CBox overviewApplicationsLayerBox(PHLMONITOR owner, double openProgress) 
     const double riseOffset = std::max<double>(240.0, owner->m_transformedSize.y * 0.42);
     const double y = overviewLerp(riseOffset, 0.0, liftProgress);
 
-    return CBox{0, y, owner->m_transformedSize.x, owner->m_transformedSize.y};
+    return overviewPixelSnappedBox(CBox{0, y, owner->m_transformedSize.x, owner->m_transformedSize.y});
 }
 
-static bool applicationsLayerReady(PHLMONITOR owner) {
-    if (!owner)
+static bool overviewLayerUsable(PHLLS layer, PHLMONITOR owner) {
+    if (!layer || !owner)
         return false;
+    if (!layer->m_mapped || layer->m_readyToDelete || !layer->m_layerSurface || !layer->wlSurface() || !layer->wlSurface()->resource())
+        return false;
+
+    const Vector2D layerSize = layer->m_realSize->value() * owner->m_scale;
+    return layerSize.x > 1.0 && layerSize.y > 1.0;
+}
+
+static PHLLS findOverviewLayerByNamespace(PHLMONITOR owner, const std::string& layerNamespace) {
+    if (!owner)
+        return nullptr;
 
     for (size_t layerIndex = 0; layerIndex < 4; ++layerIndex) {
         for (auto& weakLayer : owner->m_layerSurfaceLayers[layerIndex]) {
             const auto layer = weakLayer.lock();
-            if (!layer)
+            if (!layer || layer->m_namespace != layerNamespace)
                 continue;
-            if (layer->m_namespace != "quickshell:applications")
-                continue;
-            if (!layer->m_mapped || layer->m_readyToDelete || !layer->m_layerSurface || !layer->wlSurface() || !layer->wlSurface()->resource())
+            if (!overviewLayerUsable(layer, owner))
                 continue;
 
-            const Vector2D layerSize = layer->m_realSize->value() * owner->m_scale;
-            if (!(layerSize.x > 1.0 && layerSize.y > 1.0))
-                continue;
-
-            return true;
+            return layer;
         }
     }
 
-    return false;
+    return nullptr;
+}
+
+static bool applicationsLayerReady(PHLMONITOR owner) {
+    return findOverviewLayerByNamespace(owner, "quickshell:applications") != nullptr;
 }
 
 static bool renderApplicationsLayerBelowOverviewCard(PHLMONITOR owner, const CBox& monitorClip, const Time::steady_tp& time, double openProgress) {
     if (!owner)
         return false;
 
-    for (size_t layerIndex = 0; layerIndex < 4; ++layerIndex) {
-        for (auto& weakLayer : owner->m_layerSurfaceLayers[layerIndex]) {
-            const auto layer = weakLayer.lock();
-            if (!layer)
-                continue;
-            if (layer->m_namespace != "quickshell:applications")
-                continue;
-            if (!layer->m_mapped || layer->m_readyToDelete || !layer->m_layerSurface || !layer->wlSurface() || !layer->wlSurface()->resource())
-                continue;
+    const auto layer = findOverviewLayerByNamespace(owner, "quickshell:applications");
+    if (!layer)
+        return false;
 
-            const Vector2D layerSize = layer->m_realSize->value() * owner->m_scale;
-            if (!(layerSize.x > 1.0 && layerSize.y > 1.0))
-                continue;
-
-            const CBox layerBox = overviewApplicationsLayerBox(owner, openProgress);
-            renderLayerSurfaceStub(layer, owner, layerBox, monitorClip, time, 1.0F);
-            return true;
-        }
-    }
-
-    return false;
+    const CBox layerBox = overviewApplicationsLayerBox(owner, openProgress);
+    renderLayerSurfaceStub(layer, owner, layerBox, monitorClip, time, 1.0F);
+    return true;
 }
 
 static void renderApplicationsSideWorkspacePreviews(PHLMONITOR owner,
