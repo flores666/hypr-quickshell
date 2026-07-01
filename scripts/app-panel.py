@@ -14,7 +14,7 @@ CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / 
 PINS_FILE = CONFIG_DIR / "app-panel.json"
 RUNTIME_DIR = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / APP_NAME
 CACHE_FILE = RUNTIME_DIR / "desktop-apps-cache.json"
-CACHE_VERSION = 10
+CACHE_VERSION = 11
 
 DESKTOP_DIRS = []
 for raw_dir in [
@@ -70,6 +70,19 @@ APP_ALIASES = {
     "chromium": ["chromium", "chromiumbrowser"],
     "googlechrome": ["googlechrome", "chrome"],
     "bravebrowser": ["brave", "bravebrowser"],
+    "telegramdesktop": ["telegramdesktop", "orgtelegramdesktop"],
+    "orgtelegramdesktop": ["telegramdesktop", "orgtelegramdesktop"],
+    "nautilus": ["nautilus", "orggnomenautilus", "gnomenautilus"],
+    "orggnomenautilus": ["nautilus", "orggnomenautilus", "gnomenautilus"],
+    "dolphin": ["dolphin", "orgkdedolphin", "kdedolphin"],
+    "orgkdedolphin": ["dolphin", "orgkdedolphin", "kdedolphin"],
+    "kitty": ["kitty"],
+    "wezterm": ["wezterm", "orgwezfurlongwezterm"],
+    "orgwezfurlongwezterm": ["wezterm", "orgwezfurlongwezterm"],
+    "zen": ["zen", "zenbrowser", "zenalpha", "zenbeta"],
+    "zenbrowser": ["zen", "zenbrowser", "zenalpha", "zenbeta"],
+    "zenalpha": ["zen", "zenbrowser", "zenalpha"],
+    "zenbeta": ["zen", "zenbrowser", "zenbeta"],
 }
 
 IGNORED_MATCH_TOKENS = {
@@ -628,6 +641,26 @@ def resolve_desktop_id(value: str, apps: List[Dict[str, object]]) -> str:
     return best_id if best_score >= 72 else ""
 
 
+def remove_matching_ids(values: List[str], target: str, apps: List[Dict[str, object]]) -> List[str]:
+    target_raw = str(target or "").strip()
+    if not target_raw:
+        return unique_ids(values)
+
+    target_resolved = resolve_desktop_id(target_raw, apps) or target_raw
+    result: List[str] = []
+    for value in values or []:
+        item = str(value or "").strip()
+        if not item:
+            continue
+        if item == target_raw or item == target_resolved:
+            continue
+        item_resolved = resolve_desktop_id(item, apps) or item
+        if item_resolved == target_resolved:
+            continue
+        result.append(item)
+    return unique_ids(result)
+
+
 def list_payload(force: bool = False) -> Dict[str, object]:
     apps = load_apps(force)
     pins, order, hidden, favorites = load_config(apps)
@@ -689,7 +722,7 @@ def unpin_app(desktop_id: str) -> None:
     apps = load_apps()
     desktop_id = resolve_desktop_id(desktop_id, apps) or desktop_id
     pins, order, hidden, favorites = load_config(apps)
-    pins = [item for item in pins if item != desktop_id]
+    pins = remove_matching_ids(pins, desktop_id, apps)
     # Keep visual order. If the app is open, it stays in the same place. If it is
     # closed, QML will simply skip it until the app appears again.
     save_config(pins, order, hidden, favorites)
@@ -767,7 +800,7 @@ def unpin_with_order(desktop_id: str, desktop_ids: List[str]) -> None:
     desktop_id = resolve_desktop_id(desktop_id, apps) or desktop_id
     pins, order, hidden, favorites = load_config(apps)
     by_id = app_map(apps)
-    pins = [item for item in pins if item != desktop_id]
+    pins = remove_matching_ids(pins, desktop_id, apps)
     next_order = clean_order(desktop_ids, by_id)
     save_config(pins, next_order, hidden, favorites)
 

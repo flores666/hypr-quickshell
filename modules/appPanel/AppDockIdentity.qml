@@ -73,6 +73,12 @@ QtObject {
             "vscode": "visualstudiocode",
             "visualstudiocode": "visualstudiocode",
             "comvisualstudiocode": "visualstudiocode",
+            "codium": "vscodium",
+            "vscodium": "vscodium",
+            "zen": "zen",
+            "zenbrowser": "zen",
+            "zenalpha": "zen",
+            "zenbeta": "zen",
             "orggnomenautilus": "nautilus",
             "gnomenautilus": "nautilus",
             "nautilus": "nautilus",
@@ -326,12 +332,21 @@ QtObject {
         var substitutions = {
             "code-url-handler": "visual-studio-code",
             "code": "visual-studio-code",
+            "vscode": "visual-studio-code",
+            "codium": "vscodium",
             "firefox": "firefox",
             "navigator": "firefox",
             "obsidian": "obsidian",
             "md.obsidian": "obsidian",
+            "org.telegram.desktop": "telegramdesktop",
+            "telegram-desktop": "telegramdesktop",
+            "org.gnome.nautilus": "nautilus",
+            "org.kde.dolphin": "dolphin",
             "footclient": "foot",
-            "pavucontrol-qt": "pavucontrol"
+            "pavucontrol-qt": "pavucontrol",
+            "zen-beta": "zen",
+            "zen-alpha": "zen",
+            "zen-browser": "zen"
         };
         return substitutions[key] || substitutions[lower] || key;
     }
@@ -524,9 +539,21 @@ QtObject {
             "mdobsidian": ["obsidian", "mdobsidian"],
             "code": ["code", "vscode", "visualstudiocode"],
             "visualstudiocode": ["code", "vscode", "visualstudiocode"],
+            "codium": ["codium", "vscodium"],
+            "vscodium": ["codium", "vscodium"],
+            "telegramdesktop": ["telegramdesktop", "orgtelegramdesktop"],
+            "orgtelegramdesktop": ["telegramdesktop", "orgtelegramdesktop"],
+            "nautilus": ["nautilus", "orggnomenautilus", "gnomenautilus"],
+            "orggnomenautilus": ["nautilus", "orggnomenautilus", "gnomenautilus"],
+            "dolphin": ["dolphin", "orgkdedolphin", "kdedolphin"],
+            "orgkdedolphin": ["dolphin", "orgkdedolphin", "kdedolphin"],
             "chromium": ["chromium", "chromiumbrowser"],
             "googlechrome": ["googlechrome", "chrome"],
-            "bravebrowser": ["brave", "bravebrowser"]
+            "bravebrowser": ["brave", "bravebrowser"],
+            "zen": ["zen", "zenbrowser", "zenalpha", "zenbeta"],
+            "zenbrowser": ["zen", "zenbrowser", "zenalpha", "zenbeta"],
+            "zenalpha": ["zen", "zenbrowser", "zenalpha"],
+            "zenbeta": ["zen", "zenbrowser", "zenbeta"]
         };
 
         var candidates = [key].concat(aliases[key] || []);
@@ -537,7 +564,62 @@ QtObject {
         }
     }
 
-    function appMatchScore(window, app, tokens) {
+    function canonicalRuntimeFields(window) {
+        var fields = [window && window.appId, window && window.rawClass, window && window.initialClass];
+        var result = [];
+        for (var i = 0; i < fields.length; i++)
+            addCanonicalAppToken(result, fields[i]);
+        return result;
+    }
+
+    function appExactFieldScore(window, app) {
+        if (!window || !app)
+            return 0;
+
+        var runtime = canonicalRuntimeFields(window);
+        if (runtime.length <= 0)
+            return 0;
+
+        var best = 0;
+        var exactFields = [
+            { value: app.desktopId || "", score: 190 },
+            { value: app.sourceDesktopId || "", score: 190 },
+            { value: app.startupWmClass || "", score: 180 },
+            { value: app.executable || "", score: 150 },
+            { value: app.iconName || "", score: 118 }
+        ];
+
+        for (var i = 0; i < exactFields.length; i++) {
+            var keys = [];
+            addCanonicalAppToken(keys, exactFields[i].value);
+            for (var k = 0; k < keys.length; k++) {
+                if (runtime.indexOf(keys[k]) >= 0)
+                    best = Math.max(best, exactFields[i].score);
+            }
+        }
+
+        return best;
+    }
+
+    function appEntryScore(app, entry) {
+        if (!app || !entry)
+            return 0;
+
+        var entryId = String(entry.id || "");
+        var appId = String(app.desktopId || "");
+        if (entryId && appId && entryId === appId)
+            return 170;
+
+        var entryKeys = [];
+        addCanonicalAppToken(entryKeys, entry.id || "");
+        addCanonicalAppToken(entryKeys, entry.icon || "");
+        if (listsShareIdentity(appCanonicalKeys(app, ""), entryKeys))
+            return 115;
+
+        return 0;
+    }
+
+    function appTokenScore(window, app, tokens) {
         if (!window || !app)
             return 0;
 
@@ -574,37 +656,62 @@ QtObject {
         return best;
     }
 
+    function appMatchScore(window, app, tokens, entry) {
+        return Math.max(
+            appExactFieldScore(window, app),
+            appEntryScore(app, entry),
+            appTokenScore(window, app, tokens)
+        );
+    }
+
+    function appTieBreakScore(app) {
+        if (!app)
+            return 0;
+
+        // Preferences are deliberately only a tie-breaker. The app identity must
+        // come from stable runtime fields first; otherwise unpinning an open app
+        // can switch its title/icon to a neighbouring .desktop entry.
+        return appPreferenceBonus(app) - (app.noDisplay ? 24 : 0);
+    }
+
+    function betterAppCandidate(score, tie, bestScore, bestTie) {
+        if (score > bestScore)
+            return true;
+        if (score < bestScore)
+            return false;
+        return tie > bestTie;
+    }
+
     function findAppForWindow(window) {
         var bestApp = null;
-        var bestRank = 0;
-        var bestRawScore = 0;
+        var bestScore = 0;
+        var bestTie = -999999;
         var apps = Services.AppPanelService.apps || [];
         var tokens = windowTokens(window);
         var entry = desktopEntryForWindow(window);
-        var entryApp = appByDesktopEntry(entry);
         var runtimeKey = runtimeAppKeyForWindow(window);
         var pinnedApp = pinnedAppForRuntimeKey(runtimeKey);
         if (pinnedApp)
             return pinnedApp;
-        if (entryApp)
-            return entryApp;
 
         for (var i = 0; i < apps.length; i++) {
             var app = apps[i];
-            var score = appMatchScore(window, app, tokens);
+            var score = appMatchScore(window, app, tokens, entry);
             if (score < 70)
                 continue;
 
-            var rank = score + appPreferenceBonus(app);
-
-            if (rank > bestRank || (rank === bestRank && score > bestRawScore)) {
-                bestRank = rank;
-                bestRawScore = score;
+            var tie = appTieBreakScore(app);
+            if (betterAppCandidate(score, tie, bestScore, bestTie)) {
+                bestScore = score;
+                bestTie = tie;
                 bestApp = app;
             }
         }
-        if (bestRawScore >= 70)
+
+        if (bestApp)
             return bestApp;
+
+        var entryApp = appByDesktopEntry(entry);
         return entryApp || fallbackAppFromDesktopEntry(entry, window);
     }
 

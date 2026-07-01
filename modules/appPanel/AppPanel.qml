@@ -224,6 +224,56 @@ Item {
         }
         return false;
     }
+    function actualPinnedDesktopIdFor(item) {
+        if (!item)
+            return "";
+
+        var candidates = [];
+        function addCandidate(value) {
+            var id = String(value || "").trim();
+            if (id && candidates.indexOf(id) < 0)
+                candidates.push(id);
+        }
+
+        addCandidate(item.sourceDesktopId);
+        addCandidate(item.desktopId);
+        addCandidate(pinDesktopIdFor(item));
+        addCandidate(item.orderKey);
+        addCandidate(item.appKey);
+
+        var pins = Services.AppPanelService.pinnedIds || [];
+        for (var p = 0; p < pins.length; p++) {
+            var pinId = String(pins[p] || "");
+            if (!pinId)
+                continue;
+
+            for (var c = 0; c < candidates.length; c++) {
+                if (pinId === candidates[c])
+                    return pinId;
+            }
+        }
+
+        var itemKeys = [];
+        for (var i = 0; i < candidates.length; i++)
+            dockIdentity.addCanonicalAppToken(itemKeys, candidates[i]);
+        if (item)
+            itemKeys = itemKeys.concat(dockIdentity.appCanonicalKeys(item, ""));
+
+        for (var k = 0; k < pins.length; k++) {
+            var pinnedId = String(pins[k] || "");
+            if (!pinnedId)
+                continue;
+            if (itemKeys.indexOf(dockIdentity.canonicalAppToken(pinnedId)) >= 0)
+                return pinnedId;
+
+            var pinApp = Services.AppPanelService.appById(pinnedId);
+            if (pinApp && dockIdentity.listsShareIdentity(itemKeys, dockIdentity.appCanonicalKeys(pinApp, "")))
+                return pinnedId;
+        }
+
+        return "";
+    }
+
 
     function itemPinnedForMenu(item) {
         return item && (item.pinned || desktopIdPinned(pinDesktopIdFor(item)));
@@ -530,7 +580,7 @@ Item {
             Services.AppPanelService.pinWithOrder(pinDesktopIdFor(item), dockDrag.currentDockOrder());
             break;
         case "unpin":
-            Services.AppPanelService.unpinWithOrder(pinDesktopIdFor(item), dockDrag.currentDockOrder());
+            Services.AppPanelService.unpinWithOrder(actualPinnedDesktopIdFor(item) || pinDesktopIdFor(item), dockDrag.currentDockOrder());
             break;
         case "close-window":
             Services.ShellActions.closeWindow(targetWindow);
