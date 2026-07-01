@@ -6,32 +6,39 @@ import "../../services" as Services
 Rectangle {
     id: root
 
-    required property var notificationData
-    required property string notificationKey
     required property var popupRoot
     required property var popupController
     required property var motionTokens
 
-    property bool expanded: false
+    required property var notificationData
+    required property string notificationKey
 
-    readonly property var currentNotification: root.notificationData || ({})
-    readonly property string rowKey: root.notificationKey || ""
-    readonly property bool closing: popupController.isNotificationClosing(root.currentNotification.id || root.rowKey)
-    readonly property int groupCount: Math.max(1, Number(root.currentNotification.groupCount || 1))
-    readonly property bool grouped: groupCount > 1
-    readonly property var groupItems: root.currentNotification.groupItems || []
-    readonly property var extraGroupItems: groupItems.slice(1)
+    property bool expanded: false
+    property real enterProgress: 0.0
+
+    readonly property var notification: notificationData || ({})
+    readonly property string rowKey: String(notificationKey || "")
+    readonly property string closeKey: String(notification.id || rowKey)
+    readonly property bool closing: popupController.isNotificationClosing(closeKey)
+    readonly property var groupItems: notification.groupItems || []
+    readonly property int groupCount: Math.max(1, Number(notification.groupCount || groupItems.length || 1))
+    readonly property bool grouped: groupCount > 1 && groupItems.length > 1
+    readonly property var childItems: grouped ? groupItems.slice(1) : []
+    readonly property string displayTime: String(notification.time || (groupItems.length > 0 ? (groupItems[0].time || "") : ""))
     readonly property real headerHeight: Math.max(58, notificationTextColumn.implicitHeight + 18)
     readonly property real expandedContentHeight: grouped && expanded ? duplicateColumn.implicitHeight + 8 : 0
-    readonly property real normalHeight: headerHeight + expandedContentHeight
-    readonly property string displayTime: root.currentNotification.time || (groupItems.length > 0 ? (groupItems[0].time || "") : "")
+    readonly property real visibleProgress: closing ? 0.0 : enterProgress
+    readonly property real enterOffsetX: Number(motionTokens.notificationEnterOffsetX || 0)
+    readonly property real enterScale: Number(motionTokens.notificationEnterScale || 1.0)
 
-    width: parent ? parent.width : 1
-    height: normalHeight
-    x: closing ? width + 32 : 0
-    opacity: closing ? 0.0 : 1.0
+    width: ListView.view ? ListView.view.width : (parent ? parent.width : 1)
+    height: headerHeight + expandedContentHeight
+    x: closing ? width + 32 : (1.0 - enterProgress) * enterOffsetX
+    opacity: visibleProgress
+    scale: enterScale + (1.0 - enterScale) * visibleProgress
+    transformOrigin: Item.Center
     visible: true
-    enabled: !closing
+    enabled: !closing && enterProgress > 0.72
     radius: 15
     color: notificationMouse.pressed ? "#28000000" : (notificationMouse.containsMouse ? "#22000000" : "#16000000")
     border.width: 0
@@ -40,24 +47,47 @@ Rectangle {
 
     onGroupedChanged: if (!grouped) expanded = false
 
+    Component.onCompleted: enterAnimationKick.restart()
+
+    Timer {
+        id: enterAnimationKick
+        interval: 1
+        repeat: false
+        onTriggered: root.enterProgress = 1.0
+    }
+
+    Behavior on enterProgress {
+        NumberAnimation {
+            duration: root.motionTokens.notificationMorphDuration
+            easing.type: root.motionTokens.notificationMorphEasing
+        }
+    }
+
     Behavior on height {
         NumberAnimation {
-            duration: 240
-            easing.type: Easing.InOutCubic
+            duration: root.motionTokens.notificationMorphDuration
+            easing.type: root.motionTokens.notificationMorphEasing
         }
     }
 
     Behavior on x {
         NumberAnimation {
-            duration: root.popupController.notificationCloseDuration
-            easing.type: Easing.InCubic
+            duration: root.closing ? root.popupController.notificationCloseDuration : root.motionTokens.notificationMorphDuration
+            easing.type: root.motionTokens.notificationMorphEasing
         }
     }
 
     Behavior on opacity {
         NumberAnimation {
-            duration: root.popupController.notificationCloseDuration
-            easing.type: Easing.OutCubic
+            duration: root.closing ? root.popupController.notificationCloseDuration : root.motionTokens.notificationMorphDuration
+            easing.type: root.motionTokens.notificationMorphEasing
+        }
+    }
+
+    Behavior on scale {
+        NumberAnimation {
+            duration: root.motionTokens.notificationMorphDuration
+            easing.type: root.motionTokens.notificationMorphEasing
         }
     }
 
@@ -74,9 +104,9 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        height: root.headerHeight
         anchors.leftMargin: 10
         anchors.rightMargin: 8
+        height: root.headerHeight
 
         Rectangle {
             id: notificationIconBox
@@ -91,7 +121,7 @@ Rectangle {
             antialiasing: true
             clip: true
 
-            readonly property string iconSource: root.popupRoot.notificationIconSource(root.currentNotification)
+            readonly property string iconSource: root.popupRoot.notificationIconSource(root.notification)
 
             Image {
                 id: notificationImage
@@ -120,7 +150,7 @@ Rectangle {
             Components.StyledText {
                 anchors.centerIn: parent
                 visible: notificationImage.status !== Image.Ready
-                text: root.popupRoot.firstLetter(root.currentNotification.app || root.currentNotification.title, "N")
+                text: root.popupRoot.firstLetter(root.notification.app || root.notification.title, "N")
                 color: "#f4f7fb"
                 font.pixelSize: 13
                 font.weight: Font.DemiBold
@@ -131,7 +161,7 @@ Rectangle {
             id: notificationTextColumn
             anchors.left: notificationIconBox.right
             anchors.leftMargin: 10
-            anchors.right: root.grouped ? groupToggleButton.left : closeNotificationButton.left
+            anchors.right: root.grouped ? groupIndicator.left : closeNotificationButton.left
             anchors.rightMargin: 8
             anchors.verticalCenter: parent.verticalCenter
             spacing: 1
@@ -142,7 +172,7 @@ Rectangle {
 
                 Components.StyledText {
                     Layout.fillWidth: true
-                    text: root.currentNotification.app || "Notification"
+                    text: root.notification.app || "Notification"
                     color: "#d9e0ea"
                     font.pixelSize: 12
                     font.weight: Font.DemiBold
@@ -150,6 +180,7 @@ Rectangle {
                 }
 
                 Components.StyledText {
+                    visible: root.displayTime.length > 0
                     text: root.displayTime
                     color: "#8f9aa8"
                     font.pixelSize: 12
@@ -158,7 +189,7 @@ Rectangle {
 
             Components.StyledText {
                 width: parent.width
-                text: root.currentNotification.title || "Notification"
+                text: root.notification.title || "Notification"
                 color: "#f4f7fb"
                 font.pixelSize: 12
                 font.weight: Font.DemiBold
@@ -167,7 +198,7 @@ Rectangle {
 
             Components.StyledText {
                 width: parent.width
-                text: root.currentNotification.body || ""
+                text: root.notification.body || ""
                 color: "#aeb8c6"
                 font.pixelSize: 12
                 wrapMode: Text.WordWrap
@@ -177,7 +208,7 @@ Rectangle {
         }
 
         Item {
-            id: groupToggleButton
+            id: groupIndicator
             z: 3
             anchors.right: closeNotificationButton.left
             anchors.rightMargin: 4
@@ -187,9 +218,6 @@ Rectangle {
             height: 22
             visible: root.grouped
 
-            // Pure nesting indicator. The whole notification card handles
-            // left-click expansion, so this item must not intercept pointer
-            // events or show a separate ×N control.
             SystemIcon {
                 anchors.centerIn: parent
                 width: 13
@@ -200,8 +228,8 @@ Rectangle {
 
                 Behavior on rotation {
                     NumberAnimation {
-                        duration: 240
-                        easing.type: Easing.InOutCubic
+                        duration: root.motionTokens.notificationMorphDuration
+                        easing.type: root.motionTokens.notificationMorphEasing
                     }
                 }
             }
@@ -239,9 +267,9 @@ Rectangle {
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 acceptedButtons: Qt.LeftButton
-                onClicked: function (mouse) {
+                onClicked: function(mouse) {
                     mouse.accepted = true;
-                    root.popupController.closeNotificationAnimated(root.currentNotification.id || root.rowKey);
+                    root.popupController.closeNotificationAnimated(root.closeKey);
                 }
             }
         }
@@ -261,25 +289,43 @@ Rectangle {
 
         Behavior on opacity {
             NumberAnimation {
-                duration: 180
-                easing.type: Easing.InOutCubic
+                duration: root.motionTokens.notificationMorphDuration
+                easing.type: root.motionTokens.notificationMorphEasing
             }
         }
 
         Repeater {
-            model: root.extraGroupItems
+            model: root.childItems
 
             delegate: Rectangle {
-                required property var modelData
-
-                readonly property var duplicateNotification: modelData || ({})
+                property var childNotification: modelData || ({})
+                property real itemProgress: 0.0
 
                 width: duplicateColumn.width
                 height: 30
+                x: (1.0 - itemProgress) * 10
+                opacity: itemProgress
+                scale: 0.985 + itemProgress * 0.015
                 radius: 10
                 color: duplicateMouse.pressed ? "#24000000" : (duplicateMouse.containsMouse ? "#1c000000" : "#10000000")
                 border.width: 0
                 antialiasing: true
+
+                Component.onCompleted: duplicateEnterKick.restart()
+
+                Timer {
+                    id: duplicateEnterKick
+                    interval: 1
+                    repeat: false
+                    onTriggered: itemProgress = 1.0
+                }
+
+                Behavior on itemProgress {
+                    NumberAnimation {
+                        duration: root.motionTokens.notificationMorphDuration
+                        easing.type: root.motionTokens.notificationMorphEasing
+                    }
+                }
 
                 Behavior on color {
                     ColorAnimation {
@@ -296,7 +342,7 @@ Rectangle {
 
                     Components.StyledText {
                         Layout.preferredWidth: 44
-                        text: duplicateNotification.time || ""
+                        text: childNotification.time || ""
                         color: "#8f9aa8"
                         font.pixelSize: 11
                         elide: Text.ElideRight
@@ -304,7 +350,7 @@ Rectangle {
 
                     Components.StyledText {
                         Layout.fillWidth: true
-                        text: duplicateNotification.body || duplicateNotification.title || "Notification"
+                        text: childNotification.body || childNotification.title || "Notification"
                         color: "#c7d0dc"
                         font.pixelSize: 11
                         elide: Text.ElideRight
@@ -319,7 +365,7 @@ Rectangle {
                     cursorShape: Qt.PointingHandCursor
 
                     onClicked: {
-                        Services.SystemStatus.openNotification(duplicateNotification);
+                        Services.SystemStatus.openNotification(childNotification);
                         if (root.popupRoot.controller)
                             root.popupRoot.controller.closePopup();
                     }
@@ -342,7 +388,7 @@ Rectangle {
                 return;
             }
 
-            Services.SystemStatus.openNotification(root.currentNotification);
+            Services.SystemStatus.openNotification(root.notification);
             if (root.popupRoot.controller)
                 root.popupRoot.controller.closePopup();
         }

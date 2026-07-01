@@ -28,10 +28,60 @@ Item {
     property var utils: null
     property var iconResolver: null
 
+    readonly property int maxVisibleGroups: 12
+    readonly property int maxLiveNotifications: 24
     readonly property var actionCommands: ["notifications-clear", "notifications-toggle-silent", "notification-close", "notification-open"]
 
+    readonly property var genericNotificationTitles: ({
+        "default": true,
+        "open": true,
+        "close": true,
+        "dismiss": true,
+        "mark as read": true,
+        "new message": true,
+        "new messages": true,
+        "message": true,
+        "messages": true,
+        "new notification": true,
+        "new notifications": true,
+        "unread message": true,
+        "unread messages": true,
+        "image-data": true,
+        "image data": true,
+        "desktop-entry": true,
+        "desktop entry": true
+    })
+
+    function cloneValue(value) {
+        if (value === null || value === undefined)
+            return value;
+
+        if (Array.isArray(value)) {
+            var arrayCopy = [];
+            for (var i = 0; i < value.length; i++)
+                arrayCopy.push(cloneValue(value[i]));
+            return arrayCopy;
+        }
+
+        if (typeof value === "object") {
+            var objectCopy = {};
+            for (var key in value)
+                objectCopy[key] = cloneValue(value[key]);
+            return objectCopy;
+        }
+
+        return value;
+    }
+
     function sameList(left, right) {
-        return utils ? utils.sameList(left, right) : JSON.stringify(left || []) === JSON.stringify(right || []);
+        if (utils)
+            return utils.sameList(left, right);
+
+        try {
+            return JSON.stringify(left || []) === JSON.stringify(right || []);
+        } catch (e) {
+            return false;
+        }
     }
 
     function decodeNotificationEntities(text) {
@@ -97,68 +147,56 @@ Item {
             return "";
 
         return [
-            normalizeNotificationKeyPart(notification.app || ""),
-            normalizeNotificationKeyPart(notification.title || ""),
-            normalizeNotificationKeyPart(notification.body || "")
+            normalizeNotificationKeyPart(notification.app),
+            normalizeNotificationKeyPart(notification.title),
+            normalizeNotificationKeyPart(notification.body)
         ].join("|");
     }
 
+    function notificationStableSourceId(notification) {
+        notification = notification || {};
+        var id = String(notification.id || "");
+        return id.length > 0 ? id : notificationKey(notification);
+    }
+
     function isGenericNotificationTitle(app, title) {
-        var normalizedTitle = normalizeNotificationKeyPart(title || "");
+        var normalizedTitle = normalizeNotificationKeyPart(title);
         if (normalizedTitle.length === 0)
             return true;
 
-        var normalizedApp = normalizeNotificationKeyPart(app || "");
+        var normalizedApp = normalizeNotificationKeyPart(app);
         if (normalizedTitle === "notification" || normalizedTitle === "notifications")
             return true;
 
         if (normalizedApp.length > 0 && normalizedTitle === normalizedApp)
             return true;
 
-        var serviceTitles = {
-            "default": true,
-            "open": true,
-            "close": true,
-            "dismiss": true,
-            "mark as read": true,
-            "new message": true,
-            "new messages": true,
-            "message": true,
-            "messages": true,
-            "new notification": true,
-            "new notifications": true,
-            "unread message": true,
-            "unread messages": true,
-            "image-data": true,
-            "image data": true,
-            "desktop-entry": true,
-            "desktop entry": true
-        };
-
-        return serviceTitles[normalizedTitle] === true;
+        return genericNotificationTitles[normalizedTitle] === true;
     }
 
     function notificationGroupKey(notification) {
         if (!notification)
             return "";
 
-        var app = normalizeNotificationKeyPart(notification.app || "");
-        var title = normalizeNotificationKeyPart(notification.title || "");
+        var app = normalizeNotificationKeyPart(notification.app);
+        var title = normalizeNotificationKeyPart(notification.title);
+        var exactKey = notificationKey(notification);
 
         if (app.length === 0)
             app = "notification";
 
-        // Conversation-level grouping: messages from the same app and the
-        // same notification title are one expandable group. This keeps
-        // different senders/chats in the same app on separate rows while
-        // allowing different message bodies from one sender/conversation to
-        // collapse together. Generic/service titles fall back to exact
-        // matching so unrelated app events are not merged.
         if (!isGenericNotificationTitle(app, title))
             return ["conversation", app, title].join("|");
 
-        var exactKey = notificationKey(notification);
         return exactKey.length > 0 ? ["exact", exactKey].join("|") : "";
+    }
+
+    function copyMap(map) {
+        var result = {};
+        var source = map || {};
+        for (var key in source)
+            result[key] = source[key];
+        return result;
     }
 
     function pruneDismissedNotifications() {
@@ -166,50 +204,49 @@ Item {
         var nextIds = {};
         var nextKeys = {};
 
-        for (var id in dismissedNotificationIds) {
-            if (Number(dismissedNotificationIds[id] || 0) > now)
-                nextIds[id] = dismissedNotificationIds[id];
+        var ids = dismissedNotificationIds || {};
+        for (var id in ids) {
+            if (Number(ids[id] || 0) > now)
+                nextIds[id] = ids[id];
         }
 
-        for (var key in dismissedNotificationKeys) {
-            if (Number(dismissedNotificationKeys[key] || 0) > now)
-                nextKeys[key] = dismissedNotificationKeys[key];
+        var keys = dismissedNotificationKeys || {};
+        for (var key in keys) {
+            if (Number(keys[key] || 0) > now)
+                nextKeys[key] = keys[key];
         }
 
         dismissedNotificationIds = nextIds;
         dismissedNotificationKeys = nextKeys;
     }
 
-    function rememberDismissedNotification(notification, fallbackId) {
-        var expiresAt = Date.now() + dismissedNotificationTtlMs;
-        var nextIds = {};
-        var nextKeys = {};
+    function markDismissed(notification, expiresAt, ids, keys) {
+        if (!notification)
+            return;
 
-        for (var oldId in (dismissedNotificationIds || {}))
-            nextIds[oldId] = dismissedNotificationIds[oldId];
-
-        for (var oldKey in (dismissedNotificationKeys || {}))
-            nextKeys[oldKey] = dismissedNotificationKeys[oldKey];
-
-        var id = String(fallbackId || (notification ? notification.id : "") || "");
+        var id = String(notification.id || "");
         var key = notificationKey(notification);
 
         if (id.length > 0)
-            nextIds[id] = expiresAt;
-
+            ids[id] = expiresAt;
         if (key.length > 0)
-            nextKeys[key] = expiresAt;
+            keys[key] = expiresAt;
+    }
 
-        var groupItems = notification ? (notification.groupItems || []) : [];
-        for (var i = 0; i < groupItems.length; i++) {
-            var item = groupItems[i] || {};
-            var itemId = String(item.id || "");
-            var itemKey = notificationKey(item);
-            if (itemId.length > 0)
-                nextIds[itemId] = expiresAt;
-            if (itemKey.length > 0)
-                nextKeys[itemKey] = expiresAt;
-        }
+    function rememberDismissedNotification(notification, fallbackId) {
+        var expiresAt = Date.now() + dismissedNotificationTtlMs;
+        var nextIds = copyMap(dismissedNotificationIds);
+        var nextKeys = copyMap(dismissedNotificationKeys);
+        var fallbackNotification = notification || {};
+        var fallbackIdText = String(fallbackId || "");
+
+        markDismissed(fallbackNotification, expiresAt, nextIds, nextKeys);
+        if (fallbackIdText.length > 0)
+            nextIds[fallbackIdText] = expiresAt;
+
+        var groupItems = fallbackNotification.groupItems || [];
+        for (var i = 0; i < groupItems.length; i++)
+            markDismissed(groupItems[i], expiresAt, nextIds, nextKeys);
 
         dismissedNotificationIds = nextIds;
         dismissedNotificationKeys = nextKeys;
@@ -222,11 +259,13 @@ Item {
         var now = Date.now();
         var id = String(notification.id || "");
         var key = notificationKey(notification);
+        var ids = dismissedNotificationIds || {};
+        var keys = dismissedNotificationKeys || {};
 
-        if (id.length > 0 && Number((dismissedNotificationIds || {})[id] || 0) > now)
+        if (id.length > 0 && Number(ids[id] || 0) > now)
             return true;
 
-        return key.length > 0 && Number((dismissedNotificationKeys || {})[key] || 0) > now;
+        return key.length > 0 && Number(keys[key] || 0) > now;
     }
 
     function filterDismissedNotifications(list) {
@@ -238,58 +277,59 @@ Item {
             if (!isNotificationDismissed(source[i]))
                 result.push(source[i]);
         }
-
         return result;
     }
 
     function findNotificationById(notificationId) {
         var id = String(notificationId || "");
-        var lists = [notifications || [], liveNotifications || [], historyNotifications || []];
+        if (id.length === 0)
+            return null;
 
+        var lists = [notifications || [], liveNotifications || [], historyNotifications || []];
         for (var l = 0; l < lists.length; l++) {
-            var list = lists[l];
+            var list = lists[l] || [];
             for (var i = 0; i < list.length; i++) {
                 var item = list[i] || {};
-                if (String(item.id || "") === id)
+                if (String(item.id || "") === id || String(item.groupKey || "") === id)
                     return item;
 
                 var groupItems = item.groupItems || [];
                 for (var g = 0; g < groupItems.length; g++) {
-                    if (String((groupItems[g] || {}).id || "") === id)
-                        return groupItems[g];
+                    var groupItem = groupItems[g] || {};
+                    if (String(groupItem.id || "") === id)
+                        return groupItem;
                 }
             }
         }
-
         return null;
     }
 
     function groupedNotificationsFromList(list) {
-        var source = list || [];
         var order = [];
         var groups = {};
-        var seenIds = {};
+        var seenSources = {};
+        var source = list || [];
 
         for (var i = 0; i < source.length; i++) {
             var item = source[i];
             if (!item || isNotificationDismissed(item))
                 continue;
 
-            var itemId = String(item.id || "");
-            if (itemId.length > 0 && seenIds[itemId])
+            var sourceId = notificationStableSourceId(item);
+            if (sourceId.length > 0 && seenSources[sourceId])
                 continue;
-            if (itemId.length > 0)
-                seenIds[itemId] = true;
+            if (sourceId.length > 0)
+                seenSources[sourceId] = true;
 
-            var key = notificationGroupKey(item);
-            if (key.length === 0)
+            var groupKey = notificationGroupKey(item);
+            if (groupKey.length === 0)
                 continue;
 
-            if (!groups[key]) {
-                groups[key] = [];
-                order.push(key);
+            if (!groups[groupKey]) {
+                groups[groupKey] = [];
+                order.push(groupKey);
             }
-            groups[key].push(item);
+            groups[groupKey].push(item);
         }
 
         return {
@@ -298,38 +338,85 @@ Item {
         };
     }
 
-    function primaryNotificationTime(items, fallbackItem) {
+    function firstNonEmptyTime(items, fallbackItem) {
         var source = items || [];
         for (var i = 0; i < source.length; i++) {
-            var itemTime = String((source[i] || {}).time || "").trim();
-            if (itemTime.length > 0)
-                return itemTime;
+            var time = String((source[i] || {}).time || "").trim();
+            if (time.length > 0)
+                return time;
+        }
+        return String((fallbackItem || {}).time || "").trim();
+    }
+
+    function cloneNotification(notification) {
+        var copy = cloneValue(notification || {}) || {};
+        copy.time = String(copy.time || "");
+        return copy;
+    }
+
+    function materializeNotificationGroup(groupKey, items) {
+        items = items || [];
+        if (items.length <= 0)
+            return null;
+
+        var first = items[0] || {};
+        var result = cloneNotification(first);
+        var groupItems = [];
+
+        for (var i = 0; i < items.length; i++)
+            groupItems.push(cloneNotification(items[i]));
+
+        result.id = items.length > 1 ? groupedNotificationId(groupKey) : String(first.id || groupedNotificationId(groupKey));
+        result.groupKey = groupKey;
+        result.groupCount = groupItems.length;
+        result.groupItems = groupItems;
+        result.isGroup = groupItems.length > 1;
+        result.time = firstNonEmptyTime(groupItems, first);
+        return result;
+    }
+
+    function mergedGroupItems(liveItems, historyItems) {
+        var result = [];
+        var seenContent = {};
+
+        function appendItems(items) {
+            items = items || [];
+            for (var i = 0; i < items.length; i++) {
+                var item = items[i] || {};
+                var contentKey = notificationKey(item);
+                if (contentKey.length === 0 || seenContent[contentKey])
+                    continue;
+                seenContent[contentKey] = true;
+                result.push(item);
+            }
         }
 
-        return String((fallbackItem || {}).time || "").trim();
+        appendItems(liveItems);
+        appendItems(historyItems);
+        return result;
     }
 
     function notificationModelSignature(list) {
         var source = list || [];
-        var result = [];
+        var signatures = [];
         for (var i = 0; i < source.length; i++) {
             var item = source[i] || {};
             var groupItems = item.groupItems || [];
-            var groupSignature = [];
+            var childSignatures = [];
             for (var g = 0; g < groupItems.length; g++) {
-                var groupItem = groupItems[g] || {};
-                groupSignature.push([
-                    String(groupItem.id || ""),
-                    notificationKey(groupItem),
-                    String(groupItem.time || ""),
-                    String(groupItem.icon || ""),
-                    String(groupItem.action || ""),
-                    String(groupItem.url || ""),
-                    String(groupItem.desktopEntry || "")
+                var child = groupItems[g] || {};
+                childSignatures.push([
+                    String(child.id || ""),
+                    notificationKey(child),
+                    String(child.time || ""),
+                    String(child.icon || ""),
+                    String(child.action || ""),
+                    String(child.url || ""),
+                    String(child.desktopEntry || "")
                 ].join("^"));
             }
 
-            result.push([
+            signatures.push([
                 String(item.id || ""),
                 String(item.groupKey || ""),
                 notificationKey(item),
@@ -339,57 +426,28 @@ Item {
                 String(item.url || ""),
                 String(item.desktopEntry || ""),
                 String(item.groupCount || 1),
-                groupSignature.join("~")
+                childSignatures.join("~")
             ].join("|"));
         }
-
-        return result.join("\n");
+        return signatures.join("\n");
     }
 
     function sameNotificationsModel(left, right) {
         return notificationModelSignature(left) === notificationModelSignature(right);
     }
 
-    function materializeNotificationGroup(groupKey, items) {
-        items = items || [];
-        if (items.length <= 0)
-            return null;
-
-        var first = items[0] || {};
-        var result = {};
-        for (var prop in first)
-            result[prop] = first[prop];
-
-        var groupItems = [];
-        for (var i = 0; i < items.length; i++) {
-            var copy = {};
-            var item = items[i] || {};
-            for (var key in item)
-                copy[key] = item[key];
-            copy.time = String(copy.time || "");
-            groupItems.push(copy);
-        }
-
-        result.id = items.length > 1 ? groupedNotificationId(groupKey) : String(first.id || groupedNotificationId(groupKey));
-        result.groupKey = groupKey;
-        result.groupCount = groupItems.length;
-        result.groupItems = groupItems;
-        result.isGroup = groupItems.length > 1;
-        result.time = primaryNotificationTime(groupItems, first);
-        return result;
-    }
-
     function mergeNotifications(preferredCount) {
         var live = groupedNotificationsFromList(liveNotifications || []);
         var history = groupedNotificationsFromList(historyNotifications || []);
         var orderedKeys = [];
-        var keySeen = {};
+        var seenKeys = {};
 
         function appendKeys(keys) {
+            keys = keys || [];
             for (var i = 0; i < keys.length; i++) {
-                var key = keys[i];
-                if (!keySeen[key]) {
-                    keySeen[key] = true;
+                var key = String(keys[i] || "");
+                if (key.length > 0 && !seenKeys[key]) {
+                    seenKeys[key] = true;
                     orderedKeys.push(key);
                 }
             }
@@ -400,62 +458,10 @@ Item {
 
         var merged = [];
         var totalItems = 0;
-
-        function mergedGroupItems(liveItems, historyItems) {
-            var result = [];
-            var seenHistoryIds = {};
-            var liveExactKeys = {};
-
-            function exactEventKey(item) {
-                // Content identity, not clock identity. The same notification can
-                // arrive first through dbus-monitor and then through dunstctl
-                // history with a slightly different timestamp. Treat it as the
-                // same event so the card does not become an artificial group or
-                // reappear during refresh.
-                return notificationKey(item);
-            }
-
-            function appendLive(items) {
-                items = items || [];
-                for (var i = 0; i < items.length; i++) {
-                    var item = items[i] || {};
-                    liveExactKeys[exactEventKey(item)] = true;
-                    result.push(item);
-                }
-            }
-
-            function appendHistory(items) {
-                items = items || [];
-                for (var i = 0; i < items.length; i++) {
-                    var item = items[i] || {};
-                    var id = String(item.id || "");
-                    if (id.length > 0 && seenHistoryIds[id])
-                        continue;
-                    if (liveExactKeys[exactEventKey(item)])
-                        continue;
-
-                    if (id.length > 0)
-                        seenHistoryIds[id] = true;
-                    result.push(item);
-                }
-            }
-
-            // Live notifications are prepended so the just-arrived message stays
-            // visible immediately, then persisted notification history fills in
-            // older messages from the same conversation group. History entries
-            // that duplicate the same live event are skipped, while separate
-            // identical notifications from history keep their own rows/count.
-            appendLive(liveItems);
-            appendHistory(historyItems);
-            return result;
-        }
-
-        for (var k = 0; k < orderedKeys.length && merged.length < 12; k++) {
+        for (var k = 0; k < orderedKeys.length && merged.length < maxVisibleGroups; k++) {
             var groupKey = orderedKeys[k];
-            var liveItems = live.groups[groupKey] || [];
-            var historyItems = history.groups[groupKey] || [];
-            var selectedItems = mergedGroupItems(liveItems, historyItems);
-            var group = materializeNotificationGroup(groupKey, selectedItems);
+            var items = mergedGroupItems(live.groups[groupKey], history.groups[groupKey]);
+            var group = materializeNotificationGroup(groupKey, items);
             if (!group)
                 continue;
 
@@ -465,17 +471,14 @@ Item {
 
         if (!sameNotificationsModel(notifications, merged))
             notifications = merged;
+
         notificationsCount = Math.max(Number(preferredCount || 0), totalItems);
     }
 
     function iconResolveCacheKey(item) {
         if (!item)
             return "";
-
-        return [
-            String(item.icon || ""),
-            String(item.app || "")
-        ].join("|").toLowerCase();
+        return [String(item.icon || ""), String(item.app || "")].join("|").toLowerCase();
     }
 
     function directIconPath(icon) {
@@ -488,30 +491,24 @@ Item {
     }
 
     function rememberResolvedIcon(key, value) {
-        if (!key)
+        key = String(key || "");
+        if (key.length === 0)
             return;
 
-        var next = {};
-        var current = resolvedIconCache || {};
-        for (var oldKey in current)
-            next[oldKey] = current[oldKey];
-
+        var next = copyMap(resolvedIconCache);
         next[key] = String(value || "");
         resolvedIconCache = next;
     }
 
     function enqueueLiveNotification(app, title, body, icon) {
-        var item = {
+        var queue = pendingLiveNotifications.slice();
+        queue.push({
             app: String(app || "Notification"),
             title: String(title || "Notification"),
             body: String(body || ""),
             icon: String(icon || "")
-        };
-
-        var queue = pendingLiveNotifications.slice();
-        queue.push(item);
+        });
         pendingLiveNotifications = queue;
-
         processNextLiveNotification();
     }
 
@@ -524,15 +521,15 @@ Item {
             var item = queue.shift();
             pendingLiveNotifications = queue;
 
-            var key = iconResolveCacheKey(item);
+            var cacheKey = iconResolveCacheKey(item);
             var directPath = directIconPath(item.icon);
             if (directPath !== null) {
                 addLiveNotification(item.app, item.title, item.body, directPath);
                 continue;
             }
 
-            if ((resolvedIconCache || {}).hasOwnProperty(key)) {
-                addLiveNotification(item.app, item.title, item.body, resolvedIconCache[key]);
+            if ((resolvedIconCache || {}).hasOwnProperty(cacheKey)) {
+                addLiveNotification(item.app, item.title, item.body, resolvedIconCache[cacheKey]);
                 continue;
             }
 
@@ -544,7 +541,7 @@ Item {
                 title: item.title,
                 body: item.body,
                 icon: item.icon,
-                cacheKey: key
+                cacheKey: cacheKey
             };
             iconResolveReceived = false;
             iconResolveResult = "";
@@ -572,8 +569,8 @@ Item {
 
         var next = [notification];
         var existing = liveNotifications || [];
-        for (var i = 0; i < existing.length && next.length < 24; i++) {
-            if (!isNotificationDismissed(existing[i]))
+        for (var i = 0; i < existing.length && next.length < maxLiveNotifications; i++) {
+            if (!isNotificationDismissed(existing[i]) && notificationKey(existing[i]) !== notificationKey(notification))
                 next.push(existing[i]);
         }
 
@@ -615,19 +612,12 @@ Item {
         values.push(parsed);
         notificationStringValues = values;
 
-        // org.freedesktop.Notifications.Notify has only four top-level string
-        // arguments before the actions/hints arrays: app_name, app_icon,
-        // summary, body. Do not keep reading string values after body, because
-        // action labels and hint keys such as "default", "Mark as read",
-        // "image-data" and "desktop-entry" are also printed as strings by
-        // dbus-monitor and must not become fake notifications.
+        // org.freedesktop.Notifications.Notify has four top-level string
+        // arguments before actions/hints: app_name, app_icon, summary, body.
+        // Stop after body so action labels and hint keys do not become fake
+        // notifications.
         if (values.length >= 4) {
-            enqueueLiveNotification(
-                values[0] || "Notification",
-                values[2] || "Notification",
-                values[3] || "",
-                values[1] || ""
-            );
+            enqueueLiveNotification(values[0] || "Notification", values[2] || "Notification", values[3] || "", values[1] || "");
             notificationStringValues = [];
             notificationCaptureDone = true;
             notificationCaptureActive = false;
@@ -638,19 +628,21 @@ Item {
         notificationsData = notificationsData || {};
         notificationsAvailable = !!notificationsData.available;
         notificationsSilent = !!notificationsData.silent;
+
         var nextHistoryNotifications = filterDismissedNotifications(notificationsData.items || []);
         if (!sameList(historyNotifications, nextHistoryNotifications))
             historyNotifications = nextHistoryNotifications;
+
         mergeNotifications(historyNotifications.length);
     }
-
 
     function applyPayload(payload) {
         applyStatus(payload);
     }
 
     function isAction(args) {
-        return utils ? utils.commandIn(args, actionCommands) : actionCommands.indexOf(args && args.length > 0 ? String(args[0] || "") : "") !== -1;
+        var command = args && args.length > 0 ? String(args[0] || "") : "";
+        return utils ? utils.commandIn(args, actionCommands) : actionCommands.indexOf(command) !== -1;
     }
 
     function clearNotifications() {
@@ -660,6 +652,7 @@ Item {
         notificationsCount = 0;
         dismissedNotificationIds = {};
         dismissedNotificationKeys = {};
+
         if (utils)
             utils.runAction(actionRunner, ["notifications-clear"]);
         else if (actionRunner)
@@ -677,7 +670,6 @@ Item {
     function closeNotification(notificationId) {
         var id = String(notificationId || "");
         var target = findNotificationById(id);
-
         rememberDismissedNotification(target, id);
 
         liveNotifications = filterDismissedNotifications(liveNotifications);
@@ -686,9 +678,13 @@ Item {
         notificationsCount = Math.max(0, notificationsCount - Math.max(1, Number(target ? target.groupCount || 1 : 1)));
         mergeNotifications(notificationsCount);
 
-        var closeId = String((target && target.groupItems && target.groupItems.length > 0 ? target.groupItems[0].id : id) || "");
-        if (closeId.indexOf("group-") === 0)
-            closeId = id.indexOf("group-") === 0 ? "" : id;
+        var closeId = "";
+        if (target && target.groupItems && target.groupItems.length > 0)
+            closeId = String(target.groupItems[0].id || "");
+        else if (target)
+            closeId = String(target.id || "");
+        else if (id.indexOf("group-") !== 0)
+            closeId = id;
 
         if (closeId.length > 0) {
             if (utils)
@@ -710,6 +706,7 @@ Item {
             String(notification.desktopEntry || ""),
             String(notification.app || "")
         ];
+
         if (utils)
             utils.runAction(actionRunner, args);
         else

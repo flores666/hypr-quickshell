@@ -780,41 +780,83 @@ def clean_notification_text(value):
     return re.sub(r"\s+", " ", text).strip()
 
 
+UNIX_TIMESTAMP_MIN = 946684800      # 2000-01-01
+UNIX_TIMESTAMP_MAX = 4102444800     # 2100-01-01
+
+
+def timestamp_in_supported_range(value):
+    return UNIX_TIMESTAMP_MIN <= value <= UNIX_TIMESTAMP_MAX
+
+
+def format_epoch_time(timestamp):
+    if not timestamp_in_supported_range(timestamp):
+        return ""
+    return datetime.fromtimestamp(timestamp).strftime("%H:%M")
+
+
+def first_present(mapping, *keys):
+    if not isinstance(mapping, dict):
+        return None
+    for key in keys:
+        value = mapping.get(key)
+        if value is not None and value != "":
+            return value
+    return None
+
+
+def notification_timestamp_from_mapping(value):
+    seconds = first_present(value, "sec", "secs", "seconds", "tv_sec", "s")
+    if seconds is None:
+        return None
+
+    try:
+        timestamp = float(seconds)
+    except Exception:
+        return None
+
+    milliseconds = first_present(value, "msec", "msecs", "millisecond", "milliseconds", "ms")
+    microseconds = first_present(value, "usec", "usecs", "microsecond", "microseconds", "tv_usec", "us")
+    nanoseconds = first_present(value, "nsec", "nsecs", "nanosecond", "nanoseconds", "tv_nsec", "ns")
+
+    try:
+        if milliseconds is not None:
+            timestamp += float(milliseconds) / 1_000
+        if microseconds is not None:
+            timestamp += float(microseconds) / 1_000_000
+        if nanoseconds is not None:
+            timestamp += float(nanoseconds) / 1_000_000_000
+    except Exception:
+        return None
+
+    return timestamp
+
+
+def notification_timestamp_from_number(value):
+    try:
+        numeric = float(value)
+    except Exception:
+        return None
+
+    if numeric <= 0:
+        return None
+
+    # Dunst versions and wrappers may serialize timestamps as seconds,
+    # milliseconds, microseconds, or nanoseconds. Normalize by magnitude.
+    if numeric >= 1_000_000_000_000_000_000:
+        numeric /= 1_000_000_000
+    elif numeric >= 1_000_000_000_000_000:
+        numeric /= 1_000_000
+    elif numeric >= 1_000_000_000_000:
+        numeric /= 1_000
+
+    return numeric
+
+
 def notification_time_text(value):
     if isinstance(value, dict):
-        seconds = (
-            value.get("sec")
-            or value.get("secs")
-            or value.get("seconds")
-            or value.get("tv_sec")
-            or value.get("s")
-        )
-        fractions = (
-            value.get("nsec")
-            or value.get("nsecs")
-            or value.get("nanoseconds")
-            or value.get("tv_nsec")
-            or value.get("usec")
-            or value.get("usecs")
-            or value.get("microseconds")
-            or value.get("tv_usec")
-            or 0
-        )
-        if seconds is not None:
-            try:
-                sec_value = float(seconds)
-                frac_value = float(fractions or 0)
-                if frac_value >= 1_000_000_000:
-                    frac_value /= 1_000_000_000
-                elif frac_value >= 1_000_000:
-                    frac_value /= 1_000_000
-                elif frac_value >= 1000:
-                    frac_value /= 1000
-                timestamp = sec_value + frac_value
-                if 946684800 <= timestamp <= 4102444800:
-                    return datetime.fromtimestamp(timestamp).strftime("%H:%M")
-            except Exception:
-                pass
+        timestamp = notification_timestamp_from_mapping(value)
+        if timestamp is not None:
+            return format_epoch_time(timestamp)
 
     raw = extract_dunst_value(value)
     if raw is None:
@@ -827,26 +869,11 @@ def notification_time_text(value):
     if re.match(r"^\d{1,2}:\d{2}$", text):
         return text
 
-    try:
-        numeric = float(text)
-        if numeric <= 0:
-            return ""
-
-        # dunst may return seconds, milliseconds, microseconds or nanoseconds.
-        if numeric >= 1_000_000_000_000_000_000:
-            numeric /= 1_000_000_000
-        elif numeric >= 1_000_000_000_000_000:
-            numeric /= 1_000_000
-        elif numeric >= 1_000_000_000_000:
-            numeric /= 1_000
-
-        # Ignore values that cannot be a Unix timestamp.
-        if numeric < 946684800 or numeric > 4102444800:
-            return ""
-
-        return datetime.fromtimestamp(numeric).strftime("%H:%M")
-    except Exception:
-        pass
+    timestamp = notification_timestamp_from_number(text)
+    if timestamp is not None:
+        formatted = format_epoch_time(timestamp)
+        if formatted:
+            return formatted
 
     try:
         normalized = text.replace("Z", "+00:00")
@@ -861,7 +888,6 @@ def notification_display_time(*values, fallback_now=True):
         if text:
             return text
     return datetime.now().strftime("%H:%M") if fallback_now else ""
-
 
 def extract_first_url(*values):
     for value in values:
