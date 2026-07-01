@@ -15,6 +15,7 @@ Rectangle {
 
     property bool expanded: false
     property real enterProgress: 0.0
+    property real groupRevealProgress: 0.0
 
     readonly property var notification: notificationData || ({})
     readonly property string rowKey: String(notificationKey || "")
@@ -26,16 +27,18 @@ Rectangle {
     readonly property var childItems: grouped ? groupItems.slice(1) : []
     readonly property string displayTime: String(notification.time || (groupItems.length > 0 ? (groupItems[0].time || "") : ""))
     readonly property real headerHeight: Math.max(58, notificationTextColumn.implicitHeight + 18)
-    readonly property real expandedContentHeight: grouped && expanded ? duplicateColumn.implicitHeight + 8 : 0
+    readonly property real groupContentTargetHeight: grouped ? duplicateContent.implicitHeight + 8 : 0
+    readonly property real groupRevealHeight: grouped ? groupRevealProgress * groupContentTargetHeight : 0
     readonly property real visibleProgress: closing ? 0.0 : enterProgress
     readonly property real enterOffsetX: Number(motionTokens.notificationEnterOffsetX || 0)
-    readonly property real enterScale: Number(motionTokens.notificationEnterScale || 1.0)
+    readonly property real exitOffsetX: Number(motionTokens.notificationExitOffsetX || 32)
+    readonly property real groupFadeStart: Number(motionTokens.notificationGroupRevealFadeStart || 0.18)
+    readonly property real groupContentOpacity: grouped ? Math.max(0.0, Math.min(1.0, (groupRevealProgress - groupFadeStart) / Math.max(0.001, 1.0 - groupFadeStart))) : 0.0
 
     width: ListView.view ? ListView.view.width : (parent ? parent.width : 1)
-    height: headerHeight + expandedContentHeight
-    x: closing ? width + 32 : (1.0 - enterProgress) * enterOffsetX
+    height: headerHeight + groupRevealHeight
+    x: closing ? width + exitOffsetX : (1.0 - enterProgress) * enterOffsetX
     opacity: visibleProgress
-    scale: enterScale + (1.0 - enterScale) * visibleProgress
     transformOrigin: Item.Center
     visible: true
     enabled: !closing && enterProgress > 0.72
@@ -45,7 +48,15 @@ Rectangle {
     antialiasing: true
     clip: true
 
-    onGroupedChanged: if (!grouped) expanded = false
+    onGroupedChanged: {
+        if (!grouped)
+            expanded = false;
+    }
+
+    onExpandedChanged: {
+        groupRevealAnimation.to = expanded && grouped ? 1.0 : 0.0;
+        groupRevealAnimation.restart();
+    }
 
     Component.onCompleted: enterAnimationKick.restart()
 
@@ -63,10 +74,19 @@ Rectangle {
         }
     }
 
-    Behavior on height {
-        NumberAnimation {
-            duration: root.motionTokens.notificationMorphDuration
-            easing.type: root.motionTokens.notificationMorphEasing
+    NumberAnimation {
+        id: groupRevealAnimation
+        target: root
+        property: "groupRevealProgress"
+        duration: root.motionTokens.notificationMorphDuration
+        easing.type: root.motionTokens.notificationMorphEasing
+    }
+
+    Connections {
+        target: root.popupController
+        function onNotificationGroupsCollapseRevisionChanged() {
+            if (root.expanded)
+                root.expanded = false;
         }
     }
 
@@ -84,13 +104,6 @@ Rectangle {
         }
     }
 
-    Behavior on scale {
-        NumberAnimation {
-            duration: root.motionTokens.notificationMorphDuration
-            easing.type: root.motionTokens.notificationMorphEasing
-        }
-    }
-
     Behavior on color {
         ColorAnimation {
             duration: root.motionTokens.hoverDuration
@@ -100,7 +113,7 @@ Rectangle {
 
     Item {
         id: headerItem
-        z: 1
+        z: 2
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
@@ -275,99 +288,82 @@ Rectangle {
         }
     }
 
-    Column {
-        id: duplicateColumn
+    Item {
+        id: duplicateViewport
         z: 1
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: headerItem.bottom
         anchors.leftMargin: 54
         anchors.rightMargin: 12
-        spacing: 4
-        opacity: root.grouped && root.expanded ? 1.0 : 0.0
-        visible: root.grouped && (root.expanded || opacity > 0.001)
+        height: root.groupRevealHeight
+        visible: root.grouped && root.groupRevealProgress > 0.001
+        clip: true
+        opacity: root.groupContentOpacity
 
-        Behavior on opacity {
-            NumberAnimation {
-                duration: root.motionTokens.notificationMorphDuration
-                easing.type: root.motionTokens.notificationMorphEasing
-            }
-        }
+        Column {
+            id: duplicateContent
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.topMargin: 4
+            spacing: 4
 
-        Repeater {
-            model: root.childItems
+            Repeater {
+                model: root.childItems
 
-            delegate: Rectangle {
-                property var childNotification: modelData || ({})
-                property real itemProgress: 0.0
+                delegate: Rectangle {
+                    property var childNotification: modelData || ({})
 
-                width: duplicateColumn.width
-                height: 30
-                x: (1.0 - itemProgress) * 10
-                opacity: itemProgress
-                scale: 0.985 + itemProgress * 0.015
-                radius: 10
-                color: duplicateMouse.pressed ? "#24000000" : (duplicateMouse.containsMouse ? "#1c000000" : "#10000000")
-                border.width: 0
-                antialiasing: true
+                    width: duplicateContent.width
+                    height: 30
+                    radius: 10
+                    color: duplicateMouse.pressed ? "#24000000" : (duplicateMouse.containsMouse ? "#1c000000" : "#10000000")
+                    border.width: 0
+                    antialiasing: true
 
-                Component.onCompleted: duplicateEnterKick.restart()
-
-                Timer {
-                    id: duplicateEnterKick
-                    interval: 1
-                    repeat: false
-                    onTriggered: itemProgress = 1.0
-                }
-
-                Behavior on itemProgress {
-                    NumberAnimation {
-                        duration: root.motionTokens.notificationMorphDuration
-                        easing.type: root.motionTokens.notificationMorphEasing
-                    }
-                }
-
-                Behavior on color {
-                    ColorAnimation {
-                        duration: root.motionTokens.hoverDuration
-                        easing.type: Easing.OutCubic
-                    }
-                }
-
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: 8
-                    anchors.rightMargin: 8
-                    spacing: 6
-
-                    Components.StyledText {
-                        Layout.preferredWidth: 44
-                        text: childNotification.time || ""
-                        color: "#8f9aa8"
-                        font.pixelSize: 11
-                        elide: Text.ElideRight
+                    Behavior on color {
+                        ColorAnimation {
+                            duration: root.motionTokens.hoverDuration
+                            easing.type: Easing.OutCubic
+                        }
                     }
 
-                    Components.StyledText {
-                        Layout.fillWidth: true
-                        text: childNotification.body || childNotification.title || "Notification"
-                        color: "#c7d0dc"
-                        font.pixelSize: 11
-                        elide: Text.ElideRight
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 8
+                        anchors.rightMargin: 8
+                        spacing: 6
+
+                        Components.StyledText {
+                            Layout.preferredWidth: 44
+                            text: childNotification.time || ""
+                            color: "#8f9aa8"
+                            font.pixelSize: 11
+                            elide: Text.ElideRight
+                        }
+
+                        Components.StyledText {
+                            Layout.fillWidth: true
+                            text: childNotification.body || childNotification.title || "Notification"
+                            color: "#c7d0dc"
+                            font.pixelSize: 11
+                            elide: Text.ElideRight
+                        }
                     }
-                }
 
-                MouseArea {
-                    id: duplicateMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    acceptedButtons: Qt.LeftButton
-                    cursorShape: Qt.PointingHandCursor
+                    MouseArea {
+                        id: duplicateMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        acceptedButtons: Qt.LeftButton
+                        cursorShape: Qt.PointingHandCursor
 
-                    onClicked: {
-                        Services.SystemStatus.openNotification(childNotification);
-                        if (root.popupRoot.controller)
-                            root.popupRoot.controller.closePopup();
+                        onClicked: {
+                            Services.SystemStatus.openNotification(childNotification);
+                            if (root.popupRoot.controller)
+                                root.popupRoot.controller.closePopup();
+                        }
                     }
                 }
             }

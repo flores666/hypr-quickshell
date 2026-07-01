@@ -8,14 +8,17 @@ QtObject {
     readonly property int popupCloseDuration: 95
     readonly property int cursorDelay: 35
 
-    // Same motion language as the native live-overview workspace morph:
-    // cubic ease-in-out, ~240ms, no bounce/overshoot. Keep these values
-    // centralized so popup sections do not drift into different animation curves.
+    // Shared motion language. The workspace/live-overview morph uses a cubic
+    // ease-in-out curve and a short 240ms travel time; notification motion reuses
+    // that same timing so UI sections feel like one system instead of separate
+    // ad-hoc animations.
     readonly property int workspaceMorphDuration: 240
     readonly property int workspaceMorphEasing: Easing.InOutCubic
 
     readonly property int notificationMorphDuration: workspaceMorphDuration
     readonly property int notificationMorphEasing: workspaceMorphEasing
-    readonly property int notificationEnterOffsetX: 22
-    readonly property real notificationEnterScale: 0.985
+    readonly property int notificationEnterOffsetX: 24
+    readonly property int notificationExitOffsetX: 32
+    readonly property real notificationEnterScale: 1.0
+    readonly property real notificationGroupRevealFadeStart: 0.18
 }

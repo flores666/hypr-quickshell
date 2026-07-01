@@ -270,19 +270,11 @@ Rectangle {
                 }
 
                 remove: Transition {
-                    ParallelAnimation {
-                        NumberAnimation {
-                            properties: "opacity"
-                            to: 0.0
-                            duration: root.motionTokens.notificationMorphDuration
-                            easing.type: root.motionTokens.notificationMorphEasing
-                        }
-                        NumberAnimation {
-                            properties: "scale"
-                            to: root.motionTokens.notificationEnterScale
-                            duration: root.motionTokens.notificationMorphDuration
-                            easing.type: root.motionTokens.notificationMorphEasing
-                        }
+                    NumberAnimation {
+                        properties: "opacity"
+                        to: 0.0
+                        duration: root.motionTokens.notificationMorphDuration
+                        easing.type: root.motionTokens.notificationMorphEasing
                     }
                 }
 

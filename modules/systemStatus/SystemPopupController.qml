@@ -17,12 +17,16 @@ Item {
     property var closingNotificationEntries: []
     property var clearNotificationQueue: []
     property bool clearNotificationsInProgress: false
+    property int notificationGroupsCollapseRevision: 0
 
     onTargetVisibleChanged: {
-        if (targetVisible)
+        if (targetVisible) {
             nestedPopupCleanupTimer.stop();
-        else
-            nestedPopupCleanupTimer.restart();
+            return;
+        }
+
+        collapseNotificationGroups();
+        nestedPopupCleanupTimer.restart();
     }
 
     function openDetailPopup(mode) {
@@ -53,6 +57,10 @@ Item {
     function clearNestedPopups() {
         closeDetailPopup();
         cancelSystemActionConfirm();
+    }
+
+    function collapseNotificationGroups() {
+        notificationGroupsCollapseRevision += 1;
     }
 
     function confirmSystemAction(actionName, label) {
