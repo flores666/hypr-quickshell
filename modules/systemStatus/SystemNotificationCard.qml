@@ -11,8 +11,17 @@ Rectangle {
     required property var popupController
     required property var motionTokens
 
+    property bool expanded: false
+
     readonly property bool closing: popupController.isNotificationClosing(modelData.id)
-    readonly property real normalHeight: Math.max(58, notificationTextColumn.implicitHeight + 18)
+    readonly property int groupCount: Math.max(1, Number(modelData.groupCount || 1))
+    readonly property bool grouped: groupCount > 1
+    readonly property var groupItems: modelData.groupItems || []
+    readonly property var extraGroupItems: groupItems.slice(1)
+    readonly property real headerHeight: Math.max(58, notificationTextColumn.implicitHeight + 18)
+    readonly property real expandedContentHeight: grouped && expanded ? duplicateColumn.implicitHeight + 8 : 0
+    readonly property real normalHeight: headerHeight + expandedContentHeight
+    readonly property string displayTime: modelData.time || (groupItems.length > 0 ? (groupItems[0].time || "") : "")
 
     width: parent ? parent.width : 1
     height: normalHeight
@@ -25,6 +34,15 @@ Rectangle {
     border.width: 0
     antialiasing: true
     clip: true
+
+    onGroupedChanged: if (!grouped) expanded = false
+
+    Behavior on height {
+        NumberAnimation {
+            duration: 240
+            easing.type: Easing.InOutCubic
+        }
+    }
 
     Behavior on x {
         NumberAnimation {
@@ -48,12 +66,14 @@ Rectangle {
     }
 
     Item {
+        id: headerItem
         z: 1
-        anchors.fill: parent
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        height: root.headerHeight
         anchors.leftMargin: 10
         anchors.rightMargin: 8
-        anchors.topMargin: 9
-        anchors.bottomMargin: 9
 
         Rectangle {
             id: notificationIconBox
@@ -108,7 +128,7 @@ Rectangle {
             id: notificationTextColumn
             anchors.left: notificationIconBox.right
             anchors.leftMargin: 10
-            anchors.right: closeNotificationButton.left
+            anchors.right: root.grouped ? groupToggleButton.left : closeNotificationButton.left
             anchors.rightMargin: 8
             anchors.verticalCenter: parent.verticalCenter
             spacing: 1
@@ -127,7 +147,7 @@ Rectangle {
                 }
 
                 Components.StyledText {
-                    text: root.modelData.time || ""
+                    text: root.displayTime
                     color: "#8f9aa8"
                     font.pixelSize: 12
                 }
@@ -153,11 +173,43 @@ Rectangle {
             }
         }
 
+        Item {
+            id: groupToggleButton
+            z: 3
+            anchors.right: closeNotificationButton.left
+            anchors.rightMargin: 4
+            anchors.top: parent.top
+            anchors.topMargin: 9
+            width: 22
+            height: 22
+            visible: root.grouped
+
+            // Pure nesting indicator. The whole notification card handles
+            // left-click expansion, so this item must not intercept pointer
+            // events or show a separate ×N control.
+            SystemIcon {
+                anchors.centerIn: parent
+                width: 13
+                height: 13
+                source: root.popupRoot.rowIcon("chevron")
+                iconOpacity: 0.72
+                rotation: root.expanded ? 90 : 0
+
+                Behavior on rotation {
+                    NumberAnimation {
+                        duration: 240
+                        easing.type: Easing.InOutCubic
+                    }
+                }
+            }
+        }
+
         Rectangle {
             id: closeNotificationButton
-            z: 2
+            z: 4
             anchors.right: parent.right
             anchors.top: parent.top
+            anchors.topMargin: 9
             width: 22
             height: 22
             radius: 11
@@ -192,6 +244,83 @@ Rectangle {
         }
     }
 
+    Column {
+        id: duplicateColumn
+        z: 1
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: headerItem.bottom
+        anchors.leftMargin: 54
+        anchors.rightMargin: 12
+        spacing: 4
+        opacity: root.grouped && root.expanded ? 1.0 : 0.0
+        visible: root.grouped && (root.expanded || opacity > 0.001)
+
+        Behavior on opacity {
+            NumberAnimation {
+                duration: 180
+                easing.type: Easing.InOutCubic
+            }
+        }
+
+        Repeater {
+            model: root.extraGroupItems
+
+            delegate: Rectangle {
+                width: duplicateColumn.width
+                height: 30
+                radius: 10
+                color: duplicateMouse.pressed ? "#24000000" : (duplicateMouse.containsMouse ? "#1c000000" : "#10000000")
+                border.width: 0
+                antialiasing: true
+
+                Behavior on color {
+                    ColorAnimation {
+                        duration: root.motionTokens.hoverDuration
+                        easing.type: Easing.OutCubic
+                    }
+                }
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 8
+                    anchors.rightMargin: 8
+                    spacing: 6
+
+                    Components.StyledText {
+                        Layout.preferredWidth: 44
+                        text: modelData.time || ""
+                        color: "#8f9aa8"
+                        font.pixelSize: 11
+                        elide: Text.ElideRight
+                    }
+
+                    Components.StyledText {
+                        Layout.fillWidth: true
+                        text: modelData.body || modelData.title || "Notification"
+                        color: "#c7d0dc"
+                        font.pixelSize: 11
+                        elide: Text.ElideRight
+                    }
+                }
+
+                MouseArea {
+                    id: duplicateMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    acceptedButtons: Qt.LeftButton
+                    cursorShape: Qt.PointingHandCursor
+
+                    onClicked: {
+                        Services.SystemStatus.openNotification(modelData);
+                        if (root.popupRoot.controller)
+                            root.popupRoot.controller.closePopup();
+                    }
+                }
+            }
+        }
+    }
+
     MouseArea {
         id: notificationMouse
         anchors.fill: parent
@@ -201,6 +330,11 @@ Rectangle {
         cursorShape: Qt.PointingHandCursor
 
         onClicked: {
+            if (root.grouped) {
+                root.expanded = !root.expanded;
+                return;
+            }
+
             Services.SystemStatus.openNotification(root.modelData);
             if (root.popupRoot.controller)
                 root.popupRoot.controller.closePopup();

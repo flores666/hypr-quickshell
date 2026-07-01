@@ -798,11 +798,11 @@ def notification_time_text(value):
             return ""
 
         # dunst may return seconds, milliseconds, microseconds or nanoseconds.
-        if numeric > 1_000_000_000_000_000_000:
+        if numeric >= 1_000_000_000_000_000_000:
             numeric /= 1_000_000_000
-        elif numeric > 1_000_000_000_000_000:
+        elif numeric >= 1_000_000_000_000_000:
             numeric /= 1_000_000
-        elif numeric > 1_000_000_000_000:
+        elif numeric >= 1_000_000_000_000:
             numeric /= 1_000
 
         # Ignore values that cannot be a Unix timestamp.
@@ -818,6 +818,14 @@ def notification_time_text(value):
         return datetime.fromisoformat(normalized).strftime("%H:%M")
     except Exception:
         return ""
+
+
+def notification_display_time(*values):
+    for value in values:
+        text = notification_time_text(value)
+        if text:
+            return text
+    return datetime.now().strftime("%H:%M")
 
 
 def extract_first_url(*values):
@@ -1093,7 +1101,13 @@ def notifications_status():
                 app = extract_dunst_value(item.get("appname") or item.get("app_name")) or "Notification"
                 summary = extract_dunst_value(item.get("summary")) or "Notification"
                 body = extract_dunst_value(item.get("body")) or ""
-                ts = extract_dunst_value(item.get("timestamp")) or ""
+                ts = (
+                    extract_dunst_value(item.get("timestamp"))
+                    or extract_dunst_value(item.get("time"))
+                    or extract_dunst_value(item.get("created"))
+                    or extract_dunst_value(item.get("created_at"))
+                    or ""
+                )
                 nid = extract_dunst_value(item.get("id")) or str(i)
                 actions = extract_actions(item.get("actions") or item.get("action"))
                 url = extract_first_url(item.get("urls"), body, summary)
@@ -1104,7 +1118,7 @@ def notifications_status():
                     "app": clean_notification_text(app),
                     "title": clean_notification_text(summary),
                     "body": clean_notification_text(body),
-                    "time": notification_time_text(ts),
+                    "time": notification_display_time(ts),
                     "actions": actions,
                     "action": default_action_id(actions),
                     "url": url,
@@ -1127,7 +1141,7 @@ def notifications_status():
                 "app": "Mako",
                 "title": clean_notification_text(line[:80]),
                 "body": "",
-                "time": "",
+                "time": datetime.now().strftime("%H:%M"),
                 "actions": [],
                 "action": "",
                 "url": extract_first_url(line),
