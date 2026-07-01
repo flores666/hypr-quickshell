@@ -264,59 +264,6 @@ Item {
         return null;
     }
 
-    function isLiveNotification(notification) {
-        return String((notification || {}).id || "").indexOf("live-") === 0;
-    }
-
-    function notificationTimestamp(notification) {
-        var value = Number((notification || {}).timestamp || 0);
-        return isFinite(value) ? value : 0;
-    }
-
-    function notificationExactEventKey(notification) {
-        return notificationKey(notification);
-    }
-
-    function mergeDuplicateNotification(current, incoming) {
-        current = current || {};
-        incoming = incoming || {};
-
-        var currentIsLive = isLiveNotification(current);
-        var incomingIsLive = isLiveNotification(incoming);
-        var preferIncoming = false;
-
-        // Prefer the persisted notification object over a live dbus-monitor copy,
-        // because it carries the real daemon id/action/url/desktopEntry metadata.
-        // Keep live time/icon as fallback when the daemon history has no timestamp
-        // or icon yet.
-        if (currentIsLive && !incomingIsLive)
-            preferIncoming = true;
-        else if (incomingIsLive === currentIsLive && notificationTimestamp(incoming) > notificationTimestamp(current))
-            preferIncoming = true;
-
-        var base = preferIncoming ? incoming : current;
-        var fallback = preferIncoming ? current : incoming;
-        var result = {};
-
-        for (var prop in base)
-            result[prop] = base[prop];
-
-        if (!String(result.time || "").length)
-            result.time = String(fallback.time || "");
-        if (!notificationTimestamp(result) && notificationTimestamp(fallback))
-            result.timestamp = notificationTimestamp(fallback);
-        if (!String(result.icon || "").length)
-            result.icon = String(fallback.icon || "");
-        if (!String(result.action || "").length)
-            result.action = String(fallback.action || "");
-        if (!String(result.url || "").length)
-            result.url = String(fallback.url || "");
-        if (!String(result.desktopEntry || "").length)
-            result.desktopEntry = String(fallback.desktopEntry || "");
-
-        return result;
-    }
-
     function groupedNotificationsFromList(list) {
         var source = list || [];
         var order = [];
@@ -351,6 +298,58 @@ Item {
         };
     }
 
+    function primaryNotificationTime(items, fallbackItem) {
+        var source = items || [];
+        for (var i = 0; i < source.length; i++) {
+            var itemTime = String((source[i] || {}).time || "").trim();
+            if (itemTime.length > 0)
+                return itemTime;
+        }
+
+        return String((fallbackItem || {}).time || "").trim();
+    }
+
+    function notificationModelSignature(list) {
+        var source = list || [];
+        var result = [];
+        for (var i = 0; i < source.length; i++) {
+            var item = source[i] || {};
+            var groupItems = item.groupItems || [];
+            var groupSignature = [];
+            for (var g = 0; g < groupItems.length; g++) {
+                var groupItem = groupItems[g] || {};
+                groupSignature.push([
+                    String(groupItem.id || ""),
+                    notificationKey(groupItem),
+                    String(groupItem.time || ""),
+                    String(groupItem.icon || ""),
+                    String(groupItem.action || ""),
+                    String(groupItem.url || ""),
+                    String(groupItem.desktopEntry || "")
+                ].join("^"));
+            }
+
+            result.push([
+                String(item.id || ""),
+                String(item.groupKey || ""),
+                notificationKey(item),
+                String(item.time || ""),
+                String(item.icon || ""),
+                String(item.action || ""),
+                String(item.url || ""),
+                String(item.desktopEntry || ""),
+                String(item.groupCount || 1),
+                groupSignature.join("~")
+            ].join("|"));
+        }
+
+        return result.join("\n");
+    }
+
+    function sameNotificationsModel(left, right) {
+        return notificationModelSignature(left) === notificationModelSignature(right);
+    }
+
     function materializeNotificationGroup(groupKey, items) {
         items = items || [];
         if (items.length <= 0)
@@ -371,12 +370,12 @@ Item {
             groupItems.push(copy);
         }
 
-        result.id = groupItems.length > 1 ? groupedNotificationId(groupKey) : String(first.id || groupedNotificationId(groupKey));
+        result.id = items.length > 1 ? groupedNotificationId(groupKey) : String(first.id || groupedNotificationId(groupKey));
         result.groupKey = groupKey;
         result.groupCount = groupItems.length;
         result.groupItems = groupItems;
         result.isGroup = groupItems.length > 1;
-        result.time = String(first.time || (groupItems[0] ? groupItems[0].time : "") || "");
+        result.time = primaryNotificationTime(groupItems, first);
         return result;
     }
 
@@ -403,40 +402,51 @@ Item {
         var totalItems = 0;
 
         function mergedGroupItems(liveItems, historyItems) {
-            var byEvent = {};
-            var order = [];
-
-            function appendItem(item) {
-                item = item || {};
-                var key = notificationExactEventKey(item);
-                if (key.length === 0)
-                    return;
-
-                if (!byEvent[key]) {
-                    byEvent[key] = item;
-                    order.push(key);
-                    return;
-                }
-
-                byEvent[key] = mergeDuplicateNotification(byEvent[key], item);
-            }
-
-            function appendItems(items) {
-                items = items || [];
-                for (var i = 0; i < items.length; i++)
-                    appendItem(items[i]);
-            }
-
-            // Live entries make new notifications appear immediately. When the
-            // daemon history later returns the same app/title/body, collapse it
-            // into that existing row instead of creating a fake expandable group.
-            appendItems(liveItems);
-            appendItems(historyItems);
-
             var result = [];
-            for (var i = 0; i < order.length; i++)
-                result.push(byEvent[order[i]]);
+            var seenHistoryIds = {};
+            var liveExactKeys = {};
 
+            function exactEventKey(item) {
+                // Content identity, not clock identity. The same notification can
+                // arrive first through dbus-monitor and then through dunstctl
+                // history with a slightly different timestamp. Treat it as the
+                // same event so the card does not become an artificial group or
+                // reappear during refresh.
+                return notificationKey(item);
+            }
+
+            function appendLive(items) {
+                items = items || [];
+                for (var i = 0; i < items.length; i++) {
+                    var item = items[i] || {};
+                    liveExactKeys[exactEventKey(item)] = true;
+                    result.push(item);
+                }
+            }
+
+            function appendHistory(items) {
+                items = items || [];
+                for (var i = 0; i < items.length; i++) {
+                    var item = items[i] || {};
+                    var id = String(item.id || "");
+                    if (id.length > 0 && seenHistoryIds[id])
+                        continue;
+                    if (liveExactKeys[exactEventKey(item)])
+                        continue;
+
+                    if (id.length > 0)
+                        seenHistoryIds[id] = true;
+                    result.push(item);
+                }
+            }
+
+            // Live notifications are prepended so the just-arrived message stays
+            // visible immediately, then persisted notification history fills in
+            // older messages from the same conversation group. History entries
+            // that duplicate the same live event are skipped, while separate
+            // identical notifications from history keep their own rows/count.
+            appendLive(liveItems);
+            appendHistory(historyItems);
             return result;
         }
 
@@ -453,12 +463,9 @@ Item {
             totalItems += Math.max(1, Number(group.groupCount || 1));
         }
 
-        if (!sameList(notifications, merged))
+        if (!sameNotificationsModel(notifications, merged))
             notifications = merged;
-
-        var nextCount = Math.max(Number(preferredCount || 0), totalItems);
-        if (notificationsCount !== nextCount)
-            notificationsCount = nextCount;
+        notificationsCount = Math.max(Number(preferredCount || 0), totalItems);
     }
 
     function iconResolveCacheKey(item) {
@@ -565,14 +572,9 @@ Item {
 
         var next = [notification];
         var existing = liveNotifications || [];
-        var currentEventKey = notificationExactEventKey(notification);
         for (var i = 0; i < existing.length && next.length < 24; i++) {
-            var existingItem = existing[i] || {};
-            if (isNotificationDismissed(existingItem))
-                continue;
-            if (notificationExactEventKey(existingItem) === currentEventKey)
-                continue;
-            next.push(existingItem);
+            if (!isNotificationDismissed(existing[i]))
+                next.push(existing[i]);
         }
 
         liveNotifications = next;

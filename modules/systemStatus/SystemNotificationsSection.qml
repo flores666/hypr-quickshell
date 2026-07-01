@@ -17,6 +17,109 @@ Rectangle {
                     antialiasing: true
                     clip: true
 
+                    function cloneNotification(item) {
+                        var source = item || {};
+                        var result = {};
+                        for (var key in source) {
+                            if (key === "groupItems") {
+                                var groupItems = source.groupItems || [];
+                                var copiedGroupItems = [];
+                                for (var i = 0; i < groupItems.length; i++) {
+                                    var groupItem = groupItems[i] || {};
+                                    var copiedGroupItem = {};
+                                    for (var groupKey in groupItem)
+                                        copiedGroupItem[groupKey] = groupItem[groupKey];
+                                    copiedGroupItems.push(copiedGroupItem);
+                                }
+                                result.groupItems = copiedGroupItems;
+                            } else {
+                                result[key] = source[key];
+                            }
+                        }
+                        return result;
+                    }
+
+                    function stableNotificationId(item) {
+                        item = item || {};
+                        var id = String(item.id || "");
+                        if (id.length > 0)
+                            return id;
+
+                        var groupKey = String(item.groupKey || "");
+                        if (groupKey.length > 0)
+                            return groupKey;
+
+                        return [
+                            String(item.app || ""),
+                            String(item.title || ""),
+                            String(item.body || "")
+                        ].join("|");
+                    }
+
+                    function notificationDataEquals(left, right) {
+                        try {
+                            return JSON.stringify(left || {}) === JSON.stringify(right || {});
+                        } catch (e) {
+                            return false;
+                        }
+                    }
+
+                    function findNotificationRow(key, fromIndex) {
+                        for (var i = fromIndex; i < notificationListModel.count; i++) {
+                            if (String(notificationListModel.get(i).notificationKey || "") === key)
+                                return i;
+                        }
+                        return -1;
+                    }
+
+                    function syncNotificationModel() {
+                        var source = Services.SystemStatus.notifications || [];
+                        var targetIndex = 0;
+
+                        for (var i = 0; i < source.length; i++) {
+                            var item = cloneNotification(source[i]);
+                            var key = stableNotificationId(item);
+                            if (key.length === 0)
+                                continue;
+
+                            var existingIndex = findNotificationRow(key, targetIndex);
+                            if (existingIndex < 0) {
+                                notificationListModel.insert(targetIndex, {
+                                    notificationKey: key,
+                                    notificationData: item
+                                });
+                                targetIndex++;
+                                continue;
+                            }
+
+                            if (existingIndex !== targetIndex)
+                                notificationListModel.move(existingIndex, targetIndex, 1);
+
+                            var current = notificationListModel.get(targetIndex).notificationData || {};
+                            if (!notificationDataEquals(current, item) && !root.popupController.isNotificationClosing(key))
+                                notificationListModel.setProperty(targetIndex, "notificationData", item);
+
+                            targetIndex++;
+                        }
+
+                        while (notificationListModel.count > targetIndex)
+                            notificationListModel.remove(targetIndex);
+                    }
+
+                    Component.onCompleted: syncNotificationModel()
+
+                    Connections {
+                        target: Services.SystemStatus
+                        function onNotificationsChanged() {
+                            root.syncNotificationModel();
+                        }
+                    }
+
+                    ListModel {
+                        id: notificationListModel
+                        dynamicRoles: true
+                    }
+
                     Column {
                         anchors.fill: parent
                         anchors.margins: 12
@@ -32,13 +135,14 @@ Rectangle {
                                 Layout.preferredHeight: 18
                                 value: Services.SystemStatus.notificationsSilent ? "Do not disturb" : "Notifications"
                                 textColor: "#eef3f8"
-                                pixelSize: 12
+                                pixelSize: 13
                                 weight: Font.DemiBold
+                                horizontalAlignment: Text.AlignLeft
                                 elideMode: Text.ElideRight
                             }
 
                             SmoothText {
-                                Layout.preferredWidth: 34
+                                Layout.preferredWidth: 40
                                 Layout.preferredHeight: 18
                                 value: String(Services.SystemStatus.notificationsCount)
                                 textColor: "#aeb8c6"
@@ -79,8 +183,8 @@ Rectangle {
 
                                 Components.StyledText {
                                     width: parent.width
-                                    height: Services.SystemStatus.notifications.length === 0 ? 50 : 0
-                                    visible: Services.SystemStatus.notifications.length === 0
+                                    height: notificationListModel.count === 0 ? 50 : 0
+                                    visible: notificationListModel.count === 0
                                     text: "No notifications"
                                     color: "#8f9aa8"
                                     font.pixelSize: 12
@@ -89,7 +193,7 @@ Rectangle {
                                 }
 
                                 Repeater {
-                                    model: Services.SystemStatus.notifications
+                                    model: notificationListModel
                                     delegate: SystemNotificationCard {
                                         popupRoot: notificationColumn.popupRootRef
                                         popupController: root.popupController

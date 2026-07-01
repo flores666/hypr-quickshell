@@ -769,20 +769,9 @@ def battery_status():
 
 
 def extract_dunst_value(value):
-    """Unwrap dunstctl's {type,data}/{value} wrappers without losing arrays.
-
-    dunst versions and notification daemons differ: scalar fields are often
-    wrapped as {"type": "s", "data": "..."}, while timestamp can be a scalar,
-    an ISO string, or a tuple/list. Keep lists intact so time parsing can handle
-    seconds + micro/nanoseconds correctly.
-    """
     if isinstance(value, dict):
-        if "data" in value:
-            return extract_dunst_value(value.get("data"))
-        if "value" in value:
-            return extract_dunst_value(value.get("value"))
-        return value
-    return value if value is not None else ""
+        return value.get("data") or value.get("value") or ""
+    return value or ""
 
 
 def clean_notification_text(value):
@@ -791,55 +780,57 @@ def clean_notification_text(value):
     return re.sub(r"\s+", " ", text).strip()
 
 
-def notification_timestamp_seconds(value):
-    raw = extract_dunst_value(value)
-
-    if raw is None or raw == "":
-        return None
-
-    if isinstance(raw, (list, tuple)):
-        if len(raw) >= 2:
+def notification_time_text(value):
+    if isinstance(value, dict):
+        seconds = (
+            value.get("sec")
+            or value.get("secs")
+            or value.get("seconds")
+            or value.get("tv_sec")
+            or value.get("s")
+        )
+        fractions = (
+            value.get("nsec")
+            or value.get("nsecs")
+            or value.get("nanoseconds")
+            or value.get("tv_nsec")
+            or value.get("usec")
+            or value.get("usecs")
+            or value.get("microseconds")
+            or value.get("tv_usec")
+            or 0
+        )
+        if seconds is not None:
             try:
-                seconds = float(extract_dunst_value(raw[0]))
-                fraction = float(extract_dunst_value(raw[1]))
-                if seconds <= 0:
-                    return None
-
-                # Dunst/libnotify variants have been seen as sec+usec and
-                # sec+nsec. Pick the scale from the magnitude of the second
-                # component instead of assuming one fixed ABI representation.
-                divisor = 1_000_000_000 if abs(fraction) >= 1_000_000 else 1_000_000
-                return seconds + (fraction / divisor)
+                sec_value = float(seconds)
+                frac_value = float(fractions or 0)
+                if frac_value >= 1_000_000_000:
+                    frac_value /= 1_000_000_000
+                elif frac_value >= 1_000_000:
+                    frac_value /= 1_000_000
+                elif frac_value >= 1000:
+                    frac_value /= 1000
+                timestamp = sec_value + frac_value
+                if 946684800 <= timestamp <= 4102444800:
+                    return datetime.fromtimestamp(timestamp).strftime("%H:%M")
             except Exception:
                 pass
-        if len(raw) == 1:
-            return notification_timestamp_seconds(raw[0])
-        return None
 
-    if isinstance(raw, dict):
-        for key in ("timestamp", "time", "created", "created_at", "data", "value"):
-            if key in raw:
-                value = notification_timestamp_seconds(raw.get(key))
-                if value is not None:
-                    return value
-        return None
+    raw = extract_dunst_value(value)
+    if raw is None:
+        return ""
 
     text = str(raw).strip()
     if not text:
-        return None
+        return ""
 
     if re.match(r"^\d{1,2}:\d{2}$", text):
-        now = datetime.now()
-        try:
-            hours, minutes = [int(part) for part in text.split(":", 1)]
-            return now.replace(hour=hours, minute=minutes, second=0, microsecond=0).timestamp()
-        except Exception:
-            return None
+        return text
 
     try:
         numeric = float(text)
         if numeric <= 0:
-            return None
+            return ""
 
         # dunst may return seconds, milliseconds, microseconds or nanoseconds.
         if numeric >= 1_000_000_000_000_000_000:
@@ -849,42 +840,27 @@ def notification_timestamp_seconds(value):
         elif numeric >= 1_000_000_000_000:
             numeric /= 1_000
 
-        if 946684800 <= numeric <= 4102444800:
-            return numeric
+        # Ignore values that cannot be a Unix timestamp.
+        if numeric < 946684800 or numeric > 4102444800:
+            return ""
+
+        return datetime.fromtimestamp(numeric).strftime("%H:%M")
     except Exception:
         pass
 
     try:
         normalized = text.replace("Z", "+00:00")
-        return datetime.fromisoformat(normalized).timestamp()
-    except Exception:
-        return None
-
-
-def notification_time_text(value):
-    timestamp = notification_timestamp_seconds(value)
-    if timestamp is None:
-        return ""
-
-    try:
-        return datetime.fromtimestamp(timestamp).strftime("%H:%M")
+        return datetime.fromisoformat(normalized).strftime("%H:%M")
     except Exception:
         return ""
 
 
-def notification_timestamp_ms(value):
-    timestamp = notification_timestamp_seconds(value)
-    if timestamp is None:
-        return 0
-    return int(timestamp * 1000)
-
-
-def notification_display_time(*values, fallback_to_now=False):
+def notification_display_time(*values, fallback_now=True):
     for value in values:
         text = notification_time_text(value)
         if text:
             return text
-    return datetime.now().strftime("%H:%M") if fallback_to_now else ""
+    return datetime.now().strftime("%H:%M") if fallback_now else ""
 
 
 def extract_first_url(*values):
@@ -1160,7 +1136,13 @@ def notifications_status():
                 app = extract_dunst_value(item.get("appname") or item.get("app_name")) or "Notification"
                 summary = extract_dunst_value(item.get("summary")) or "Notification"
                 body = extract_dunst_value(item.get("body")) or ""
-                ts = next((item.get(key) for key in ("timestamp", "time", "created", "created_at") if item.get(key) is not None), "")
+                ts = (
+                    extract_dunst_value(item.get("timestamp"))
+                    or extract_dunst_value(item.get("time"))
+                    or extract_dunst_value(item.get("created"))
+                    or extract_dunst_value(item.get("created_at"))
+                    or ""
+                )
                 nid = extract_dunst_value(item.get("id")) or str(i)
                 actions = extract_actions(item.get("actions") or item.get("action"))
                 url = extract_first_url(item.get("urls"), body, summary)
@@ -1171,8 +1153,7 @@ def notifications_status():
                     "app": clean_notification_text(app),
                     "title": clean_notification_text(summary),
                     "body": clean_notification_text(body),
-                    "time": notification_display_time(ts),
-                    "timestamp": notification_timestamp_ms(ts),
+                    "time": notification_display_time(ts, fallback_now=False),
                     "actions": actions,
                     "action": default_action_id(actions),
                     "url": url,
@@ -1196,7 +1177,6 @@ def notifications_status():
                 "title": clean_notification_text(line[:80]),
                 "body": "",
                 "time": datetime.now().strftime("%H:%M"),
-                "timestamp": int(datetime.now().timestamp() * 1000),
                 "actions": [],
                 "action": "",
                 "url": extract_first_url(line),

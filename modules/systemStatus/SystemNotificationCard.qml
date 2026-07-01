@@ -6,22 +6,25 @@ import "../../services" as Services
 Rectangle {
     id: root
 
-    required property var modelData
+    required property var notificationData
+    required property string notificationKey
     required property var popupRoot
     required property var popupController
     required property var motionTokens
 
     property bool expanded: false
 
-    readonly property bool closing: popupController.isNotificationClosing(modelData.id)
-    readonly property int groupCount: Math.max(1, Number(modelData.groupCount || 1))
+    readonly property var currentNotification: root.notificationData || ({})
+    readonly property string rowKey: root.notificationKey || ""
+    readonly property bool closing: popupController.isNotificationClosing(root.currentNotification.id || root.rowKey)
+    readonly property int groupCount: Math.max(1, Number(root.currentNotification.groupCount || 1))
     readonly property bool grouped: groupCount > 1
-    readonly property var groupItems: modelData.groupItems || []
+    readonly property var groupItems: root.currentNotification.groupItems || []
     readonly property var extraGroupItems: groupItems.slice(1)
     readonly property real headerHeight: Math.max(58, notificationTextColumn.implicitHeight + 18)
     readonly property real expandedContentHeight: grouped && expanded ? duplicateColumn.implicitHeight + 8 : 0
     readonly property real normalHeight: headerHeight + expandedContentHeight
-    readonly property string displayTime: modelData.time || (groupItems.length > 0 ? (groupItems[0].time || "") : "")
+    readonly property string displayTime: root.currentNotification.time || (groupItems.length > 0 ? (groupItems[0].time || "") : "")
 
     width: parent ? parent.width : 1
     height: normalHeight
@@ -88,7 +91,7 @@ Rectangle {
             antialiasing: true
             clip: true
 
-            readonly property string iconSource: root.popupRoot.notificationIconSource(root.modelData)
+            readonly property string iconSource: root.popupRoot.notificationIconSource(root.currentNotification)
 
             Image {
                 id: notificationImage
@@ -117,7 +120,7 @@ Rectangle {
             Components.StyledText {
                 anchors.centerIn: parent
                 visible: notificationImage.status !== Image.Ready
-                text: root.popupRoot.firstLetter(root.modelData.app || root.modelData.title, "N")
+                text: root.popupRoot.firstLetter(root.currentNotification.app || root.currentNotification.title, "N")
                 color: "#f4f7fb"
                 font.pixelSize: 13
                 font.weight: Font.DemiBold
@@ -139,7 +142,7 @@ Rectangle {
 
                 Components.StyledText {
                     Layout.fillWidth: true
-                    text: root.modelData.app || "Notification"
+                    text: root.currentNotification.app || "Notification"
                     color: "#d9e0ea"
                     font.pixelSize: 12
                     font.weight: Font.DemiBold
@@ -155,7 +158,7 @@ Rectangle {
 
             Components.StyledText {
                 width: parent.width
-                text: root.modelData.title || "Notification"
+                text: root.currentNotification.title || "Notification"
                 color: "#f4f7fb"
                 font.pixelSize: 12
                 font.weight: Font.DemiBold
@@ -164,7 +167,7 @@ Rectangle {
 
             Components.StyledText {
                 width: parent.width
-                text: root.modelData.body || ""
+                text: root.currentNotification.body || ""
                 color: "#aeb8c6"
                 font.pixelSize: 12
                 wrapMode: Text.WordWrap
@@ -238,7 +241,7 @@ Rectangle {
                 acceptedButtons: Qt.LeftButton
                 onClicked: function (mouse) {
                     mouse.accepted = true;
-                    root.popupController.closeNotificationAnimated(root.modelData.id);
+                    root.popupController.closeNotificationAnimated(root.currentNotification.id || root.rowKey);
                 }
             }
         }
@@ -267,6 +270,10 @@ Rectangle {
             model: root.extraGroupItems
 
             delegate: Rectangle {
+                required property var modelData
+
+                readonly property var duplicateNotification: modelData || ({})
+
                 width: duplicateColumn.width
                 height: 30
                 radius: 10
@@ -289,7 +296,7 @@ Rectangle {
 
                     Components.StyledText {
                         Layout.preferredWidth: 44
-                        text: modelData.time || ""
+                        text: duplicateNotification.time || ""
                         color: "#8f9aa8"
                         font.pixelSize: 11
                         elide: Text.ElideRight
@@ -297,7 +304,7 @@ Rectangle {
 
                     Components.StyledText {
                         Layout.fillWidth: true
-                        text: modelData.body || modelData.title || "Notification"
+                        text: duplicateNotification.body || duplicateNotification.title || "Notification"
                         color: "#c7d0dc"
                         font.pixelSize: 11
                         elide: Text.ElideRight
@@ -312,7 +319,7 @@ Rectangle {
                     cursorShape: Qt.PointingHandCursor
 
                     onClicked: {
-                        Services.SystemStatus.openNotification(modelData);
+                        Services.SystemStatus.openNotification(duplicateNotification);
                         if (root.popupRoot.controller)
                             root.popupRoot.controller.closePopup();
                     }
@@ -335,7 +342,7 @@ Rectangle {
                 return;
             }
 
-            Services.SystemStatus.openNotification(root.modelData);
+            Services.SystemStatus.openNotification(root.currentNotification);
             if (root.popupRoot.controller)
                 root.popupRoot.controller.closePopup();
         }
