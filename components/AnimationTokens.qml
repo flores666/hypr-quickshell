@@ -21,4 +21,9 @@ QtObject {
     readonly property int notificationExitOffsetX: 32
     readonly property real notificationEnterScale: 1.0
     readonly property real notificationGroupRevealFadeStart: 0.18
+
+    readonly property int systemNestedOpenDuration: Math.min(170, Math.max(120, workspaceMorphDuration * 0.62))
+    readonly property int systemNestedCloseDuration: Math.min(135, Math.max(95, popupCloseDuration + 25))
+    readonly property real systemNestedCardStartScale: 0.972
+    readonly property int systemNestedCardOffsetY: 10
 }

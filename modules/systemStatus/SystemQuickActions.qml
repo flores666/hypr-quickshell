@@ -1,68 +1,98 @@
 import QtQuick
 import QtQuick.Layouts
 import "../../components" as Components
-import "../../services" as Services
 
 RowLayout {
+    id: root
+
     required property var popupRoot
     required property var popupController
     required property var motionTokens
-                    width: parent.width
-                    height: 44
-                    spacing: 9
 
-                    Repeater {
-                        model: [
-                            {
-                                action: "logout",
-                                icon: "logout",
-                                label: "Logout",
-                                confirmLabel: "log out"
-                            },
-                            {
-                                action: "reboot",
-                                icon: "reboot",
-                                label: "Reboot",
-                                confirmLabel: "reboot"
-                            },
-                            {
-                                action: "poweroff",
-                                icon: "power",
-                                label: "Power off",
-                                confirmLabel: "power off"
-                            }
-                        ]
+    width: parent.width
+    height: 44
+    spacing: 9
 
-                        delegate: Rectangle {
-                            required property var modelData
+    Repeater {
+        model: [
+            {
+                action: "logout",
+                icon: "logout",
+                label: "Logout",
+                confirmLabel: "log out"
+            },
+            {
+                action: "reboot",
+                icon: "reboot",
+                label: "Reboot",
+                confirmLabel: "reboot"
+            },
+            {
+                action: "poweroff",
+                icon: "power",
+                label: "Power",
+                confirmLabel: "power off"
+            }
+        ]
 
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 44
-                            radius: 15
-                            color: actionMouse.pressed ? "#34000000" : (actionMouse.containsMouse ? "#26000000" : "#30000000")
-                            border.width: 0
-                            antialiasing: true
+        delegate: Rectangle {
+            id: actionTile
 
-                            Behavior on color {
-                                ColorAnimation {
-                                    duration: motionTokens.hoverDuration
-                                    easing.type: Easing.OutCubic
-                                }
-                            }
+            required property var modelData
 
-                            SystemIcon {
-                                anchors.centerIn: parent
-                                source: popupRoot.rowIcon(modelData.icon)
-                                iconOpacity: actionMouse.containsMouse ? 1.0 : 0.82
-                            }
+            Layout.fillWidth: true
+            Layout.preferredHeight: root.height
+            radius: 15
+            color: actionMouse.pressed ? "#34000000" : (actionMouse.containsMouse ? "#26000000" : "#30000000")
+            border.width: 0
+            antialiasing: true
+            scale: actionMouse.pressed ? 0.985 : 1.0
 
-                            MouseArea {
-                                id: actionMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: popupController.confirmSystemAction(modelData.action, modelData.confirmLabel || modelData.label)
-                            }
-                        }
-                    }
+            Behavior on color {
+                ColorAnimation {
+                    duration: root.motionTokens.hoverDuration
+                    easing.type: Easing.OutCubic
                 }
+            }
+
+            Behavior on scale {
+                NumberAnimation {
+                    duration: actionMouse.pressed ? root.motionTokens.pressDuration : root.motionTokens.releaseDuration
+                    easing.type: Easing.OutCubic
+                }
+            }
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 14
+                anchors.rightMargin: 12
+                spacing: 7
+
+                SystemIcon {
+                    Layout.preferredWidth: 18
+                    Layout.preferredHeight: 18
+                    source: root.popupRoot.rowIcon(actionTile.modelData.icon)
+                    iconOpacity: actionMouse.containsMouse ? 1.0 : 0.84
+                }
+
+                Components.StyledText {
+                    Layout.fillWidth: true
+                    text: actionTile.modelData.label
+                    color: "#eef3f8"
+                    font.pixelSize: 12
+                    font.weight: Font.DemiBold
+                    elide: Text.ElideRight
+                }
+            }
+
+            MouseArea {
+                id: actionMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                acceptedButtons: Qt.LeftButton
+                onClicked: root.popupController.confirmSystemAction(actionTile.modelData.action, actionTile.modelData.confirmLabel || actionTile.modelData.label)
+            }
+        }
+    }
+}
