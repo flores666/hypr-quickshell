@@ -28,6 +28,7 @@ Scope {
     readonly property int openAnimationDuration: overviewController.openAnimationDuration
     readonly property real horizontalMargin: Math.max(52, Math.round(visualWindow.width * 0.08))
     readonly property real applicationsRiseProgress: overviewController.applicationsRiseProgress
+    readonly property real applicationsContentScale: overviewController.applicationsContentScale
     readonly property bool panelVisuallySettled: overviewController.panelVisuallySettled
     readonly property bool applicationsClosingHandoffVisible: overviewController.applicationsClosingHandoffVisible
     readonly property bool applicationsInputCaptureRequired: overviewController.applicationsInputCaptureRequired
@@ -800,6 +801,7 @@ Scope {
             syncContentY: true
             horizontalMargin: root.horizontalMargin
             contentYOffset: root.visualContentYOffset
+            contentScale: root.applicationsContentScale
             queryText: searchController.query
         }
     }
@@ -955,6 +957,7 @@ Scope {
             sectionRowsVersion: root.sectionRowsVersion
             horizontalMargin: root.horizontalMargin
             contentYOffset: root.inputContentYOffset
+            contentScale: 1.0
             externalContentY: root.gridContentY
             syncContentY: !root.applicationsInputInteractive && !root.applicationsClosing && !overviewController.closingVisualActive
             queryText: searchController.query

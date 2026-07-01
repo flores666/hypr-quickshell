@@ -38,6 +38,8 @@ Item {
     readonly property int closeAnimationDuration: 300
     readonly property int openAnimationDuration: 340
     readonly property real applicationsRiseProgress: smoothStep(desktopCardPhaseEnd, 1.0, animationProgress)
+    readonly property real applicationsContentScaleProgress: easeOutCubic(applicationsRiseProgress)
+    readonly property real applicationsContentScale: 0.985 + 0.015 * applicationsContentScaleProgress
     readonly property bool panelVisuallySettled: applicationsRiseProgress >= 0.998
     // The interactive top layer must disappear as soon as closing starts. Keeping
     // it mapped for a handoff leaves one untransformed copy of the application
@@ -66,6 +68,12 @@ Item {
         var range = Math.max(0.0001, edge1 - edge0);
         var t = clamp01((value - edge0) / range);
         return t * t * (3 - 2 * t);
+    }
+
+    function easeOutCubic(value) {
+        var t = clamp01(value);
+        var inv = 1 - t;
+        return 1 - inv * inv * inv;
     }
 
     function startOpenAnimation() {

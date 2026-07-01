@@ -10,6 +10,7 @@ Item {
     property bool visualInteractive: interactive
     required property real horizontalMargin
     property real contentYOffset: 0
+    property real contentScale: 1.0
     property string queryText: ""
     property string selectedAppKey: ""
     property bool hidePointerCursor: false
@@ -47,13 +48,13 @@ Item {
 
     signal queryEdited(string text)
     signal moveSelectionRequested(string direction)
-    signal activateSelectionRequested()
+    signal activateSelectionRequested
     signal appHovered(string appKey)
     signal appUnhovered(string appKey)
     signal appPressed(var app, int button)
     signal appContextRequested(var app, real x, real y)
     signal appLaunched(var app)
-    signal hiddenSectionToggleRequested()
+    signal hiddenSectionToggleRequested
     signal contentYEdited(real value)
 
     onHidePointerCursorChanged: {
@@ -75,7 +76,6 @@ Item {
     function clearSearchFocus() {
         searchBox.clearSearchFocus();
     }
-
 
     function notifyPointerMoved() {
         if (root.pointerMovedCallback)
@@ -403,12 +403,14 @@ Item {
     }
 
     Item {
+        id: contentRoot
         x: 0
         y: Math.round(root.contentYOffset)
         width: parent.width
         height: parent.height
         opacity: 1
         scale: 1
+        transformOrigin: Item.Center
 
         ColumnLayout {
             anchors {
@@ -430,9 +432,15 @@ Item {
                 showVisuals: root.showVisuals
                 queryText: root.queryText
                 hidePointerCursor: root.hidePointerCursor
-                onQueryEdited: function(text) { root.queryEdited(text); }
-                pointerMovedCallback: function() { root.notifyPointerMoved(); }
-                onMoveSelectionRequested: function(direction) { root.moveSelectionRequested(direction); }
+                onQueryEdited: function (text) {
+                    root.queryEdited(text);
+                }
+                pointerMovedCallback: function () {
+                    root.notifyPointerMoved();
+                }
+                onMoveSelectionRequested: function (direction) {
+                    root.moveSelectionRequested(direction);
+                }
                 onActivateSelectionRequested: root.activateSelectionRequested()
             }
 
@@ -576,7 +584,7 @@ Item {
                                 acceptedButtons: Qt.LeftButton
                                 cursorShape: enabled ? root.interactiveCursorShape(Qt.PointingHandCursor) : root.interactiveCursorShape(Qt.ArrowCursor)
                                 onPositionChanged: root.notifyPointerMoved()
-                                onClicked: function(mouse) {
+                                onClicked: function (mouse) {
                                     mouse.accepted = true;
                                     root.hideOverflowTooltip();
                                     root.hiddenSectionToggleRequested();
@@ -615,25 +623,29 @@ Item {
                                         interactive: root.interactive
                                         showVisuals: root.showVisuals
                                         hidePointerCursor: root.hidePointerCursor
-                                        onHovered: function(appKey) {
+                                        onHovered: function (appKey) {
                                             root.appHovered(appKey);
                                             root.showOverflowTooltipForItem(appTile, appKey, appTile.displayName, appTile.labelOverflowing);
                                         }
-                                        onUnhovered: function(appKey) {
+                                        onUnhovered: function (appKey) {
                                             root.hideOverflowTooltip(appKey);
                                             root.appUnhovered(appKey);
                                         }
-                                        pointerMovedCallback: function() {
+                                        pointerMovedCallback: function () {
                                             root.notifyPointerMoved();
                                             if (root.overflowTooltipAppKey === appCell.appKey)
                                                 root.showOverflowTooltipForItem(appTile, appCell.appKey, appTile.displayName, appTile.labelOverflowing);
                                         }
-                                        onPressed: function(app, button, localX, localY) { root.appPressed(app, button); }
-                                        onContextRequested: function(app, localX, localY) {
+                                        onPressed: function (app, button, localX, localY) {
+                                            root.appPressed(app, button);
+                                        }
+                                        onContextRequested: function (app, localX, localY) {
                                             var point = appTile.mapToItem(root, localX, localY);
                                             root.appContextRequested(app, point.x, point.y);
                                         }
-                                        onLaunched: function(app) { root.appLaunched(app); }
+                                        onLaunched: function (app) {
+                                            root.appLaunched(app);
+                                        }
                                     }
                                 }
                             }
@@ -733,21 +745,33 @@ Item {
             layer.smooth: true
 
             Behavior on opacity {
-                NumberAnimation { duration: 85; easing.type: Easing.OutCubic }
+                NumberAnimation {
+                    duration: 85
+                    easing.type: Easing.OutCubic
+                }
             }
 
             Behavior on y {
                 enabled: root.overflowTooltipPlacementAnimationEnabled
-                NumberAnimation { duration: 85; easing.type: Easing.OutCubic }
+                NumberAnimation {
+                    duration: 85
+                    easing.type: Easing.OutCubic
+                }
             }
 
             Behavior on x {
                 enabled: root.overflowTooltipPlacementAnimationEnabled
-                NumberAnimation { duration: 85; easing.type: Easing.OutCubic }
+                NumberAnimation {
+                    duration: 85
+                    easing.type: Easing.OutCubic
+                }
             }
 
             Behavior on scale {
-                NumberAnimation { duration: 85; easing.type: Easing.OutCubic }
+                NumberAnimation {
+                    duration: 85
+                    easing.type: Easing.OutCubic
+                }
             }
 
             Components.GlassPanel {
@@ -788,9 +812,8 @@ Item {
         id: contentWheelHandler
         enabled: root.interactive
         target: null
-        onWheel: function(event) {
+        onWheel: function (event) {
             root.handleWheel(event);
         }
     }
-
 }

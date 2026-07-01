@@ -116,6 +116,33 @@ static double overviewEaseInOutCubic(double value) {
     return 1.0 - (inv * inv * inv) / 2.0;
 }
 
+static double overviewApplicationsPhaseProgress(double openProgress) {
+    constexpr double CARD_PHASE_END = 0.48;
+    return overviewClamp01((openProgress - CARD_PHASE_END) / (1.0 - CARD_PHASE_END));
+}
+
+static double overviewApplicationsPanelSlideProgress(double openProgress) {
+    // The applications layer itself should feel like a panel: leave the desktop
+    // card phase untouched, then rise quickly and settle softly. Keep this as a
+    // pure progress curve; do not alter layer origin, namespace or render path.
+    return overviewEaseOutQuart(overviewApplicationsPhaseProgress(openProgress));
+}
+
+static double overviewApplicationsSideWorkspaceProgress(double openProgress) {
+    // Side workspace cards use the same second phase as the panel, but a cubic
+    // curve keeps their lateral motion a little lighter than the panel rise.
+    return overviewEaseOutCubic(overviewApplicationsPhaseProgress(openProgress));
+}
+
+static double overviewSideWorkspaceRevealProgress(double rawOpenProgress) {
+    return overviewEaseOutCubic((rawOpenProgress - 0.16) / 0.84);
+}
+
+static double overviewSideWorkspaceExitProgress(double rawOpenProgress) {
+    const double t = overviewClamp01((rawOpenProgress - 0.30) / 0.70);
+    return overviewEaseInOutCubic(t);
+}
+
 static double overviewSmoothStep(double edge0, double edge1, double value) {
     const double range = std::max(0.0001, edge1 - edge0);
     const double t = overviewClamp01((value - edge0) / range);
@@ -198,8 +225,7 @@ static CBox overviewApplicationsLayerBox(PHLMONITOR owner, double openProgress) 
     if (!owner)
         return CBox{0, 0, 1, 1};
 
-    constexpr double CARD_PHASE_END = 0.48;
-    const double liftProgress = overviewEaseInOutCubic((openProgress - CARD_PHASE_END) / (1.0 - CARD_PHASE_END));
+    const double liftProgress = overviewApplicationsPanelSlideProgress(openProgress);
     const double riseOffset = std::max<double>(240.0, owner->m_transformedSize.y * 0.42);
     const double y = overviewLerp(riseOffset, 0.0, liftProgress);
 
@@ -269,8 +295,7 @@ static void renderApplicationsSideWorkspacePreviews(PHLMONITOR owner,
     }
 
     const int centerIndex = std::clamp(static_cast<int>(std::distance(workspaces.begin(), centerIt)), 0, static_cast<int>(workspaces.size()) - 1);
-    constexpr double CARD_PHASE_END = 0.48;
-    const double sideProgress = overviewEaseInOutCubic((openProgress - CARD_PHASE_END) / (1.0 - CARD_PHASE_END));
+    const double sideProgress = overviewApplicationsSideWorkspaceProgress(openProgress);
     const float opacity = static_cast<float>(std::clamp(1.0 - sideProgress, 0.0, 1.0));
     if (opacity <= 0.001F)
         return;
@@ -729,10 +754,9 @@ void CHyprspaceWidget::draw() {
                 backgroundBox = overviewLerpBox(fullWorkspaceBox, backgroundBox, openProgress);
                 workspaceBox = overviewLerpBox(morphSourceWorkspaceBox, workspaceBox, openProgress);
             } else {
-                const double sideExitProgress = overviewClamp01((rawOpenProgress - 0.30) / 0.70);
                 const double sideProgress = closingAnimationRunning
-                    ? sideExitProgress * sideExitProgress
-                    : overviewEaseOutQuart((rawOpenProgress - 0.16) / 0.84);
+                    ? overviewSideWorkspaceExitProgress(rawOpenProgress)
+                    : overviewSideWorkspaceRevealProgress(rawOpenProgress);
                 const double slideDistance = owner->m_transformedSize.x * (closingAnimationRunning ? 0.14 : 0.10);
                 CBox sideStartBox = workspaceBox;
                 sideStartBox.x += (directionFromTarget < 0 ? -slideDistance : slideDistance);
