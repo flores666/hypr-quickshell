@@ -28,7 +28,6 @@ Scope {
     readonly property int openAnimationDuration: overviewController.openAnimationDuration
     readonly property real horizontalMargin: Math.max(52, Math.round(visualWindow.width * 0.08))
     readonly property real applicationsRiseProgress: overviewController.applicationsRiseProgress
-    readonly property real applicationsContentScale: overviewController.applicationsContentScale
     readonly property bool panelVisuallySettled: overviewController.panelVisuallySettled
     readonly property bool applicationsClosingHandoffVisible: overviewController.applicationsClosingHandoffVisible
     readonly property bool applicationsInputCaptureRequired: overviewController.applicationsInputCaptureRequired
@@ -64,6 +63,7 @@ Scope {
     property real preservedViewportY: 0
     property bool suppressEnsureVisible: false
     property bool hiddenSectionExpanded: false
+    property bool appLaunchInProgress: false
 
     ApplicationsOverviewController {
         id: overviewController
@@ -477,10 +477,18 @@ Scope {
     }
 
     function launchApp(app) {
-        if (!app || !app.desktopId)
+        if (!app || !app.desktopId || appLaunchInProgress)
             return;
 
+        appLaunchInProgress = true;
+        appLaunchGuardTimer.restart();
+
         closeContextMenu();
+        if (inputContent)
+            inputContent.clearPendingKeyboardActivation();
+        searchController.notifyApplicationsInputNotReady();
+        searchController.clearSearchFocus();
+
         Services.AppPanelService.launch(app.desktopId);
         Services.ShellActions.closeWorkspaceOverview();
     }
@@ -671,6 +679,7 @@ Scope {
     onApplicationsOpenChanged: {
         clearPointerSuppression();
         if (applicationsOpen) {
+            appLaunchInProgress = false;
             resetInputReadiness(false);
             beginApplicationsSession();
         } else {
@@ -739,6 +748,14 @@ Scope {
         }
     }
 
+
+    Timer {
+        id: appLaunchGuardTimer
+        interval: 900
+        repeat: false
+        onTriggered: root.appLaunchInProgress = false
+    }
+
     Connections {
         target: Services.ShellState
         function onApplicationsOverviewBufferedQueryNonceChanged() {
@@ -801,7 +818,6 @@ Scope {
             syncContentY: true
             horizontalMargin: root.horizontalMargin
             contentYOffset: root.visualContentYOffset
-            contentScale: root.applicationsContentScale
             queryText: searchController.query
         }
     }
@@ -957,7 +973,6 @@ Scope {
             sectionRowsVersion: root.sectionRowsVersion
             horizontalMargin: root.horizontalMargin
             contentYOffset: root.inputContentYOffset
-            contentScale: 1.0
             externalContentY: root.gridContentY
             syncContentY: !root.applicationsInputInteractive && !root.applicationsClosing && !overviewController.closingVisualActive
             queryText: searchController.query

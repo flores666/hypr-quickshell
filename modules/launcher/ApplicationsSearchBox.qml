@@ -12,6 +12,7 @@ Item {
     property bool hidePointerCursor: false
     property var pointerMovedCallback: null
     property alias inputField: searchInput
+    property bool enterActivationPending: false
 
     readonly property int horizontalPadding: 16
     readonly property int iconSize: 18
@@ -39,6 +40,16 @@ Item {
 
     function clearSearchFocus() {
         searchInput.focus = false;
+        enterActivationPending = false;
+    }
+
+    function clearPendingKeyboardActivation() {
+        enterActivationPending = false;
+    }
+
+    onInteractiveChanged: {
+        if (!interactive)
+            clearPendingKeyboardActivation();
     }
 
     opacity: showVisuals ? 1 : 0
@@ -129,6 +140,11 @@ Item {
 
         onTextEdited: root.queryEdited(text)
 
+        onActiveFocusChanged: {
+            if (!activeFocus)
+                root.clearPendingKeyboardActivation();
+        }
+
         Text {
             anchors.fill: parent
             visible: searchInput.text.length === 0
@@ -145,8 +161,13 @@ Item {
 
         Keys.onPressed: function(event) {
             if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                root.activateSelectionRequested();
+                // Do not launch on key press. If the overview closes while the
+                // physical Enter key is still down, the newly focused client can
+                // inherit the pressed/repeating state. Arm activation here and
+                // launch only after the release event is consumed by Quickshell.
                 event.accepted = true;
+                if (!event.isAutoRepeat)
+                    root.enterActivationPending = true;
                 return;
             }
 
@@ -172,6 +193,20 @@ Item {
             }
         }
 
-        Keys.onEscapePressed: Services.ShellActions.closeWorkspaceOverview()
+        Keys.onReleased: function(event) {
+            if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                var shouldActivate = root.enterActivationPending && root.interactive && !event.isAutoRepeat;
+                root.enterActivationPending = false;
+                event.accepted = true;
+                if (shouldActivate)
+                    root.activateSelectionRequested();
+                return;
+            }
+        }
+
+        Keys.onEscapePressed: {
+            root.clearPendingKeyboardActivation();
+            Services.ShellActions.closeWorkspaceOverview();
+        }
     }
 }
